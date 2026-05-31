@@ -208,6 +208,14 @@ function bindEvents() {
       render();
     }
   });
+
+  document.addEventListener("wheel", (event) => {
+    const rail = (event.target as HTMLElement).closest<HTMLElement>(".asset-scroll");
+    if (!rail || rail.scrollWidth <= rail.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+
+    event.preventDefault();
+    rail.scrollLeft += event.deltaY;
+  }, { passive: false });
 }
 
 async function createWallet(form: HTMLFormElement) {
@@ -456,12 +464,15 @@ function renderView() {
 
 function dashboardView() {
   if (!session) return "";
-  const topAssets = session.assets.slice(0, 4).map(assetCard).join("");
+  const topAssets = [...session.assets]
+    .sort((left, right) => assetValue(right) - assetValue(left))
+    .map(assetCard)
+    .join("");
   const recent = session.activity.slice(0, 5).map(activityRow).join("");
   return `
     <div class="grid gap-5 xl:grid-cols-[1.35fr_0.75fr]">
-      <div class="space-y-5">
-        <section class="glass overflow-hidden rounded-[2rem] p-6">
+      <div class="min-w-0 space-y-5">
+        <section class="glass min-w-0 overflow-hidden rounded-[2rem] p-6">
           <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p class="text-sm uppercase tracking-[0.3em] text-acid">Portfolio</p>
@@ -472,7 +483,7 @@ function dashboardView() {
               <p class="text-3xl font-black text-acid">${session.risk_score}/100</p>
             </div>
           </div>
-          <div class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">${topAssets}</div>
+          <div class="asset-scroll mt-6">${topAssets}</div>
         </section>
         <section class="glass rounded-[2rem] p-6">
           <div class="mb-5 flex items-center justify-between"><h2 class="text-xl font-black">Recent activity</h2><button class="text-sm font-bold text-acid" data-view="activity">View all</button></div>
@@ -627,18 +638,22 @@ function navButton(view: View, label: string) {
 }
 
 function assetCard(asset: Asset) {
-  const value = asset.balance * asset.price_usd;
+  const value = assetValue(asset);
   const positive = asset.change_24h >= 0;
   return `
-    <article class="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
+    <article class="asset-card rounded-3xl border border-white/10 bg-white/[0.04] p-5">
       <div class="flex items-start justify-between gap-4">
-        <div><p class="text-lg font-black">${escapeHtml(asset.symbol)}</p><p class="text-sm text-slate-500">${escapeHtml(asset.name)}</p></div>
-        <span class="rounded-full ${positive ? "bg-emerald-400/10 text-emerald-300" : "bg-rose-400/10 text-rose-300"} px-3 py-1 text-xs font-bold">${positive ? "+" : ""}${asset.change_24h.toFixed(2)}%</span>
+        <div class="asset-card-header"><p class="truncate text-lg font-black">${escapeHtml(asset.symbol)}</p><p class="truncate text-sm text-slate-500">${escapeHtml(asset.name)}</p></div>
+        <span class="asset-change rounded-full ${positive ? "bg-emerald-400/10 text-emerald-300" : "bg-rose-400/10 text-rose-300"} px-3 py-1 text-xs font-bold">${positive ? "+" : ""}${asset.change_24h.toFixed(2)}%</span>
       </div>
-      <p class="mt-5 text-2xl font-black">${money(value)}</p>
+      <p class="asset-value mt-5 text-2xl font-black">${money(value)}</p>
       <p class="mt-1 text-sm text-slate-400">${asset.balance.toFixed(asset.symbol === "USDC" ? 2 : 5)} ${escapeHtml(asset.symbol)}</p>
     </article>
   `;
+}
+
+function assetValue(asset: Asset) {
+  return asset.balance * asset.price_usd;
 }
 
 function activityRow(item: Activity) {

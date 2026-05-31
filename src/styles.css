@@ -139,6 +139,53 @@ select.field option:checked {
   color: #f8fafc;
 }
 
+.asset-scroll {
+  display: flex;
+  gap: 1rem;
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 0.65rem;
+  scroll-snap-type: x proximity;
+  scrollbar-color: rgba(184, 255, 92, 0.45) rgba(15, 23, 42, 0.72);
+}
+
+.asset-scroll .asset-card {
+  flex: 0 0 16.25rem;
+  min-width: 16.25rem;
+  scroll-snap-align: start;
+}
+
+.asset-scroll::-webkit-scrollbar {
+  height: 0.55rem;
+}
+
+.asset-scroll::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.asset-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(184, 255, 92, 0.45);
+}
+
+.asset-card {
+  overflow: hidden;
+}
+
+.asset-card-header {
+  min-width: 0;
+}
+
+.asset-change,
+.asset-value {
+  white-space: nowrap;
+}
+
+.asset-change {
+  flex: 0 0 auto;
+}
+
 .qr-code svg {
   display: block;
   width: 100%;
