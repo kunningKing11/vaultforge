@@ -62,6 +62,31 @@ textarea {
   color: #64748b;
 }
 
+select.field {
+  appearance: none;
+  background-color: #0f172a;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #b8ff5c 50%),
+    linear-gradient(135deg, #b8ff5c 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.25rem) 50%,
+    calc(100% - 0.9rem) 50%;
+  background-repeat: no-repeat;
+  background-size: 0.35rem 0.35rem, 0.35rem 0.35rem;
+  color: #f8fafc;
+  padding-right: 2.5rem;
+}
+
+select.field option {
+  background-color: #0f172a;
+  color: #f8fafc;
+}
+
+select.field option:checked {
+  background-color: #1e293b;
+  color: #b8ff5c;
+}
+
 .btn-primary {
   display: inline-flex;
   align-items: center;
