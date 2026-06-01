@@ -1,6 +1,6 @@
 use chrono::Utc;
 use rand::{seq::SliceRandom, Rng};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
 use tauri::State;
@@ -47,6 +47,21 @@ struct WalletSession {
     risk_score: u8,
     assets: Vec<Asset>,
     activity: Vec<Activity>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SignedTransaction {
+    from: String,
+    to: String,
+    symbol: String,
+    amount: f64,
+    note: String,
+    network: String,
+    nonce: String,
+    signed_at: String,
+    payload_hash: String,
+    signature: String,
 }
 
 struct AppState {
@@ -156,40 +171,84 @@ fn lock_wallet(state: State<'_, Mutex<AppState>>) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn send_transaction(
+fn sign_transaction(
     state: State<'_, Mutex<AppState>>,
     to: String,
     symbol: String,
     amount: f64,
     note: String,
+) -> Result<SignedTransaction, String> {
+    validate_unlocked(&state)?;
+
+    let state = state.lock().map_err(|_| "State lock failed")?;
+    let wallet = state
+        .wallet
+        .as_ref()
+        .ok_or_else(|| "No wallet exists yet".to_string())?;
+    validate_transfer(wallet, &to, &symbol, amount)?;
+
+    let signed_at = Utc::now().to_rfc3339();
+    let nonce = random_hex(6);
+    let mut signed = SignedTransaction {
+        from: wallet.address.clone(),
+        to: to.trim().to_string(),
+        symbol,
+        amount,
+        note: note.trim().to_string(),
+        network: state.network.clone(),
+        nonce,
+        signed_at,
+        payload_hash: String::new(),
+        signature: String::new(),
+    };
+    signed.payload_hash = transaction_payload_hash(&signed);
+    signed.signature = transaction_signature(wallet, &signed.payload_hash);
+
+    Ok(signed)
+}
+
+#[tauri::command]
+fn send_transaction(
+    state: State<'_, Mutex<AppState>>,
+    signed: SignedTransaction,
 ) -> Result<WalletSession, String> {
     validate_unlocked(&state)?;
-    if !to.starts_with("0x") || to.len() < 12 {
-        return Err("Recipient must be a valid 0x address".to_string());
-    }
-    if amount <= 0.0 || !amount.is_finite() {
-        return Err("Amount must be greater than zero".to_string());
-    }
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
+    let active_network = state.network.clone();
     let wallet = state
         .wallet
         .as_mut()
         .ok_or_else(|| "No wallet exists yet".to_string())?;
+    validate_transfer(wallet, &signed.to, &signed.symbol, signed.amount)?;
+    if signed.from != wallet.address.as_str() {
+        return Err("Signed transaction does not match this wallet".to_string());
+    }
+    if signed.network != active_network {
+        return Err("Signed transaction network no longer matches the active network".to_string());
+    }
+    let expected_hash = transaction_payload_hash(&signed);
+    if signed.payload_hash != expected_hash {
+        return Err("Signed transaction payload was modified".to_string());
+    }
+    if signed.signature != transaction_signature(wallet, &signed.payload_hash) {
+        return Err("Invalid transaction signature".to_string());
+    }
+
     let asset = wallet
         .assets
         .iter_mut()
-        .find(|asset| asset.symbol == symbol)
+        .find(|asset| asset.symbol == signed.symbol)
         .ok_or_else(|| "Asset not found".to_string())?;
-    if asset.balance < amount {
-        return Err(format!("Insufficient {} balance", symbol));
+    if asset.balance < signed.amount {
+        return Err(format!("Insufficient {} balance", signed.symbol));
     }
 
-    asset.balance -= amount;
-    let memo = if note.trim().is_empty() {
-        format!("Sent to {}", short_address(&to))
+    asset.balance -= signed.amount;
+    let memo = if signed.note.is_empty() {
+        format!("Sent to {}", short_address(&signed.to))
     } else {
-        note.trim().to_string()
+        signed.note.clone()
     };
     wallet.activity.insert(
         0,
@@ -197,7 +256,7 @@ fn send_transaction(
             "send",
             "Transfer sent",
             &memo,
-            &format!("-{amount:.6} {symbol}"),
+            &format!("-{:.6} {}", signed.amount, signed.symbol),
         ),
     );
     Ok(session_from_state(&state))
@@ -288,6 +347,51 @@ fn validate_unlocked(state: &State<'_, Mutex<AppState>>) -> Result<(), String> {
         return Err("Wallet is locked".to_string());
     }
     Ok(())
+}
+
+fn validate_transfer(wallet: &Wallet, to: &str, symbol: &str, amount: f64) -> Result<(), String> {
+    let to = to.trim();
+    if !to.starts_with("0x") || to.len() < 12 {
+        return Err("Recipient must be a valid 0x address".to_string());
+    }
+    if amount <= 0.0 || !amount.is_finite() {
+        return Err("Amount must be greater than zero".to_string());
+    }
+
+    let asset = wallet
+        .assets
+        .iter()
+        .find(|asset| asset.symbol == symbol)
+        .ok_or_else(|| "Asset not found".to_string())?;
+    if asset.balance < amount {
+        return Err(format!("Insufficient {} balance", symbol));
+    }
+
+    Ok(())
+}
+
+fn transaction_payload_hash(signed: &SignedTransaction) -> String {
+    hash_secret(&format!(
+        "from={};to={};symbol={};amount={:.12};note={};network={};nonce={};signed_at={}",
+        signed.from,
+        signed.to,
+        signed.symbol,
+        signed.amount,
+        signed.note,
+        signed.network,
+        signed.nonce,
+        signed.signed_at
+    ))
+}
+
+fn transaction_signature(wallet: &Wallet, payload_hash: &str) -> String {
+    format!(
+        "0x{}",
+        hash_secret(&format!(
+            "{}:{}:{}",
+            wallet.address, wallet.passphrase_hash, payload_hash
+        ))
+    )
 }
 
 fn session_from_state(state: &AppState) -> WalletSession {
@@ -450,6 +554,7 @@ fn main() {
             import_wallet,
             unlock_wallet,
             lock_wallet,
+            sign_transaction,
             send_transaction,
             swap_tokens,
             set_network,

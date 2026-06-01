@@ -6,6 +6,7 @@ A local-first crypto wallet desktop app built with a TypeScript frontend, Tailwi
 
 - Create, import, lock, and unlock a wallet session
 - Portfolio dashboard with token balances and fiat valuation
+- Sign and review simulated transactions before broadcasting them
 - Send, receive, swap, assets, activity, and settings screens
 - Rust-backed Tauri commands for wallet state, validation, transaction simulation, and network switching
 - Responsive TailwindCSS UI for desktop and smaller screens
@@ -44,4 +45,4 @@ npm run tauri build
 
 ## Security note
 
-This is a fully functional local app foundation with simulated assets and transactions. It is not production mainnet wallet software. Before handling real funds, add audited key derivation, encrypted persistence, hardware wallet support, chain RPC integrations, transaction signing, threat modeling, and external security review.
+This is a fully functional local app foundation with simulated assets, signatures, and transactions. It is not production mainnet wallet software. Before handling real funds, add audited key derivation, encrypted persistence, hardware wallet support, chain RPC integrations, production transaction signing, threat modeling, and external security review.

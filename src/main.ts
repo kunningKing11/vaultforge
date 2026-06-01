@@ -34,6 +34,19 @@ type WalletSession = {
   activity: Activity[];
 };
 
+type SignedTransaction = {
+  from: string;
+  to: string;
+  symbol: string;
+  amount: number;
+  note: string;
+  network: string;
+  nonce: string;
+  signedAt: string;
+  payloadHash: string;
+  signature: string;
+};
+
 type View = "dashboard" | "send" | "receive" | "swap" | "assets" | "activity" | "settings";
 
 type EvmReceiveNetworkInput = {
@@ -124,6 +137,7 @@ let qrResilience: QrResilience = "M";
 let qrSvg = "";
 let qrKey = "";
 let qrGeneratingKey = "";
+let signedTransaction: SignedTransaction | null = null;
 let busy = false;
 let toastId = 0;
 let toasts: Toast[] = [];
@@ -178,6 +192,11 @@ function bindEvents() {
     if (action === "copy-address") void copyAddress();
     if (action === "copy-qr") void copyQrPayload();
     if (action === "download-qr") downloadQrSvg();
+    if (action === "broadcast-signed-transaction") void broadcastSignedTransaction();
+    if (action === "edit-signed-transaction") {
+      signedTransaction = null;
+      render();
+    }
   });
 
   document.addEventListener("submit", (event) => {
@@ -188,7 +207,7 @@ function bindEvents() {
     if (action === "create-wallet") void createWallet(form);
     if (action === "import-wallet") void importWallet(form);
     if (action === "unlock-wallet") void unlockWallet(form);
-    if (action === "send-transaction") void sendTransaction(form);
+    if (action === "sign-transaction") void signTransaction(form);
     if (action === "swap-tokens") void swapTokens(form);
     if (action === "set-network") void setNetwork(form);
   });
@@ -241,14 +260,34 @@ async function unlockWallet(form: HTMLFormElement) {
   });
 }
 
-async function sendTransaction(form: HTMLFormElement) {
+async function signTransaction(form: HTMLFormElement) {
   const formData = new FormData(form);
-  await runCommand("send_transaction", {
-    to: String(formData.get("to") || ""),
-    symbol: String(formData.get("symbol") || "ETH"),
-    amount: Number(formData.get("amount") || 0),
-    note: String(formData.get("note") || ""),
-  });
+  busy = true;
+  render();
+  try {
+    signedTransaction = await invoke<SignedTransaction>("sign_transaction", {
+      to: String(formData.get("to") || ""),
+      symbol: String(formData.get("symbol") || "ETH"),
+      amount: Number(formData.get("amount") || 0),
+      note: String(formData.get("note") || ""),
+    });
+    pushToast(successMessage("sign_transaction"), "success");
+  } catch (error) {
+    pushToast(formatError(error), "error");
+  } finally {
+    busy = false;
+    render();
+  }
+}
+
+async function broadcastSignedTransaction() {
+  if (!signedTransaction) return;
+
+  const ok = await runCommand("send_transaction", { signed: signedTransaction });
+  if (ok) {
+    signedTransaction = null;
+    render();
+  }
 }
 
 async function swapTokens(form: HTMLFormElement) {
@@ -278,8 +317,10 @@ async function runCommand(command: string, args?: Record<string, unknown>) {
       currentView = "dashboard";
     }
     pushToast(successMessage(command), "success");
+    return true;
   } catch (error) {
     pushToast(formatError(error), "error");
+    return false;
   } finally {
     busy = false;
     render();
@@ -499,20 +540,63 @@ function dashboardView() {
 }
 
 function sendView() {
+  if (signedTransaction) return signedTransactionView(signedTransaction);
+
   return `
     <section class="glass max-w-3xl rounded-[2rem] p-6">
       <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Transfer</p>
       <h2 class="mt-2 text-3xl font-black">Send crypto</h2>
-      <form data-action="send-transaction" class="mt-6 grid gap-4">
+      <p class="mt-3 text-sm leading-6 text-slate-400">Transactions are signed locally before broadcast to the simulator. Review the signature before funds leave your simulated balance.</p>
+      <form data-action="sign-transaction" class="mt-6 grid gap-4">
         <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Recipient address</span><input class="field" name="to" placeholder="0x..." required /></label>
         <div class="grid gap-4 sm:grid-cols-2">
           <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Asset</span>${assetSelect("symbol")}</label>
           <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" required /></label>
         </div>
         <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Note</span><input class="field" name="note" placeholder="Optional transaction memo" /></label>
-        <button class="btn-primary justify-self-start" type="submit">Review and send</button>
+        <button class="btn-primary justify-self-start" type="submit">Sign transaction</button>
       </form>
     </section>
+  `;
+}
+
+function signedTransactionView(signed: SignedTransaction) {
+  return `
+    <section class="glass max-w-4xl rounded-[2rem] p-6">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p class="text-sm uppercase tracking-[0.3em] text-acid">Signed transfer</p>
+          <h2 class="mt-2 text-3xl font-black">Review signature</h2>
+          <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-400">The backend signed this simulated transaction locally. Broadcast only if the details match your intent.</p>
+        </div>
+        <span class="rounded-full bg-acid/15 px-3 py-1 text-xs font-black uppercase tracking-[0.2em] text-acid">Ready</span>
+      </div>
+      <div class="mt-6 grid gap-4 sm:grid-cols-2">
+        ${signedDetail("From", shortAddress(signed.from))}
+        ${signedDetail("To", shortAddress(signed.to))}
+        ${signedDetail("Amount", `${signed.amount.toFixed(6)} ${signed.symbol}`)}
+        ${signedDetail("Network", signed.network)}
+        ${signedDetail("Nonce", signed.nonce)}
+        ${signedDetail("Signed", new Date(signed.signedAt).toLocaleString())}
+      </div>
+      <div class="mt-4 space-y-4">
+        ${signedDetail("Payload hash", signed.payloadHash, true)}
+        ${signedDetail("Signature", signed.signature, true)}
+      </div>
+      <div class="mt-6 flex flex-col gap-3 sm:flex-row">
+        <button class="btn-primary" data-action="broadcast-signed-transaction" type="button">Broadcast signed transaction</button>
+        <button class="btn-secondary" data-action="edit-signed-transaction" type="button">Edit transaction</button>
+      </div>
+    </section>
+  `;
+}
+
+function signedDetail(label: string, value: string, mono = false) {
+  return `
+    <div class="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+      <p class="text-xs uppercase tracking-[0.22em] text-slate-500">${escapeHtml(label)}</p>
+      <p class="mt-2 ${mono ? "break-all font-mono text-xs" : "text-sm font-bold"} text-slate-200">${escapeHtml(value)}</p>
+    </div>
   `;
 }
 
@@ -828,7 +912,8 @@ function successMessage(command: string) {
     import_wallet: "Wallet imported successfully.",
     unlock_wallet: "Wallet unlocked.",
     lock_wallet: "Wallet locked.",
-    send_transaction: "Transaction broadcast to the local simulator.",
+    sign_transaction: "Transaction signed locally.",
+    send_transaction: "Signed transaction broadcast to the local simulator.",
     swap_tokens: "Swap completed in the local simulator.",
     set_network: "Network updated.",
   };
