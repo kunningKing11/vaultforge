@@ -9,6 +9,9 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+aes-gcm = "0.10"
+argon2 = "0.5"
+base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 hex = "0.4"
 rand = "0.8"

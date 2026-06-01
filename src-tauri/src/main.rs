@@ -1,11 +1,14 @@
+use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
+use argon2::Argon2;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::Utc;
 use rand::{seq::SliceRandom, Rng};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::sync::Mutex;
-use tauri::State;
+use std::{fs, path::PathBuf, sync::Mutex};
+use tauri::{Manager, State};
 
-#[derive(Clone)]
+#[derive(Clone, Deserialize, Serialize)]
 struct Wallet {
     name: String,
     address: String,
@@ -14,7 +17,7 @@ struct Wallet {
     activity: Vec<Activity>,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct Asset {
     symbol: String,
     name: String,
@@ -24,7 +27,7 @@ struct Asset {
     network: String,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct Activity {
     id: String,
     kind: String,
@@ -34,6 +37,12 @@ struct Activity {
     status: String,
     timestamp: String,
     hash: String,
+    from: Option<String>,
+    to: Option<String>,
+    network: Option<String>,
+    payload_hash: Option<String>,
+    signature: Option<String>,
+    fee: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -62,20 +71,64 @@ struct SignedTransaction {
     signed_at: String,
     payload_hash: String,
     signature: String,
+    fee_amount: f64,
+    fee_symbol: String,
+    total_debit: f64,
+    post_balance: f64,
+    fiat_value: f64,
 }
 
 struct AppState {
     wallet: Option<Wallet>,
     locked: bool,
     network: String,
+    stored_wallet: Option<StoredWalletMetadata>,
+    encryption_key: Option<[u8; 32]>,
+    storage_salt: Option<Vec<u8>>,
+    storage_path: PathBuf,
 }
 
-impl Default for AppState {
-    fn default() -> Self {
+#[derive(Clone)]
+struct StoredWalletMetadata {
+    wallet_name: String,
+    address: String,
+    network: String,
+}
+
+#[derive(Deserialize, Serialize)]
+struct StoredWalletFile {
+    version: u8,
+    wallet_name: String,
+    address: String,
+    network: String,
+    salt: String,
+    nonce: String,
+    ciphertext: String,
+}
+
+impl AppState {
+    fn from_storage(storage_path: PathBuf) -> Self {
+        let stored_wallet = read_stored_wallet(&storage_path)
+            .ok()
+            .flatten()
+            .map(|stored| StoredWalletMetadata {
+                wallet_name: stored.wallet_name,
+                address: stored.address,
+                network: stored.network,
+            });
+        let network = stored_wallet
+            .as_ref()
+            .map(|wallet| wallet.network.clone())
+            .unwrap_or_else(|| "Ethereum".to_string());
+
         Self {
             wallet: None,
-            locked: false,
-            network: "Ethereum".to_string(),
+            locked: stored_wallet.is_some(),
+            network,
+            stored_wallet,
+            encryption_key: None,
+            storage_salt: None,
+            storage_path,
         }
     }
 }
@@ -108,8 +161,12 @@ fn create_wallet(
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
+    let (key, salt) = derive_storage_key(&passphrase, None)?;
+    state.encryption_key = Some(key);
+    state.storage_salt = Some(salt);
     state.wallet = Some(wallet);
     state.locked = false;
+    persist_state_wallet(&mut state)?;
     Ok(session_from_state(&state))
 }
 
@@ -139,8 +196,12 @@ fn import_wallet(
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
+    let (key, salt) = derive_storage_key(&passphrase, None)?;
+    state.encryption_key = Some(key);
+    state.storage_salt = Some(salt);
     state.wallet = Some(wallet);
     state.locked = false;
+    persist_state_wallet(&mut state)?;
     Ok(session_from_state(&state))
 }
 
@@ -150,13 +211,33 @@ fn unlock_wallet(
     passphrase: String,
 ) -> Result<WalletSession, String> {
     let mut state = state.lock().map_err(|_| "State lock failed")?;
-    let wallet = state
-        .wallet
-        .as_ref()
+    if let Some(wallet) = state.wallet.as_ref() {
+        if wallet.passphrase_hash != hash_secret(&passphrase) {
+            return Err("Invalid passphrase".to_string());
+        }
+        state.locked = false;
+        return Ok(session_from_state(&state));
+    }
+
+    let stored = read_stored_wallet(&state.storage_path)?
         .ok_or_else(|| "No wallet exists yet".to_string())?;
+    let wallet = decrypt_wallet(&stored, &passphrase)?;
     if wallet.passphrase_hash != hash_secret(&passphrase) {
         return Err("Invalid passphrase".to_string());
     }
+    state.network = stored.network.clone();
+    state.stored_wallet = Some(StoredWalletMetadata {
+        wallet_name: stored.wallet_name,
+        address: stored.address,
+        network: stored.network,
+    });
+    let salt = BASE64
+        .decode(stored.salt)
+        .map_err(|_| "Stored wallet salt is invalid")?;
+    let (key, salt) = derive_storage_key(&passphrase, Some(&salt))?;
+    state.encryption_key = Some(key);
+    state.storage_salt = Some(salt);
+    state.wallet = Some(wallet);
     state.locked = false;
     Ok(session_from_state(&state))
 }
@@ -165,9 +246,27 @@ fn unlock_wallet(
 fn lock_wallet(state: State<'_, Mutex<AppState>>) -> Result<(), String> {
     let mut state = state.lock().map_err(|_| "State lock failed")?;
     if state.wallet.is_some() {
+        state.wallet = None;
+        state.encryption_key = None;
+        state.storage_salt = None;
         state.locked = true;
     }
     Ok(())
+}
+
+#[tauri::command]
+fn clear_wallet(state: State<'_, Mutex<AppState>>) -> Result<WalletSession, String> {
+    let mut state = state.lock().map_err(|_| "State lock failed")?;
+    if state.storage_path.exists() {
+        fs::remove_file(&state.storage_path).map_err(|_| "Failed to remove stored wallet")?;
+    }
+    state.wallet = None;
+    state.stored_wallet = None;
+    state.encryption_key = None;
+    state.storage_salt = None;
+    state.locked = false;
+    state.network = "Ethereum".to_string();
+    Ok(session_from_state(&state))
 }
 
 #[tauri::command]
@@ -186,13 +285,26 @@ fn sign_transaction(
         .as_ref()
         .ok_or_else(|| "No wallet exists yet".to_string())?;
     validate_transfer(wallet, &to, &symbol, amount)?;
+    let asset = wallet
+        .assets
+        .iter()
+        .find(|asset| asset.symbol == symbol)
+        .ok_or_else(|| "Asset not found".to_string())?;
+    let fee_amount = transaction_fee(&symbol, amount);
+    let total_debit = amount + fee_amount;
+    if asset.balance < total_debit {
+        return Err(format!(
+            "Insufficient {} balance for amount plus fee",
+            symbol
+        ));
+    }
 
     let signed_at = Utc::now().to_rfc3339();
     let nonce = random_hex(6);
     let mut signed = SignedTransaction {
         from: wallet.address.clone(),
         to: to.trim().to_string(),
-        symbol,
+        symbol: symbol.clone(),
         amount,
         note: note.trim().to_string(),
         network: state.network.clone(),
@@ -200,6 +312,11 @@ fn sign_transaction(
         signed_at,
         payload_hash: String::new(),
         signature: String::new(),
+        fee_amount,
+        fee_symbol: symbol.clone(),
+        total_debit,
+        post_balance: asset.balance - total_debit,
+        fiat_value: amount * asset.price_usd,
     };
     signed.payload_hash = transaction_payload_hash(&signed);
     signed.signature = transaction_signature(wallet, &signed.payload_hash);
@@ -234,31 +351,33 @@ fn send_transaction(
     if signed.signature != transaction_signature(wallet, &signed.payload_hash) {
         return Err("Invalid transaction signature".to_string());
     }
+    if signed.fee_amount != transaction_fee(&signed.symbol, signed.amount)
+        || signed.fee_symbol != signed.symbol
+        || (signed.total_debit - (signed.amount + signed.fee_amount)).abs() > f64::EPSILON
+    {
+        return Err("Signed transaction fee details are invalid".to_string());
+    }
 
     let asset = wallet
         .assets
         .iter_mut()
         .find(|asset| asset.symbol == signed.symbol)
         .ok_or_else(|| "Asset not found".to_string())?;
-    if asset.balance < signed.amount {
-        return Err(format!("Insufficient {} balance", signed.symbol));
+    if asset.balance < signed.total_debit {
+        return Err(format!(
+            "Insufficient {} balance for amount plus fee",
+            signed.symbol
+        ));
     }
 
-    asset.balance -= signed.amount;
+    asset.balance -= signed.total_debit;
     let memo = if signed.note.is_empty() {
         format!("Sent to {}", short_address(&signed.to))
     } else {
         signed.note.clone()
     };
-    wallet.activity.insert(
-        0,
-        activity(
-            "send",
-            "Transfer sent",
-            &memo,
-            &format!("-{:.6} {}", signed.amount, signed.symbol),
-        ),
-    );
+    wallet.activity.insert(0, send_activity(&signed, &memo));
+    persist_state_wallet(&mut state)?;
     Ok(session_from_state(&state))
 }
 
@@ -311,6 +430,7 @@ fn swap_tokens(
             &format!("{amount:.6} {from_symbol} -> {received:.6} {to_symbol}"),
         ),
     );
+    persist_state_wallet(&mut state)?;
     Ok(session_from_state(&state))
 }
 
@@ -335,6 +455,7 @@ fn set_network(
             activity("network", "Network changed", &network, "Updated"),
         );
     }
+    persist_state_wallet(&mut state)?;
     Ok(session_from_state(&state))
 }
 
@@ -396,9 +517,18 @@ fn validate_address_for_symbol(address: &str, symbol: &str) -> Result<(), String
     }
 }
 
+fn transaction_fee(symbol: &str, amount: f64) -> f64 {
+    match symbol {
+        "BTC" => 0.00001,
+        "SOL" => 0.000005,
+        "USDC" => (amount * 0.001).max(0.25),
+        _ => 0.00042,
+    }
+}
+
 fn transaction_payload_hash(signed: &SignedTransaction) -> String {
     hash_secret(&format!(
-        "from={};to={};symbol={};amount={:.12};note={};network={};nonce={};signed_at={}",
+        "from={};to={};symbol={};amount={:.12};note={};network={};nonce={};signed_at={};fee_amount={:.12};fee_symbol={};total_debit={:.12};post_balance={:.12};fiat_value={:.12}",
         signed.from,
         signed.to,
         signed.symbol,
@@ -406,7 +536,12 @@ fn transaction_payload_hash(signed: &SignedTransaction) -> String {
         signed.note,
         signed.network,
         signed.nonce,
-        signed.signed_at
+        signed.signed_at,
+        signed.fee_amount,
+        signed.fee_symbol,
+        signed.total_debit,
+        signed.post_balance,
+        signed.fiat_value
     ))
 }
 
@@ -422,6 +557,20 @@ fn transaction_signature(wallet: &Wallet, payload_hash: &str) -> String {
 
 fn session_from_state(state: &AppState) -> WalletSession {
     let Some(wallet) = state.wallet.as_ref() else {
+        if let Some(stored_wallet) = state.stored_wallet.as_ref() {
+            return WalletSession {
+                has_wallet: true,
+                locked: true,
+                wallet_name: Some(stored_wallet.wallet_name.clone()),
+                address: Some(stored_wallet.address.clone()),
+                network: stored_wallet.network.clone(),
+                fiat_balance: 0.0,
+                risk_score: 92,
+                assets: vec![],
+                activity: vec![],
+            };
+        }
+
         return WalletSession {
             has_wallet: false,
             locked: false,
@@ -515,7 +664,124 @@ fn activity(kind: &str, title: &str, subtitle: &str, amount: &str) -> Activity {
         status: "confirmed".to_string(),
         timestamp: Utc::now().to_rfc3339(),
         hash: format!("0x{}", random_hex(32)),
+        from: None,
+        to: None,
+        network: None,
+        payload_hash: None,
+        signature: None,
+        fee: None,
     }
+}
+
+fn send_activity(signed: &SignedTransaction, subtitle: &str) -> Activity {
+    Activity {
+        id: random_hex(8),
+        kind: "send".to_string(),
+        title: "Transfer sent".to_string(),
+        subtitle: subtitle.to_string(),
+        amount: format!("-{:.6} {}", signed.amount, signed.symbol),
+        status: "confirmed".to_string(),
+        timestamp: Utc::now().to_rfc3339(),
+        hash: format!("0x{}", &signed.payload_hash[..32]),
+        from: Some(signed.from.clone()),
+        to: Some(signed.to.clone()),
+        network: Some(signed.network.clone()),
+        payload_hash: Some(signed.payload_hash.clone()),
+        signature: Some(signed.signature.clone()),
+        fee: Some(format!("{:.6} {}", signed.fee_amount, signed.fee_symbol)),
+    }
+}
+
+fn read_stored_wallet(path: &PathBuf) -> Result<Option<StoredWalletFile>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let contents = fs::read_to_string(path).map_err(|_| "Failed to read stored wallet")?;
+    let stored = serde_json::from_str(&contents).map_err(|_| "Stored wallet file is invalid")?;
+    Ok(Some(stored))
+}
+
+fn persist_state_wallet(state: &mut AppState) -> Result<(), String> {
+    let Some(wallet) = state.wallet.as_ref() else {
+        return Ok(());
+    };
+    let key = state
+        .encryption_key
+        .ok_or_else(|| "Wallet encryption key is not available".to_string())?;
+    let salt = state
+        .storage_salt
+        .clone()
+        .ok_or_else(|| "Wallet encryption salt is not available".to_string())?;
+
+    let stored = encrypt_wallet(wallet, &state.network, &key, &salt)?;
+    if let Some(parent) = state.storage_path.parent() {
+        fs::create_dir_all(parent).map_err(|_| "Failed to create wallet storage directory")?;
+    }
+    let contents = serde_json::to_string_pretty(&stored).map_err(|_| "Failed to encode wallet")?;
+    fs::write(&state.storage_path, contents).map_err(|_| "Failed to save wallet")?;
+    state.stored_wallet = Some(StoredWalletMetadata {
+        wallet_name: stored.wallet_name,
+        address: stored.address,
+        network: stored.network,
+    });
+    Ok(())
+}
+
+fn encrypt_wallet(
+    wallet: &Wallet,
+    network: &str,
+    key: &[u8; 32],
+    salt: &[u8],
+) -> Result<StoredWalletFile, String> {
+    let nonce_bytes: Vec<u8> = (0..12).map(|_| rand::thread_rng().gen()).collect();
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| "Failed to initialize encryption")?;
+    let plaintext = serde_json::to_vec(wallet).map_err(|_| "Failed to encode wallet")?;
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce_bytes), plaintext.as_ref())
+        .map_err(|_| "Failed to encrypt wallet")?;
+
+    Ok(StoredWalletFile {
+        version: 1,
+        wallet_name: wallet.name.clone(),
+        address: wallet.address.clone(),
+        network: network.to_string(),
+        salt: BASE64.encode(salt),
+        nonce: BASE64.encode(nonce_bytes),
+        ciphertext: BASE64.encode(ciphertext),
+    })
+}
+
+fn decrypt_wallet(stored: &StoredWalletFile, passphrase: &str) -> Result<Wallet, String> {
+    let salt = BASE64
+        .decode(&stored.salt)
+        .map_err(|_| "Stored wallet salt is invalid")?;
+    let nonce = BASE64
+        .decode(&stored.nonce)
+        .map_err(|_| "Stored wallet nonce is invalid")?;
+    let ciphertext = BASE64
+        .decode(&stored.ciphertext)
+        .map_err(|_| "Stored wallet payload is invalid")?;
+    let (key, _) = derive_storage_key(passphrase, Some(&salt))?;
+    let cipher = Aes256Gcm::new_from_slice(&key).map_err(|_| "Failed to initialize encryption")?;
+    let plaintext = cipher
+        .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
+        .map_err(|_| "Invalid passphrase")?;
+    serde_json::from_slice(&plaintext).map_err(|_| "Stored wallet contents are invalid".to_string())
+}
+
+fn derive_storage_key(
+    passphrase: &str,
+    salt: Option<&[u8]>,
+) -> Result<([u8; 32], Vec<u8>), String> {
+    let salt = salt
+        .map(|value| value.to_vec())
+        .unwrap_or_else(|| (0..16).map(|_| rand::thread_rng().gen()).collect());
+    let mut key = [0u8; 32];
+    Argon2::default()
+        .hash_password_into(passphrase.as_bytes(), &salt, &mut key)
+        .map_err(|_| "Failed to derive wallet encryption key")?;
+    Ok((key, salt))
 }
 
 fn generate_mnemonic() -> String {
@@ -571,15 +837,117 @@ fn short_address(address: &str) -> String {
     format!("{}...{}", &address[..8], &address[address.len() - 6..])
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_asset_address_formats() {
+        assert!(validate_address_for_symbol("0x123456789abc", "ETH").is_ok());
+        assert!(
+            validate_address_for_symbol("bc1q123456789012345678901234567890123456", "BTC").is_ok()
+        );
+        assert!(validate_address_for_symbol("7".repeat(44).as_str(), "SOL").is_ok());
+        assert!(validate_address_for_symbol("0x123456789abc", "BTC").is_err());
+        assert!(validate_address_for_symbol("0x123456789abc", "SOL").is_err());
+    }
+
+    #[test]
+    fn calculates_simulated_fees() {
+        assert_eq!(transaction_fee("BTC", 1.0), 0.00001);
+        assert_eq!(transaction_fee("SOL", 1.0), 0.000005);
+        assert_eq!(transaction_fee("ETH", 1.0), 0.00042);
+        assert_eq!(transaction_fee("USDC", 100.0), 0.25);
+        assert_eq!(transaction_fee("USDC", 1_000.0), 1.0);
+    }
+
+    #[test]
+    fn payload_hash_changes_when_details_change() {
+        let mut signed = SignedTransaction {
+            from: "0xfrom".to_string(),
+            to: "0xto".to_string(),
+            symbol: "ETH".to_string(),
+            amount: 1.0,
+            note: "memo".to_string(),
+            network: "Ethereum".to_string(),
+            nonce: "abc".to_string(),
+            signed_at: "2026-01-01T00:00:00Z".to_string(),
+            payload_hash: String::new(),
+            signature: String::new(),
+            fee_amount: 0.00042,
+            fee_symbol: "ETH".to_string(),
+            total_debit: 1.00042,
+            post_balance: 2.0,
+            fiat_value: 3480.62,
+        };
+        let first = transaction_payload_hash(&signed);
+        signed.amount = 2.0;
+        assert_ne!(first, transaction_payload_hash(&signed));
+    }
+
+    #[test]
+    fn derives_same_key_with_same_salt() {
+        let (key, salt) = derive_storage_key("correct horse battery staple", None).unwrap();
+        let (same_key, same_salt) =
+            derive_storage_key("correct horse battery staple", Some(&salt)).unwrap();
+        assert_eq!(key, same_key);
+        assert_eq!(salt, same_salt);
+    }
+
+    #[test]
+    fn encrypts_and_decrypts_wallet_payload() {
+        let passphrase = "Correct horse battery staple 42!";
+        let wallet = Wallet {
+            name: "Test Wallet".to_string(),
+            address: address_from_seed("test seed"),
+            passphrase_hash: hash_secret(passphrase),
+            assets: starter_assets("Ethereum"),
+            activity: vec![activity("system", "Created", "Local", "1")],
+        };
+        let (key, salt) = derive_storage_key(passphrase, None).unwrap();
+        let stored = encrypt_wallet(&wallet, "Ethereum", &key, &salt).unwrap();
+        assert!(!stored.ciphertext.contains(&wallet.address));
+
+        let decrypted = decrypt_wallet(&stored, passphrase).unwrap();
+        assert_eq!(decrypted.name, wallet.name);
+        assert_eq!(decrypted.address, wallet.address);
+        assert_eq!(decrypted.assets.len(), wallet.assets.len());
+    }
+
+    #[test]
+    fn rejects_wrong_storage_passphrase() {
+        let wallet = Wallet {
+            name: "Test Wallet".to_string(),
+            address: address_from_seed("test seed"),
+            passphrase_hash: hash_secret("right passphrase 42!"),
+            assets: starter_assets("Ethereum"),
+            activity: vec![],
+        };
+        let (key, salt) = derive_storage_key("right passphrase 42!", None).unwrap();
+        let stored = encrypt_wallet(&wallet, "Ethereum", &key, &salt).unwrap();
+
+        assert!(decrypt_wallet(&stored, "wrong passphrase 42!").is_err());
+    }
+}
+
 fn main() {
     tauri::Builder::default()
-        .manage(Mutex::new(AppState::default()))
+        .setup(|app| {
+            let storage_path = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| format!("failed to resolve app data directory: {error}"))?
+                .join("wallet.json");
+            app.manage(Mutex::new(AppState::from_storage(storage_path)));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_wallet,
             create_wallet,
             import_wallet,
             unlock_wallet,
             lock_wallet,
+            clear_wallet,
             sign_transaction,
             send_transaction,
             swap_tokens,

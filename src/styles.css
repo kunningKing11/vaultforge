@@ -124,6 +124,25 @@ select.field option:checked {
   background: rgba(30, 41, 59, 0.86);
 }
 
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 113, 133, 0.38);
+  background: rgba(127, 29, 29, 0.48);
+  color: #fecdd3;
+  padding: 0.76rem 1.1rem;
+  font-weight: 800;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.btn-danger:hover {
+  border-color: rgba(251, 113, 133, 0.72);
+  background: rgba(159, 18, 57, 0.62);
+}
+
 .nav-item {
   width: 100%;
   border-radius: 1rem;
@@ -137,6 +156,74 @@ select.field option:checked {
 .nav-item.active {
   background: rgba(184, 255, 92, 0.1);
   color: #f8fafc;
+}
+
+.mobile-nav {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  left: 1rem;
+  z-index: 45;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.35rem;
+  padding: 0.45rem;
+}
+
+.mobile-nav-item {
+  border-radius: 0.9rem;
+  padding: 0.72rem 0.25rem;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-weight: 800;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.mobile-nav-item.active,
+.mobile-nav-item:hover {
+  background: rgba(184, 255, 92, 0.12);
+  color: #f8fafc;
+}
+
+@media (min-width: 1024px) {
+  .mobile-nav {
+    display: none;
+  }
+}
+
+.passphrase-meter-track {
+  height: 0.4rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.88);
+}
+
+.passphrase-meter-track > div {
+  height: 100%;
+  width: 8%;
+  border-radius: inherit;
+  background: #fb7185;
+  transition: width 180ms ease, background 180ms ease;
+}
+
+.passphrase-meter[data-score="1"] .passphrase-meter-track > div {
+  width: 25%;
+  background: #f97316;
+}
+
+.passphrase-meter[data-score="2"] .passphrase-meter-track > div {
+  width: 50%;
+  background: #facc15;
+}
+
+.passphrase-meter[data-score="3"] .passphrase-meter-track > div {
+  width: 75%;
+  background: #84cc16;
+}
+
+.passphrase-meter[data-score="4"] .passphrase-meter-track > div {
+  width: 100%;
+  background: linear-gradient(90deg, #b8ff5c, #62e2ff);
 }
 
 .asset-scroll {

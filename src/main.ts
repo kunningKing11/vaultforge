@@ -20,6 +20,12 @@ type Activity = {
   status: string;
   timestamp: string;
   hash: string;
+  from?: string | null;
+  to?: string | null;
+  network?: string | null;
+  payload_hash?: string | null;
+  signature?: string | null;
+  fee?: string | null;
 };
 
 type WalletSession = {
@@ -45,7 +51,21 @@ type SignedTransaction = {
   signedAt: string;
   payloadHash: string;
   signature: string;
+  feeAmount: number;
+  feeSymbol: string;
+  totalDebit: number;
+  postBalance: number;
+  fiatValue: number;
 };
+
+type SendDraft = {
+  to: string;
+  symbol: string;
+  amount: string;
+  note: string;
+};
+
+type SessionCommand = "create_wallet" | "import_wallet" | "unlock_wallet" | "send_transaction" | "swap_tokens" | "set_network" | "clear_wallet";
 
 type View = "dashboard" | "send" | "receive" | "swap" | "assets" | "activity" | "settings";
 
@@ -83,8 +103,16 @@ type LightningReceiveNetwork = {
   isTestNet: boolean;
 };
 
-type ReceiveNetworkInput = EvmReceiveNetworkInput | BitcoinReceiveNetwork | LightningReceiveNetwork;
-type ReceiveNetwork = EvmReceiveNetwork | BitcoinReceiveNetwork | LightningReceiveNetwork;
+type SolanaReceiveNetwork = {
+  kind: "solana";
+  id: string;
+  name: string;
+  ticker: "SOL";
+  isTestNet: boolean;
+};
+
+type ReceiveNetworkInput = EvmReceiveNetworkInput | BitcoinReceiveNetwork | LightningReceiveNetwork | SolanaReceiveNetwork;
+type ReceiveNetwork = EvmReceiveNetwork | BitcoinReceiveNetwork | LightningReceiveNetwork | SolanaReceiveNetwork;
 
 type QrResilience = "L" | "M" | "Q" | "H";
 
@@ -104,6 +132,8 @@ const rawReceiveNetworks: ReceiveNetworkInput[] = [
   { kind: "evm", id: "base", name: "Base", chainId: 8453, ticker: "ETH", vm_type: "EVM", isL2: true },
   { kind: "evm", id: "optimism", name: "Optimism", chainId: 10, ticker: "ETH", vm_type: "EVM", isL2: true },
   { kind: "evm", id: "avalanche_c", name: "Avalanche C-Chain", chainId: 43114, ticker: "AVAX", vm_type: "EVM" },
+  { kind: "bitcoin", id: "bitcoin", name: "Bitcoin", network: "mainnet", ticker: "BTC", isTestNet: false },
+  { kind: "solana", id: "solana", name: "Solana", ticker: "SOL", isTestNet: false },
 ];
 
 export const receiveNetworks: ReceiveNetwork[] = rawReceiveNetworks.map(normalizeReceiveNetwork);
@@ -128,6 +158,19 @@ const qrResilienceOptions: Array<{ value: QrResilience; label: string; detail: s
   { value: "H", label: "High", detail: "~30% recovery" },
 ];
 
+const walletApi = {
+  getWallet: () => invoke<WalletSession>("get_wallet"),
+  createWallet: (args: { name: string; passphrase: string }) => invoke<WalletSession>("create_wallet", args),
+  importWallet: (args: { mnemonic: string; passphrase: string }) => invoke<WalletSession>("import_wallet", args),
+  unlockWallet: (args: { passphrase: string }) => invoke<WalletSession>("unlock_wallet", args),
+  lockWallet: () => invoke<null>("lock_wallet"),
+  clearWallet: () => invoke<WalletSession>("clear_wallet"),
+  signTransaction: (args: { to: string; symbol: string; amount: number; note: string }) => invoke<SignedTransaction>("sign_transaction", args),
+  sendTransaction: (args: { signed: SignedTransaction }) => invoke<WalletSession>("send_transaction", args),
+  swapTokens: (args: { fromSymbol: string; toSymbol: string; amount: number }) => invoke<WalletSession>("swap_tokens", args),
+  setNetwork: (args: { network: string }) => invoke<WalletSession>("set_network", args),
+};
+
 const app = document.querySelector<HTMLDivElement>("#app");
 
 let session: WalletSession | null = null;
@@ -138,6 +181,8 @@ let qrSvg = "";
 let qrKey = "";
 let qrGeneratingKey = "";
 let signedTransaction: SignedTransaction | null = null;
+let sendDraft: SendDraft = { to: "", symbol: "ETH", amount: "", note: "" };
+let selectedActivityId = "";
 let busy = false;
 let toastId = 0;
 let toasts: Toast[] = [];
@@ -164,7 +209,7 @@ async function loadSession() {
   busy = true;
   render();
   try {
-    session = await invoke<WalletSession>("get_wallet");
+    session = await walletApi.getWallet();
   } catch (error) {
     pushToast(formatError(error), "error");
   } finally {
@@ -187,15 +232,25 @@ function bindEvents() {
 
     if (!action) return;
 
-    if (action === "lock") void runCommand("lock_wallet");
+    if (action === "lock") void lockWallet();
+    if (action === "clear-wallet") void clearWallet();
     if (action === "refresh") void loadSession();
     if (action === "copy-address") void copyAddress();
+    if (action === "copy-receive-address") void copyReceiveAddress();
     if (action === "copy-qr") void copyQrPayload();
     if (action === "download-qr") downloadQrSvg();
     if (action === "broadcast-signed-transaction") void broadcastSignedTransaction();
     if (action === "edit-signed-transaction") {
       signedTransaction = null;
       render();
+    }
+    if (action === "select-activity") {
+      selectedActivityId = target.closest<HTMLElement>("[data-activity-id]")?.dataset.activityId ?? "";
+      render();
+    }
+    if (action === "copy-value") {
+      const value = target.closest<HTMLElement>("[data-copy-value]")?.dataset.copyValue;
+      if (value) void copyText(value, "Value copied.");
     }
   });
 
@@ -232,6 +287,11 @@ function bindEvents() {
     }
   });
 
+  document.addEventListener("input", (event) => {
+    const target = event.target as HTMLInputElement;
+    if (target.matches("[data-passphrase-input]")) updatePassphraseStrength(target);
+  });
+
   document.addEventListener("wheel", (event) => {
     const rail = (event.target as HTMLElement).closest<HTMLElement>(".asset-scroll");
     if (!rail || rail.scrollWidth <= rail.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
@@ -243,37 +303,49 @@ function bindEvents() {
 
 async function createWallet(form: HTMLFormElement) {
   const formData = new FormData(form);
-  await runCommand("create_wallet", {
+  const passphrase = String(formData.get("passphrase") || "");
+  if (!validatePassphraseConfirmation(form, passphrase)) return;
+
+  await runCommand("create_wallet", () => walletApi.createWallet({
     name: String(formData.get("name") || "Primary Wallet"),
-    passphrase: String(formData.get("passphrase") || ""),
-  });
+    passphrase,
+  }));
 }
 
 async function importWallet(form: HTMLFormElement) {
   const formData = new FormData(form);
-  await runCommand("import_wallet", {
+  const passphrase = String(formData.get("passphrase") || "");
+  if (!validatePassphraseConfirmation(form, passphrase)) return;
+
+  await runCommand("import_wallet", () => walletApi.importWallet({
     mnemonic: String(formData.get("mnemonic") || ""),
-    passphrase: String(formData.get("passphrase") || ""),
-  });
+    passphrase,
+  }));
 }
 
 async function unlockWallet(form: HTMLFormElement) {
   const formData = new FormData(form);
-  await runCommand("unlock_wallet", {
+  await runCommand("unlock_wallet", () => walletApi.unlockWallet({
     passphrase: String(formData.get("passphrase") || ""),
-  });
+  }));
 }
 
 async function signTransaction(form: HTMLFormElement) {
   const formData = new FormData(form);
+  sendDraft = {
+    to: String(formData.get("to") || ""),
+    symbol: String(formData.get("symbol") || "ETH"),
+    amount: String(formData.get("amount") || ""),
+    note: String(formData.get("note") || ""),
+  };
   busy = true;
   render();
   try {
-    signedTransaction = await invoke<SignedTransaction>("sign_transaction", {
-      to: String(formData.get("to") || ""),
-      symbol: String(formData.get("symbol") || "ETH"),
-      amount: Number(formData.get("amount") || 0),
-      note: String(formData.get("note") || ""),
+    signedTransaction = await walletApi.signTransaction({
+      to: sendDraft.to,
+      symbol: sendDraft.symbol,
+      amount: Number(sendDraft.amount || 0),
+      note: sendDraft.note,
     });
     pushToast(successMessage("sign_transaction"), "success");
   } catch (error) {
@@ -286,40 +358,66 @@ async function signTransaction(form: HTMLFormElement) {
 
 async function broadcastSignedTransaction() {
   if (!signedTransaction) return;
+  if (!window.confirm("Broadcast this signed transaction to the local simulator?")) return;
+  const signed = signedTransaction;
 
-  const ok = await runCommand("send_transaction", { signed: signedTransaction });
+  const ok = await runCommand("send_transaction", () => walletApi.sendTransaction({ signed }));
   if (ok) {
     signedTransaction = null;
+    sendDraft = { to: "", symbol: "ETH", amount: "", note: "" };
     render();
   }
 }
 
 async function swapTokens(form: HTMLFormElement) {
   const formData = new FormData(form);
-  await runCommand("swap_tokens", {
+  await runCommand("swap_tokens", () => walletApi.swapTokens({
     fromSymbol: String(formData.get("fromSymbol") || "ETH"),
     toSymbol: String(formData.get("toSymbol") || "USDC"),
     amount: Number(formData.get("amount") || 0),
-  });
+  }));
 }
 
 async function setNetwork(form: HTMLFormElement) {
   const formData = new FormData(form);
-  await runCommand("set_network", {
+  await runCommand("set_network", () => walletApi.setNetwork({
     network: String(formData.get("network") || "Ethereum"),
-  });
+  }));
 }
 
-async function runCommand(command: string, args?: Record<string, unknown>) {
+async function lockWallet() {
   busy = true;
   render();
   try {
-    const result = await invoke<WalletSession | null>(command, args);
+    await walletApi.lockWallet();
+    session = await walletApi.getWallet();
+    currentView = "dashboard";
+    pushToast(successMessage("lock_wallet"), "success");
+  } catch (error) {
+    pushToast(formatError(error), "error");
+  } finally {
+    busy = false;
+    render();
+  }
+}
+
+async function clearWallet() {
+  if (!window.confirm("Remove the encrypted local wallet and return to onboarding? This cannot be undone.")) return;
+  const ok = await runCommand("clear_wallet", () => walletApi.clearWallet());
+  if (ok) {
+    currentView = "dashboard";
+    signedTransaction = null;
+    sendDraft = { to: "", symbol: "ETH", amount: "", note: "" };
+    render();
+  }
+}
+
+async function runCommand(command: SessionCommand, action: () => Promise<WalletSession | null>) {
+  busy = true;
+  render();
+  try {
+    const result = await action();
     if (result) session = result;
-    if (command === "lock_wallet") {
-      session = await invoke<WalletSession>("get_wallet");
-      currentView = "dashboard";
-    }
     pushToast(successMessage(command), "success");
     return true;
   } catch (error) {
@@ -333,8 +431,13 @@ async function runCommand(command: string, args?: Record<string, unknown>) {
 
 async function copyAddress() {
   if (!session?.address) return;
-  await navigator.clipboard.writeText(session.address);
-  pushToast("Receive address copied.", "success");
+  await copyText(session.address, "Receive address copied.");
+}
+
+async function copyReceiveAddress() {
+  const address = receiveAddress(selectedReceiveNetwork());
+  if (!address) return;
+  await copyText(address, "Receive address copied.");
 }
 
 async function copyQrPayload() {
@@ -343,8 +446,43 @@ async function copyQrPayload() {
     return;
   }
 
-  await navigator.clipboard.writeText(qrSvg);
-  pushToast("QR SVG copied.", "success");
+  await copyText(qrSvg, "QR SVG copied.");
+}
+
+async function copyText(value: string, message: string) {
+  await navigator.clipboard.writeText(value);
+  pushToast(message, "success");
+}
+
+function validatePassphraseConfirmation(form: HTMLFormElement, passphrase: string) {
+  const confirm = String(new FormData(form).get("confirmPassphrase") || "");
+  if (passphrase !== confirm) {
+    pushToast("Passphrases do not match.", "error");
+    return false;
+  }
+  if (passphraseScore(passphrase) < 3) {
+    pushToast("Use a stronger passphrase before creating encrypted storage.", "error");
+    return false;
+  }
+  return true;
+}
+
+function updatePassphraseStrength(input: HTMLInputElement) {
+  const meter = input.closest("form")?.querySelector<HTMLElement>("[data-passphrase-meter]");
+  if (!meter) return;
+  const score = passphraseScore(input.value);
+  const labels = ["Too weak", "Weak", "Fair", "Strong", "Excellent"];
+  meter.dataset.score = String(score);
+  meter.querySelector<HTMLElement>("[data-passphrase-label]")!.textContent = labels[score];
+}
+
+function passphraseScore(value: string) {
+  let score = value.length >= 8 ? 1 : 0;
+  if (value.length >= 12) score += 1;
+  if (/[A-Z]/.test(value) && /[a-z]/.test(value)) score += 1;
+  if (/\d/.test(value)) score += 1;
+  if (/[^A-Za-z0-9]/.test(value)) score += 1;
+  return Math.min(score, 4);
 }
 
 function downloadQrSvg() {
@@ -416,14 +554,18 @@ function onboarding() {
         </div>
         <form data-action="create-wallet" class="space-y-4">
           <label class="block space-y-2"><span class="text-sm font-bold text-slate-300">Wallet name</span><input class="field" name="name" placeholder="Primary Vault" required /></label>
-          <label class="block space-y-2"><span class="text-sm font-bold text-slate-300">Passphrase</span><input class="field" name="passphrase" type="password" minlength="8" placeholder="Minimum 8 characters" required /></label>
+          <label class="block space-y-2"><span class="text-sm font-bold text-slate-300">Passphrase</span><input class="field" name="passphrase" type="password" minlength="8" placeholder="Minimum 8 characters" data-passphrase-input required /></label>
+          ${passphraseMeter()}
+          <label class="block space-y-2"><span class="text-sm font-bold text-slate-300">Confirm passphrase</span><input class="field" name="confirmPassphrase" type="password" minlength="8" required /></label>
           <button class="btn-primary w-full" type="submit">Generate wallet</button>
         </form>
         <div class="my-7 h-px bg-white/10"></div>
         <form data-action="import-wallet" class="space-y-4">
           <h3 class="font-black">Import existing wallet</h3>
           <label class="block space-y-2"><span class="text-sm font-bold text-slate-300">Recovery phrase</span><textarea class="field min-h-28" name="mnemonic" placeholder="12 or 24 word phrase" required></textarea></label>
-          <label class="block space-y-2"><span class="text-sm font-bold text-slate-300">New local passphrase</span><input class="field" name="passphrase" type="password" minlength="8" required /></label>
+          <label class="block space-y-2"><span class="text-sm font-bold text-slate-300">New local passphrase</span><input class="field" name="passphrase" type="password" minlength="8" data-passphrase-input required /></label>
+          ${passphraseMeter()}
+          <label class="block space-y-2"><span class="text-sm font-bold text-slate-300">Confirm passphrase</span><input class="field" name="confirmPassphrase" type="password" minlength="8" required /></label>
           <button class="btn-secondary w-full" type="submit">Import wallet</button>
         </form>
       </div>
@@ -451,8 +593,8 @@ function lockedWallet() {
 function walletShell() {
   if (!session) return "";
   return `
-    <div class="mx-auto grid max-w-[1500px] gap-5 lg:grid-cols-[280px_1fr]">
-      <aside class="glass rounded-[2rem] p-5 lg:sticky lg:top-5 lg:h-[calc(100vh-2.5rem)]">
+    <div class="mx-auto grid max-w-[1500px] gap-5 pb-24 lg:grid-cols-[280px_1fr] lg:pb-0">
+      <aside class="glass hidden rounded-[2rem] p-5 lg:sticky lg:top-5 lg:block lg:h-[calc(100vh-2.5rem)]">
         <div class="mb-8 flex items-center gap-3">
           <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-acid text-xl font-black text-ink">VF</div>
           <div><p class="font-black">${escapeHtml(session.wallet_name ?? "VaultForge")}</p><p class="text-sm text-slate-500">${escapeHtml(session.network)}</p></div>
@@ -476,6 +618,7 @@ function walletShell() {
         ${topBar()}
         ${renderView()}
       </section>
+      ${mobileNav()}
     </div>
   `;
 }
@@ -513,7 +656,8 @@ function dashboardView() {
     .sort((left, right) => assetValue(right) - assetValue(left))
     .map(assetCard)
     .join("");
-  const recent = session.activity.slice(0, 5).map(activityRow).join("");
+  const recent = session.activity.slice(0, 5).map(activityRow).join("") || emptyState("No recent activity", "Sign, send, swap, or change networks to build a local activity timeline.");
+  const change = portfolioChange();
   return `
     <div class="grid gap-5 xl:grid-cols-[1.35fr_0.75fr]">
       <div class="min-w-0 space-y-5">
@@ -523,12 +667,18 @@ function dashboardView() {
               <p class="text-sm uppercase tracking-[0.3em] text-acid">Portfolio</p>
               <h2 class="mt-3 max-w-2xl text-4xl font-black tracking-tight">Multi-asset wallet with transaction controls.</h2>
             </div>
-            <div class="rounded-2xl border border-acid/30 bg-acid/10 p-4 text-right">
-              <p class="text-sm text-slate-400">Security score</p>
-              <p class="text-3xl font-black text-acid">${session.risk_score}/100</p>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div class="rounded-2xl border border-acid/30 bg-acid/10 p-4 text-right">
+                <p class="text-sm text-slate-400">Weighted 24h</p>
+                <p class="text-3xl font-black ${change >= 0 ? "text-emerald-300" : "text-rose-300"}">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</p>
+              </div>
+              <div class="rounded-2xl border border-acid/30 bg-acid/10 p-4 text-right">
+                <p class="text-sm text-slate-400">Security score</p>
+                <p class="text-3xl font-black text-acid">${session.risk_score}/100</p>
+              </div>
             </div>
           </div>
-          <div class="asset-scroll mt-6">${topAssets}</div>
+          <div class="asset-scroll mt-6">${topAssets || emptyState("No assets", "Create or import a wallet to populate simulated balances.")}</div>
         </section>
         <section class="glass rounded-[2rem] p-6">
           <div class="mb-5 flex items-center justify-between"><h2 class="text-xl font-black">Recent activity</h2><button class="text-sm font-bold text-acid" data-view="activity">View all</button></div>
@@ -545,6 +695,7 @@ function dashboardView() {
 
 function sendView() {
   if (signedTransaction) return signedTransactionView(signedTransaction);
+  const selectedSymbol = sendDraft.symbol || "ETH";
 
   return `
     <section class="glass max-w-3xl rounded-[2rem] p-6">
@@ -552,12 +703,12 @@ function sendView() {
       <h2 class="mt-2 text-3xl font-black">Send crypto</h2>
       <p class="mt-3 text-sm leading-6 text-slate-400">Transactions are signed locally before broadcast to the simulator. Review the signature before funds leave your simulated balance.</p>
       <form data-action="sign-transaction" class="mt-6 grid gap-4">
-        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Recipient address</span><input class="field" name="to" data-recipient-address placeholder="${addressPlaceholder("ETH")}" required /></label>
+        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Recipient address</span><input class="field" name="to" data-recipient-address placeholder="${addressPlaceholder(selectedSymbol)}" value="${escapeHtml(sendDraft.to)}" required /></label>
         <div class="grid gap-4 sm:grid-cols-2">
-          <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Asset</span>${assetSelect("symbol", "ETH", "data-send-symbol")}</label>
-          <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" required /></label>
+          <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Asset</span>${assetSelect("symbol", selectedSymbol, "data-send-symbol")}</label>
+          <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" value="${escapeHtml(sendDraft.amount)}" required /></label>
         </div>
-        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Note</span><input class="field" name="note" placeholder="Optional transaction memo" /></label>
+        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Note</span><input class="field" name="note" placeholder="Optional transaction memo" value="${escapeHtml(sendDraft.note)}" /></label>
         <button class="btn-primary justify-self-start" type="submit">Sign transaction</button>
       </form>
     </section>
@@ -579,6 +730,10 @@ function signedTransactionView(signed: SignedTransaction) {
         ${signedDetail("From", shortAddress(signed.from))}
         ${signedDetail("To", shortAddress(signed.to))}
         ${signedDetail("Amount", `${signed.amount.toFixed(6)} ${signed.symbol}`)}
+        ${signedDetail("Network fee", `${signed.feeAmount.toFixed(6)} ${signed.feeSymbol}`)}
+        ${signedDetail("Total debit", `${signed.totalDebit.toFixed(6)} ${signed.symbol}`)}
+        ${signedDetail("Post-send balance", `${signed.postBalance.toFixed(6)} ${signed.symbol}`)}
+        ${signedDetail("Estimated value", money(signed.fiatValue))}
         ${signedDetail("Network", signed.network)}
         ${signedDetail("Nonce", signed.nonce)}
         ${signedDetail("Signed", new Date(signed.signedAt).toLocaleString())}
@@ -605,8 +760,8 @@ function signedDetail(label: string, value: string, mono = false) {
 }
 
 function receiveView() {
-  const address = session?.address ?? "";
   const network = selectedReceiveNetwork();
+  const address = receiveAddress(network);
   const payload = receivePayload();
   const qrContent = payload ? qrSvg || `<span class="text-sm font-bold text-slate-500">Generating QR...</span>` : `<span class="text-sm font-bold text-slate-500">Receive is not available for this network yet.</span>`;
   const qrActionsDisabled = payload ? "" : "disabled";
@@ -632,7 +787,7 @@ function receiveView() {
           <p class="mt-3 break-all font-mono text-xs text-slate-400">${escapeHtml(payload)}</p>
         </div>
         <p class="mt-5 break-all font-mono text-sm text-slate-200">${escapeHtml(address)}</p>
-        <button class="btn-primary mt-5" data-action="copy-address" type="button">Copy address</button>
+        <button class="btn-primary mt-5" data-action="copy-receive-address" type="button">Copy address</button>
       </div>
     </section>
   `;
@@ -656,39 +811,65 @@ function swapView() {
 }
 
 function assetsView() {
+  const assets = session?.assets ?? [];
   return `
     <section class="glass rounded-[2rem] p-6">
-      <div class="mb-5 flex items-center justify-between"><h2 class="text-2xl font-black">Assets</h2><span class="text-sm text-slate-500">${session?.assets.length ?? 0} tracked</span></div>
-      <div class="grid gap-4 lg:grid-cols-2">${session?.assets.map(assetCard).join("") ?? ""}</div>
+      <div class="mb-5 flex items-center justify-between"><h2 class="text-2xl font-black">Assets</h2><span class="text-sm text-slate-500">${assets.length} tracked</span></div>
+      <div class="grid gap-4 lg:grid-cols-2">${assets.map(assetCard).join("") || emptyState("No assets tracked", "Unlock or create a wallet to view simulated asset balances.")}</div>
     </section>
   `;
 }
 
 function activityView() {
+  const selected = selectedActivity();
   return `
-    <section class="glass rounded-[2rem] p-6">
-      <h2 class="text-2xl font-black">Activity</h2>
-      <div class="mt-5 space-y-3">${session?.activity.map(activityRow).join("") ?? ""}</div>
-    </section>
+    <div class="grid gap-5 xl:grid-cols-[1fr_0.85fr]">
+      <section class="glass rounded-[2rem] p-6">
+        <h2 class="text-2xl font-black">Activity</h2>
+        <div class="mt-5 space-y-3">${session?.activity.map(activityRow).join("") || emptyState("No activity yet", "Your signed sends, swaps, and network changes will appear here.")}</div>
+      </section>
+      ${activityDetails(selected)}
+    </div>
   `;
 }
 
 function settingsView() {
   return `
-    <section class="glass max-w-3xl rounded-[2rem] p-6">
-      <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Preferences</p>
-      <h2 class="mt-2 text-3xl font-black">Wallet settings</h2>
-      <form data-action="set-network" class="mt-6 space-y-4">
-        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Active network</span>
-          <select class="field" name="network">
-            ${["Ethereum", "Polygon", "Arbitrum", "Base", "Optimism"].map((network) => `<option ${session?.network === network ? "selected" : ""}>${network}</option>`).join("")}
-          </select>
-        </label>
-        <button class="btn-primary" type="submit">Save network</button>
-      </form>
-      <div class="mt-6 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm text-amber-100">This build simulates balances and transactions. Connect audited chain clients and hardware-backed signing before using real funds.</div>
-    </section>
+    <div class="grid gap-5 xl:grid-cols-[0.95fr_1fr]">
+      <section class="glass rounded-[2rem] p-6">
+        <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Preferences</p>
+        <h2 class="mt-2 text-3xl font-black">Wallet settings</h2>
+        <form data-action="set-network" class="mt-6 space-y-4">
+          <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Active network</span>
+            <select class="field" name="network">
+              ${["Ethereum", "Polygon", "Arbitrum", "Base", "Optimism"].map((network) => `<option ${session?.network === network ? "selected" : ""}>${network}</option>`).join("")}
+            </select>
+          </label>
+          <button class="btn-primary" type="submit">Save network</button>
+        </form>
+        <div class="mt-6 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm text-amber-100">This build simulates balances and transactions. Connect audited chain clients and hardware-backed signing before using real funds.</div>
+      </section>
+      <section class="glass rounded-[2rem] p-6">
+        <p class="text-sm uppercase tracking-[0.3em] text-acid">Security center</p>
+        <h2 class="mt-2 text-3xl font-black">Local protection</h2>
+        <div class="mt-6 grid gap-3 sm:grid-cols-2">
+          ${securityTile("Storage", "AES-GCM encrypted")}
+          ${securityTile("Key derivation", "Argon2 passphrase key")}
+          ${securityTile("Mode", "Simulated signing")}
+          ${securityTile("Lock state", session?.locked ? "Locked" : "Unlocked")}
+        </div>
+        <div class="mt-6 rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4">
+          <h3 class="font-black text-rose-100">Danger zone</h3>
+          <p class="mt-2 text-sm leading-6 text-rose-100/80">Remove the encrypted local wallet file and return this app to onboarding.</p>
+          <button class="btn-danger mt-4" data-action="clear-wallet" type="button">Clear local wallet</button>
+        </div>
+      </section>
+    </div>
   `;
+}
+
+function securityTile(label: string, value: string) {
+  return `<div class="rounded-2xl border border-white/10 bg-white/[0.035] p-4"><p class="text-xs uppercase tracking-[0.22em] text-slate-500">${escapeHtml(label)}</p><p class="mt-2 font-black text-slate-100">${escapeHtml(value)}</p></div>`;
 }
 
 function quickActions() {
@@ -721,13 +902,34 @@ function featureCard(title: string, body: string) {
   return `<div class="rounded-2xl border border-white/10 bg-white/[0.04] p-5"><h3 class="font-black">${title}</h3><p class="mt-2 text-sm leading-6 text-slate-400">${body}</p></div>`;
 }
 
+function passphraseMeter() {
+  return `<div class="passphrase-meter" data-passphrase-meter data-score="0"><div class="passphrase-meter-track"><div></div></div><p class="mt-2 text-xs font-bold text-slate-500">Strength: <span data-passphrase-label>Too weak</span></p></div>`;
+}
+
 function navButton(view: View, label: string) {
   return `<button class="nav-item ${currentView === view ? "active" : ""}" data-view="${view}" type="button">${label}</button>`;
+}
+
+function mobileNav() {
+  return `
+    <nav class="mobile-nav glass">
+      ${mobileNavButton("dashboard", "Home")}
+      ${mobileNavButton("send", "Send")}
+      ${mobileNavButton("receive", "Receive")}
+      ${mobileNavButton("activity", "Activity")}
+      ${mobileNavButton("settings", "Secure")}
+    </nav>
+  `;
+}
+
+function mobileNavButton(view: View, label: string) {
+  return `<button class="mobile-nav-item ${currentView === view ? "active" : ""}" data-view="${view}" type="button">${label}</button>`;
 }
 
 function assetCard(asset: Asset) {
   const value = assetValue(asset);
   const positive = asset.change_24h >= 0;
+  const allocation = session?.fiat_balance ? (value / session.fiat_balance) * 100 : 0;
   return `
     <article class="asset-card rounded-3xl border border-white/10 bg-white/[0.04] p-5">
       <div class="flex items-start justify-between gap-4">
@@ -736,6 +938,10 @@ function assetCard(asset: Asset) {
       </div>
       <p class="asset-value mt-5 text-2xl font-black">${money(value)}</p>
       <p class="mt-1 text-sm text-slate-400">${asset.balance.toFixed(asset.symbol === "USDC" ? 2 : 5)} ${escapeHtml(asset.symbol)}</p>
+      <div class="mt-4">
+        <div class="flex justify-between text-xs font-bold text-slate-500"><span>Allocation</span><span>${allocation.toFixed(1)}%</span></div>
+        <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-900"><div class="h-full rounded-full bg-acid" style="width: ${Math.max(2, allocation).toFixed(1)}%"></div></div>
+      </div>
     </article>
   `;
 }
@@ -744,13 +950,60 @@ function assetValue(asset: Asset) {
   return asset.balance * asset.price_usd;
 }
 
+function portfolioChange() {
+  if (!session?.fiat_balance) return 0;
+  return session.assets.reduce((total, asset) => total + asset.change_24h * (assetValue(asset) / session!.fiat_balance), 0);
+}
+
+function emptyState(title: string, body: string) {
+  return `<div class="rounded-3xl border border-dashed border-white/10 bg-white/[0.025] p-6 text-center"><p class="font-black text-slate-200">${escapeHtml(title)}</p><p class="mt-2 text-sm leading-6 text-slate-500">${escapeHtml(body)}</p></div>`;
+}
+
 function activityRow(item: Activity) {
   return `
-    <article class="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-4 sm:flex-row sm:items-center sm:justify-between">
+    <article class="flex cursor-pointer flex-col gap-3 rounded-2xl border ${selectedActivityId === item.id ? "border-acid/50 bg-acid/10" : "border-white/10 bg-white/[0.035]"} p-4 sm:flex-row sm:items-center sm:justify-between" data-action="select-activity" data-activity-id="${escapeHtml(item.id)}">
       <div><p class="font-black">${escapeHtml(item.title)}</p><p class="mt-1 text-sm text-slate-500">${escapeHtml(item.subtitle)} - ${new Date(item.timestamp).toLocaleString()}</p></div>
       <div class="text-left sm:text-right"><p class="font-mono font-bold">${escapeHtml(item.amount)}</p><p class="text-xs uppercase tracking-[0.2em] text-acid">${escapeHtml(item.status)}</p></div>
     </article>
   `;
+}
+
+function selectedActivity() {
+  const activity = session?.activity ?? [];
+  return activity.find((item) => item.id === selectedActivityId) ?? activity[0] ?? null;
+}
+
+function activityDetails(item: Activity | null) {
+  if (!item) {
+    return `<section class="glass rounded-[2rem] p-6"><p class="text-sm text-slate-400">No activity selected.</p></section>`;
+  }
+
+  return `
+    <section class="glass rounded-[2rem] p-6">
+      <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Activity details</p>
+      <h2 class="mt-2 text-2xl font-black">${escapeHtml(item.title)}</h2>
+      <div class="mt-5 space-y-3">
+        ${detailRow("Status", item.status)}
+        ${detailRow("Amount", item.amount)}
+        ${detailRow("Fee", item.fee ?? "n/a")}
+        ${detailRow("Network", item.network ?? session?.network ?? "n/a")}
+        ${detailRow("Timestamp", new Date(item.timestamp).toLocaleString())}
+        ${copyableDetailRow("Transaction hash", item.hash)}
+        ${item.from ? copyableDetailRow("From", item.from) : ""}
+        ${item.to ? copyableDetailRow("To", item.to) : ""}
+        ${item.payload_hash ? copyableDetailRow("Payload hash", item.payload_hash) : ""}
+        ${item.signature ? copyableDetailRow("Signature", item.signature) : ""}
+      </div>
+    </section>
+  `;
+}
+
+function detailRow(label: string, value: string) {
+  return `<div class="rounded-2xl border border-white/10 bg-white/[0.035] p-4"><p class="text-xs uppercase tracking-[0.22em] text-slate-500">${escapeHtml(label)}</p><p class="mt-2 break-all text-sm font-bold text-slate-200">${escapeHtml(value)}</p></div>`;
+}
+
+function copyableDetailRow(label: string, value: string) {
+  return `<div class="rounded-2xl border border-white/10 bg-white/[0.035] p-4"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="text-xs uppercase tracking-[0.22em] text-slate-500">${escapeHtml(label)}</p><p class="mt-2 break-all font-mono text-xs text-slate-200">${escapeHtml(value)}</p></div><button class="btn-secondary shrink-0 text-xs" data-action="copy-value" data-copy-value="${escapeHtml(value)}" type="button">Copy</button></div></div>`;
 }
 
 function assetSelect(name: string, selected = "ETH", attributes = "") {
@@ -792,16 +1045,27 @@ function selectedReceiveNetwork() {
 
 function receiveNetworkDetail(network: ReceiveNetwork) {
   if (network.kind === "evm") return `Chain ID ${network.chainId} - ${network.ticker}`;
-  return `${network.ticker} - Coming soon`;
+  if (network.kind === "bitcoin") return `${network.ticker} - ${network.network}`;
+  return `${network.ticker} - Simulated`;
 }
 
 function receivePayload() {
-  const address = session?.address;
-  if (!address) return "";
-
   const network = selectedReceiveNetwork();
+  const address = receiveAddress(network);
+  if (!address) return "";
   if (network.kind === "evm") return `ethereum:${address}@${network.chainId}`;
+  if (network.kind === "bitcoin") return `bitcoin:${address}`;
+  if (network.kind === "solana") return `solana:${address}`;
   return "";
+}
+
+function receiveAddress(network: ReceiveNetwork) {
+  const address = session?.address ?? "";
+  if (!address) return "";
+  const seed = address.replace(/[^a-fA-F0-9]/g, "");
+  if (network.kind === "bitcoin") return `bc1q${seed.toLowerCase().padEnd(38, "0").slice(0, 38)}`;
+  if (network.kind === "solana") return seed.padEnd(44, "7").slice(0, 44);
+  return address;
 }
 
 async function ensureReceiveQr() {
@@ -929,6 +1193,7 @@ function successMessage(command: string) {
     import_wallet: "Wallet imported successfully.",
     unlock_wallet: "Wallet unlocked.",
     lock_wallet: "Wallet locked.",
+    clear_wallet: "Local wallet cleared.",
     sign_transaction: "Transaction signed locally.",
     send_transaction: "Signed transaction broadcast to the local simulator.",
     swap_tokens: "Swap completed in the local simulator.",
