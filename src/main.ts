@@ -226,6 +226,10 @@ function bindEvents() {
       resetQr();
       render();
     }
+
+    if (target.matches("[data-send-symbol]")) {
+      updateRecipientPlaceholder(target.value);
+    }
   });
 
   document.addEventListener("wheel", (event) => {
@@ -548,9 +552,9 @@ function sendView() {
       <h2 class="mt-2 text-3xl font-black">Send crypto</h2>
       <p class="mt-3 text-sm leading-6 text-slate-400">Transactions are signed locally before broadcast to the simulator. Review the signature before funds leave your simulated balance.</p>
       <form data-action="sign-transaction" class="mt-6 grid gap-4">
-        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Recipient address</span><input class="field" name="to" placeholder="0x..." required /></label>
+        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Recipient address</span><input class="field" name="to" data-recipient-address placeholder="${addressPlaceholder("ETH")}" required /></label>
         <div class="grid gap-4 sm:grid-cols-2">
-          <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Asset</span>${assetSelect("symbol")}</label>
+          <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Asset</span>${assetSelect("symbol", "ETH", "data-send-symbol")}</label>
           <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" required /></label>
         </div>
         <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Note</span><input class="field" name="note" placeholder="Optional transaction memo" /></label>
@@ -749,8 +753,21 @@ function activityRow(item: Activity) {
   `;
 }
 
-function assetSelect(name: string, selected = "ETH") {
-  return `<select class="field" name="${name}">${session?.assets.map((asset) => `<option value="${asset.symbol}" ${asset.symbol === selected ? "selected" : ""}>${asset.symbol} - ${asset.name}</option>`).join("") ?? ""}</select>`;
+function assetSelect(name: string, selected = "ETH", attributes = "") {
+  return `<select class="field" name="${name}" ${attributes}>${session?.assets.map((asset) => `<option value="${asset.symbol}" ${asset.symbol === selected ? "selected" : ""}>${asset.symbol} - ${asset.name}</option>`).join("") ?? ""}</select>`;
+}
+
+function updateRecipientPlaceholder(symbol: string) {
+  const input = document.querySelector<HTMLInputElement>("[data-recipient-address]");
+  if (input) input.placeholder = addressPlaceholder(symbol);
+}
+
+function addressPlaceholder(symbol: string) {
+  const placeholders: Record<string, string> = {
+    BTC: "bc1... / 1... / 3...",
+    SOL: "Solana address",
+  };
+  return placeholders[symbol] ?? "0x...";
 }
 
 function iconCopy() {

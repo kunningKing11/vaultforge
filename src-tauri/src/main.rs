@@ -351,9 +351,6 @@ fn validate_unlocked(state: &State<'_, Mutex<AppState>>) -> Result<(), String> {
 
 fn validate_transfer(wallet: &Wallet, to: &str, symbol: &str, amount: f64) -> Result<(), String> {
     let to = to.trim();
-    if !to.starts_with("0x") || to.len() < 12 {
-        return Err("Recipient must be a valid 0x address".to_string());
-    }
     if amount <= 0.0 || !amount.is_finite() {
         return Err("Amount must be greater than zero".to_string());
     }
@@ -366,8 +363,37 @@ fn validate_transfer(wallet: &Wallet, to: &str, symbol: &str, amount: f64) -> Re
     if asset.balance < amount {
         return Err(format!("Insufficient {} balance", symbol));
     }
+    validate_address_for_symbol(to, symbol)?;
 
     Ok(())
+}
+
+fn validate_address_for_symbol(address: &str, symbol: &str) -> Result<(), String> {
+    match symbol {
+        "BTC" => {
+            let valid_prefix =
+                address.starts_with("bc1") || address.starts_with('1') || address.starts_with('3');
+            if valid_prefix && address.len() >= 26 && address.len() <= 62 {
+                Ok(())
+            } else {
+                Err("Recipient must be a valid Bitcoin address".to_string())
+            }
+        }
+        "SOL" => {
+            if !address.starts_with("0x") && address.len() >= 32 && address.len() <= 44 {
+                Ok(())
+            } else {
+                Err("Recipient must be a valid Solana address".to_string())
+            }
+        }
+        _ => {
+            if address.starts_with("0x") && address.len() >= 12 {
+                Ok(())
+            } else {
+                Err("Recipient must be a valid 0x address".to_string())
+            }
+        }
+    }
 }
 
 fn transaction_payload_hash(signed: &SignedTransaction) -> String {
