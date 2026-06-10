@@ -5,7 +5,7 @@ use chrono::Utc;
 use rand::{seq::SliceRandom, Rng};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{fs, path::PathBuf, sync::Mutex};
+use std::{collections::HashMap, fs, path::PathBuf, sync::Mutex};
 use tauri::{Manager, State};
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -78,6 +78,14 @@ struct SignedTransaction {
     fiat_value: f64,
 }
 
+#[derive(Deserialize)]
+struct CoinGeckoPrice {
+    usd: f64,
+    usd_24h_change: Option<f64>,
+}
+
+type CoinGeckoPriceResponse = HashMap<String, CoinGeckoPrice>;
+
 struct AppState {
     wallet: Option<Wallet>,
     locked: bool,
@@ -136,6 +144,63 @@ impl AppState {
 #[tauri::command]
 fn get_wallet(state: State<'_, Mutex<AppState>>) -> Result<WalletSession, String> {
     let state = state.lock().map_err(|_| "State lock failed")?;
+    Ok(session_from_state(&state))
+}
+
+#[tauri::command]
+async fn refresh_prices(state: State<'_, Mutex<AppState>>) -> Result<WalletSession, String> {
+    let price_ids = {
+        let state = state.lock().map_err(|_| "State lock failed")?;
+        if state.locked {
+            return Err("Wallet is locked".to_string());
+        }
+        let wallet = state
+            .wallet
+            .as_ref()
+            .ok_or_else(|| "No wallet exists yet".to_string())?;
+        wallet
+            .assets
+            .iter()
+            .filter_map(|asset| price_id_for_symbol(&asset.symbol))
+            .fold(Vec::<&'static str>::new(), |mut ids, id| {
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+                ids
+            })
+    };
+
+    if price_ids.is_empty() {
+        let state = state.lock().map_err(|_| "State lock failed")?;
+        return Ok(session_from_state(&state));
+    }
+
+    let prices = fetch_market_prices(&price_ids).await?;
+
+    let mut state = state.lock().map_err(|_| "State lock failed")?;
+    {
+        let wallet = state
+            .wallet
+            .as_mut()
+            .ok_or_else(|| "No wallet exists yet".to_string())?;
+        for asset in &mut wallet.assets {
+            let Some(price_id) = price_id_for_symbol(&asset.symbol) else {
+                continue;
+            };
+            let Some(price) = prices.get(price_id) else {
+                continue;
+            };
+            if price.usd.is_finite() && price.usd > 0.0 {
+                asset.price_usd = price.usd;
+            }
+            if let Some(change) = price.usd_24h_change {
+                if change.is_finite() {
+                    asset.change_24h = change;
+                }
+            }
+        }
+    }
+    persist_state_wallet(&mut state)?;
     Ok(session_from_state(&state))
 }
 
@@ -654,6 +719,39 @@ fn starter_assets(network: &str) -> Vec<Asset> {
     ]
 }
 
+fn price_id_for_symbol(symbol: &str) -> Option<&'static str> {
+    match symbol {
+        "ETH" => Some("ethereum"),
+        "BTC" => Some("bitcoin"),
+        "SOL" => Some("solana"),
+        "USDC" => Some("usd-coin"),
+        _ => None,
+    }
+}
+
+async fn fetch_market_prices(ids: &[&str]) -> Result<CoinGeckoPriceResponse, String> {
+    let ids = ids.join(",");
+    let url = format!(
+        "https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd&include_24hr_change=true"
+    );
+    let response = reqwest::Client::new()
+        .get(url)
+        .header("accept", "application/json")
+        .header("user-agent", "VaultForge Wallet/0.1.0")
+        .send()
+        .await
+        .map_err(|_| "Failed to reach price service")?;
+
+    if !response.status().is_success() {
+        return Err(format!("Price service returned HTTP {}", response.status()));
+    }
+
+    response
+        .json::<CoinGeckoPriceResponse>()
+        .await
+        .map_err(|_| "Price service returned invalid data".to_string())
+}
+
 fn activity(kind: &str, title: &str, subtitle: &str, amount: &str) -> Activity {
     Activity {
         id: random_hex(8),
@@ -734,7 +832,7 @@ fn encrypt_wallet(
     key: &[u8; 32],
     salt: &[u8],
 ) -> Result<StoredWalletFile, String> {
-    let nonce_bytes: Vec<u8> = (0..12).map(|_| rand::thread_rng().gen()).collect();
+let nonce_bytes: Vec<u8> = (0..12).map(|_| rand::thread_rng().r#gen()).collect();
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| "Failed to initialize encryption")?;
     let plaintext = serde_json::to_vec(wallet).map_err(|_| "Failed to encode wallet")?;
     let ciphertext = cipher
@@ -776,7 +874,7 @@ fn derive_storage_key(
 ) -> Result<([u8; 32], Vec<u8>), String> {
     let salt = salt
         .map(|value| value.to_vec())
-        .unwrap_or_else(|| (0..16).map(|_| rand::thread_rng().gen()).collect());
+        .unwrap_or_else(|| (0..16).map(|_| rand::thread_rng().r#gen()).collect());
     let mut key = [0u8; 32];
     Argon2::default()
         .hash_password_into(passphrase.as_bytes(), &salt, &mut key)
@@ -826,7 +924,7 @@ fn hash_secret(value: &str) -> String {
 
 fn random_hex(bytes: usize) -> String {
     let mut rng = rand::thread_rng();
-    let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
+    let data: Vec<u8> = (0..bytes).map(|_| rng.r#gen()).collect();
     hex::encode(data)
 }
 
@@ -943,6 +1041,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_wallet,
+            refresh_prices,
             create_wallet,
             import_wallet,
             unlock_wallet,

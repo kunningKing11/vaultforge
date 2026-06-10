@@ -16,10 +16,10 @@ type Activity = {
   kind: string;
   title: string;
   subtitle: string;
-  amount: string;
   status: string;
   timestamp: string;
   hash: string;
+  amount?: string;
   from?: string | null;
   to?: string | null;
   network?: string | null;
@@ -65,9 +65,9 @@ type SendDraft = {
   note: string;
 };
 
-type SessionCommand = "create_wallet" | "import_wallet" | "unlock_wallet" | "send_transaction" | "swap_tokens" | "set_network" | "clear_wallet";
+type SessionCommand = "create_wallet" | "import_wallet" | "unlock_wallet" | "send_transaction" | "swap_tokens" | "set_network" | "clear_wallet" | "refresh_prices";
 
-type View = "dashboard" | "send" | "receive" | "swap" | "assets" | "activity" | "settings";
+type View = "dashboard" | "send" | "receive" | "swap" | "assets" | "activity" | "security" | "settings";
 
 type EvmReceiveNetworkInput = {
   kind: "evm";
@@ -86,40 +86,91 @@ type EvmReceiveNetwork = Omit<Required<EvmReceiveNetworkInput>, "vm_type"> & {
   isTestNet: boolean;
 };
 
-type BitcoinReceiveNetwork = {
+type BitcoinReceiveNetworkInput = {
   kind: "bitcoin";
   id: string;
   name: string;
-  network: "mainnet" | "testnet";
   ticker: "BTC";
-  isTestNet: boolean;
+  isTestNet?: boolean;
 };
 
-type LightningReceiveNetwork = {
+type BitcoinReceiveNetwork = Omit<Required<BitcoinReceiveNetworkInput>, "vm_type"> & {
+  vm_type: "FVM",
+  isL2: boolean,
+  isTestNet: boolean,
+}
+
+type LightningReceiveNetworkInput = {
   kind: "lightning";
   id: string;
   name: string;
   ticker: "BTC";
-  isTestNet: boolean;
+  isTestNet?: boolean;
 };
 
-type SolanaReceiveNetwork = {
+type LightningReceiveNetwork = Omit<Required<LightningReceiveNetworkInput>, "vm_type"> & {
+  vm_type: "FVM",
+  isL2: boolean,
+  isTestNet: boolean,
+}
+
+type SolanaReceiveNetworkInput = {
   kind: "solana";
   id: string;
   name: string;
   ticker: "SOL";
-  isTestNet: boolean;
+  isTestNet?: boolean;
 };
 
-type ReceiveNetworkInput = EvmReceiveNetworkInput | BitcoinReceiveNetwork | LightningReceiveNetwork | SolanaReceiveNetwork;
-type ReceiveNetwork = EvmReceiveNetwork | BitcoinReceiveNetwork | LightningReceiveNetwork | SolanaReceiveNetwork;
+type SolanaReceiveNetwork = Omit<Required<SolanaReceiveNetworkInput>, "vm_type"> & {
+  vm_type: "FVM",
+  isL2: boolean,
+  isTestNet: boolean,
+}
+
+type ZcashReceiveNetworkInput = {
+  kind: "zcash";
+  id: string;
+  name: string;
+  ticker: "ZEC";
+  isTestNet?: boolean;
+}
+
+type ZcashReceiveNetwork = Omit<Required<ZcashReceiveNetworkInput>, "vm_type"> & {
+  vm_type: "FVM",
+  isL2: boolean,
+  isTestNet: boolean,
+}
+
+type FilecoinReceiveNetworkInput = {
+  kind: "filecoin";
+  id: string;
+  name: string;
+  ticker: "FIL";
+  isTestNet?: boolean;
+}
+
+type FilecoinReceiveNetwork = Omit<Required<FilecoinReceiveNetworkInput>, "vm_type"> & {
+  vm_type: "FVM",
+  isL2: boolean,
+  isTestNet: boolean,
+}
+
+type ReceiveNetworkInput =
+  | EvmReceiveNetworkInput
+  | BitcoinReceiveNetworkInput
+  | LightningReceiveNetworkInput
+  | SolanaReceiveNetworkInput
+  | ZcashReceiveNetworkInput
+  | FilecoinReceiveNetworkInput;
+type ReceiveNetwork = EvmReceiveNetwork | BitcoinReceiveNetwork | LightningReceiveNetwork | SolanaReceiveNetwork | ZcashReceiveNetwork | FilecoinReceiveNetwork;
 
 type QrResilience = "L" | "M" | "Q" | "H";
 
 type Toast = {
   id: number;
   message: string;
-  tone: "success" | "warning" | "error";
+  tone: "info" | "success" | "warning" | "error";
   createdAt: number;
   duration: number;
   exiting: boolean;
@@ -127,13 +178,16 @@ type Toast = {
 
 const rawReceiveNetworks: ReceiveNetworkInput[] = [
   { kind: "evm", id: "ethereum", name: "Ethereum", chainId: 1, ticker: "ETH", vm_type: "EVM" },
+  { kind: "evm", id: "monad", name: "Monad", chainId: 167004, ticker: "MONAD", vm_type: "EVM" },
   { kind: "evm", id: "polygon", name: "Polygon", chainId: 137, ticker: "MATIC", vm_type: "EVM", isL2: true },
   { kind: "evm", id: "arbitrum_one", name: "Arbitrum One", chainId: 42161, ticker: "ETH", vm_type: "EVM", isL2: true },
   { kind: "evm", id: "base", name: "Base", chainId: 8453, ticker: "ETH", vm_type: "EVM", isL2: true },
   { kind: "evm", id: "optimism", name: "Optimism", chainId: 10, ticker: "ETH", vm_type: "EVM", isL2: true },
   { kind: "evm", id: "avalanche_c", name: "Avalanche C-Chain", chainId: 43114, ticker: "AVAX", vm_type: "EVM" },
-  { kind: "bitcoin", id: "bitcoin", name: "Bitcoin", network: "mainnet", ticker: "BTC", isTestNet: false },
-  { kind: "solana", id: "solana", name: "Solana", ticker: "SOL", isTestNet: false },
+  { kind: "bitcoin", id: "bitcoin", name: "Bitcoin", ticker: "BTC" },
+  { kind: "solana", id: "solana", name: "Solana", ticker: "SOL" },
+  { kind: "zcash", id: "zcash", name: "Zcash", ticker: "ZEC" },
+  { kind: "filecoin", id: "filecoin", name: "Filecoin", ticker: "FIL" },
 ];
 
 export const receiveNetworks: ReceiveNetwork[] = rawReceiveNetworks.map(normalizeReceiveNetwork);
@@ -148,7 +202,12 @@ function normalizeReceiveNetwork(network: ReceiveNetworkInput): ReceiveNetwork {
     };
   }
 
-  return network;
+  return {
+    ...network,
+    vm_type: "FVM",
+    isL2: false,
+    isTestNet: network.isTestNet ?? false,
+  };
 }
 
 const qrResilienceOptions: Array<{ value: QrResilience; label: string; detail: string }> = [
@@ -160,6 +219,7 @@ const qrResilienceOptions: Array<{ value: QrResilience; label: string; detail: s
 
 const walletApi = {
   getWallet: () => invoke<WalletSession>("get_wallet"),
+  refreshPrices: () => invoke<WalletSession>("refresh_prices"),
   createWallet: (args: { name: string; passphrase: string }) => invoke<WalletSession>("create_wallet", args),
   importWallet: (args: { mnemonic: string; passphrase: string }) => invoke<WalletSession>("import_wallet", args),
   unlockWallet: (args: { passphrase: string }) => invoke<WalletSession>("unlock_wallet", args),
@@ -234,7 +294,7 @@ function bindEvents() {
 
     if (action === "lock") void lockWallet();
     if (action === "clear-wallet") void clearWallet();
-    if (action === "refresh") void loadSession();
+    if (action === "refresh") void refreshPrices();
     if (action === "copy-address") void copyAddress();
     if (action === "copy-receive-address") void copyReceiveAddress();
     if (action === "copy-qr") void copyQrPayload();
@@ -410,6 +470,10 @@ async function clearWallet() {
     sendDraft = { to: "", symbol: "ETH", amount: "", note: "" };
     render();
   }
+}
+
+async function refreshPrices() {
+  await runCommand("refresh_prices", () => walletApi.refreshPrices());
 }
 
 async function runCommand(command: SessionCommand, action: () => Promise<WalletSession | null>) {
@@ -963,7 +1027,7 @@ function activityRow(item: Activity) {
   return `
     <article class="flex cursor-pointer flex-col gap-3 rounded-2xl border ${selectedActivityId === item.id ? "border-acid/50 bg-acid/10" : "border-white/10 bg-white/[0.035]"} p-4 sm:flex-row sm:items-center sm:justify-between" data-action="select-activity" data-activity-id="${escapeHtml(item.id)}">
       <div><p class="font-black">${escapeHtml(item.title)}</p><p class="mt-1 text-sm text-slate-500">${escapeHtml(item.subtitle)} - ${new Date(item.timestamp).toLocaleString()}</p></div>
-      <div class="text-left sm:text-right"><p class="font-mono font-bold">${escapeHtml(item.amount)}</p><p class="text-xs uppercase tracking-[0.2em] text-acid">${escapeHtml(item.status)}</p></div>
+      <div class="text-left sm:text-right"><p class="font-mono font-bold">${escapeHtml(item.amount ?? "")}</p><p class="text-xs uppercase tracking-[0.2em] text-acid">${escapeHtml(item.status)}</p></div>
     </article>
   `;
 }
@@ -984,7 +1048,7 @@ function activityDetails(item: Activity | null) {
       <h2 class="mt-2 text-2xl font-black">${escapeHtml(item.title)}</h2>
       <div class="mt-5 space-y-3">
         ${detailRow("Status", item.status)}
-        ${detailRow("Amount", item.amount)}
+        ${detailRow("Amount", item.amount ?? "n/a")}
         ${detailRow("Fee", item.fee ?? "n/a")}
         ${detailRow("Network", item.network ?? session?.network ?? "n/a")}
         ${detailRow("Timestamp", new Date(item.timestamp).toLocaleString())}
@@ -1045,7 +1109,7 @@ function selectedReceiveNetwork() {
 
 function receiveNetworkDetail(network: ReceiveNetwork) {
   if (network.kind === "evm") return `Chain ID ${network.chainId} - ${network.ticker}`;
-  if (network.kind === "bitcoin") return `${network.ticker} - ${network.network}`;
+  if (network.kind === "bitcoin") return network.ticker + " - " + (network.isTestNet ? "Testnet" : "Mainnet");
   return `${network.ticker} - Simulated`;
 }
 
@@ -1198,6 +1262,7 @@ function successMessage(command: string) {
     send_transaction: "Signed transaction broadcast to the local simulator.",
     swap_tokens: "Swap completed in the local simulator.",
     set_network: "Network updated.",
+    refresh_prices: "Market prices refreshed.",
   };
   return messages[command] ?? "Updated.";
 }
