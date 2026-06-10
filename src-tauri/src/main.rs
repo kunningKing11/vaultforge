@@ -52,8 +52,6 @@ struct WalletSession {
     wallet_name: Option<String>,
     address: Option<String>,
     network: String,
-    fiat_balance: f64,
-    risk_score: u8,
     assets: Vec<Asset>,
     activity: Vec<Activity>,
 }
@@ -623,18 +621,16 @@ fn transaction_signature(wallet: &Wallet, payload_hash: &str) -> String {
 fn session_from_state(state: &AppState) -> WalletSession {
     let Some(wallet) = state.wallet.as_ref() else {
         if let Some(stored_wallet) = state.stored_wallet.as_ref() {
-            return WalletSession {
-                has_wallet: true,
-                locked: true,
-                wallet_name: Some(stored_wallet.wallet_name.clone()),
-                address: Some(stored_wallet.address.clone()),
-                network: stored_wallet.network.clone(),
-                fiat_balance: 0.0,
-                risk_score: 92,
-                assets: vec![],
-                activity: vec![],
-            };
-        }
+                return WalletSession {
+                    has_wallet: true,
+                    locked: true,
+                    wallet_name: Some(stored_wallet.wallet_name.clone()),
+                    address: Some(stored_wallet.address.clone()),
+                    network: stored_wallet.network.clone(),
+                    assets: vec![],
+                    activity: vec![],
+                };
+            }
 
         return WalletSession {
             has_wallet: false,
@@ -642,8 +638,6 @@ fn session_from_state(state: &AppState) -> WalletSession {
             wallet_name: None,
             address: None,
             network: state.network.clone(),
-            fiat_balance: 0.0,
-            risk_score: 0,
             assets: vec![],
             activity: vec![],
         };
@@ -656,18 +650,10 @@ fn session_from_state(state: &AppState) -> WalletSession {
             wallet_name: Some(wallet.name.clone()),
             address: Some(wallet.address.clone()),
             network: state.network.clone(),
-            fiat_balance: 0.0,
-            risk_score: 92,
             assets: vec![],
             activity: vec![],
         };
     }
-
-    let fiat_balance = wallet
-        .assets
-        .iter()
-        .map(|asset| asset.balance * asset.price_usd)
-        .sum();
 
     WalletSession {
         has_wallet: true,
@@ -675,8 +661,6 @@ fn session_from_state(state: &AppState) -> WalletSession {
         wallet_name: Some(wallet.name.clone()),
         address: Some(wallet.address.clone()),
         network: state.network.clone(),
-        fiat_balance,
-        risk_score: 92,
         assets: wallet.assets.clone(),
         activity: wallet.activity.clone(),
     }

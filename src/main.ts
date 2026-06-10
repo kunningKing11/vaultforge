@@ -34,8 +34,6 @@ type WalletSession = {
   wallet_name: string | null;
   address: string | null;
   network: string;
-  fiat_balance: number;
-  risk_score: number;
   assets: Asset[];
   activity: Activity[];
 };
@@ -495,7 +493,7 @@ async function runCommand(command: SessionCommand, action: () => Promise<WalletS
 
 async function copyAddress() {
   if (!session?.address) return;
-  await copyText(session.address, "Receive address copied.");
+  await copyText(session!.address, "Receive address copied.");
 }
 
 async function copyReceiveAddress() {
@@ -557,7 +555,7 @@ function downloadQrSvg() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `vaultforge-${network.id}-${shortAddress(session.address).replace(/[^a-zA-Z0-9]/g, "")}-qr.svg`;
+  link.download = `vaultforge-${network.id}-${shortAddress(session!.address).replace(/[^a-zA-Z0-9]/g, "")}-qr.svg`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -578,7 +576,7 @@ function render() {
 function renderBody() {
   if (!session && busy) return splash();
   if (!session?.has_wallet) return onboarding();
-  if (session.locked) return lockedWallet();
+  if (session?.locked) return lockedWallet();
   return walletShell();
 }
 
@@ -692,8 +690,8 @@ function topBar() {
   return `
     <header class="glass flex flex-col gap-4 rounded-[2rem] p-5 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Total balance</p>
-        <h1 class="mt-1 text-4xl font-black">${money(session.fiat_balance)}</h1>
+        <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Overview</p>
+        <h1 class="mt-1 text-4xl font-black">${escapeHtml(session.wallet_name ?? "VaultForge")}</h1>
       </div>
       <div class="flex flex-wrap gap-3">
         <button class="btn-secondary" data-action="refresh" type="button">Refresh</button>
@@ -731,14 +729,10 @@ function dashboardView() {
               <p class="text-sm uppercase tracking-[0.3em] text-acid">Portfolio</p>
               <h2 class="mt-3 max-w-2xl text-4xl font-black tracking-tight">Multi-asset wallet with transaction controls.</h2>
             </div>
-            <div class="grid gap-3 sm:grid-cols-2">
+            <div class="grid gap-3 sm:grid-cols-1">
               <div class="rounded-2xl border border-acid/30 bg-acid/10 p-4 text-right">
                 <p class="text-sm text-slate-400">Weighted 24h</p>
                 <p class="text-3xl font-black ${change >= 0 ? "text-emerald-300" : "text-rose-300"}">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</p>
-              </div>
-              <div class="rounded-2xl border border-acid/30 bg-acid/10 p-4 text-right">
-                <p class="text-sm text-slate-400">Security score</p>
-                <p class="text-3xl font-black text-acid">${session.risk_score}/100</p>
               </div>
             </div>
           </div>
@@ -993,7 +987,8 @@ function mobileNavButton(view: View, label: string) {
 function assetCard(asset: Asset) {
   const value = assetValue(asset);
   const positive = asset.change_24h >= 0;
-  const allocation = session?.fiat_balance ? (value / session.fiat_balance) * 100 : 0;
+  const total = session ? session.assets.reduce((s, a) => s + assetValue(a), 0) : 0;
+  const allocation = total ? (value / total) * 100 : 0;
   return `
     <article class="asset-card rounded-3xl border border-white/10 bg-white/[0.04] p-5">
       <div class="flex items-start justify-between gap-4">
@@ -1015,8 +1010,10 @@ function assetValue(asset: Asset) {
 }
 
 function portfolioChange() {
-  if (!session?.fiat_balance) return 0;
-  return session.assets.reduce((total, asset) => total + asset.change_24h * (assetValue(asset) / session!.fiat_balance), 0);
+  const assets = session?.assets ?? [];
+  const total = assets.reduce((t, a) => t + assetValue(a), 0);
+  if (!total) return 0;
+  return assets.reduce((acc, asset) => acc + asset.change_24h * (assetValue(asset) / total), 0);
 }
 
 function emptyState(title: string, body: string) {
@@ -1133,7 +1130,7 @@ function receiveAddress(network: ReceiveNetwork) {
 }
 
 async function ensureReceiveQr() {
-  if (currentView !== "receive" || !session?.address || session.locked) return;
+  if (currentView !== "receive" || !session?.address || session?.locked) return;
 
   const payload = receivePayload();
   if (!payload) {
