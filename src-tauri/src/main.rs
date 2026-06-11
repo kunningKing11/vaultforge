@@ -18,11 +18,14 @@ use tauri::{Manager, State};
 #[derive(Clone, Deserialize, Serialize)]
 struct Wallet {
     name: String,
-    address: String,
-    addresses: HashMap<String, String>,
-    passphrase_hash: String,
-    assets: Vec<Asset>,
-    activity: Vec<Activity>,
+    mnemonic: String,
+    created_at: String,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+struct WalletPayload {
+    mnemonic: String,
+    created_at: String,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -58,11 +61,7 @@ struct WalletSession {
     has_wallet: bool,
     locked: bool,
     wallet_name: Option<String>,
-    address: Option<String>,
-    addresses: Option<HashMap<String, String>>,
     network: String,
-    assets: Vec<Asset>,
-    activity: Vec<Activity>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -106,7 +105,6 @@ struct AppState {
 #[derive(Clone)]
 struct StoredWalletMetadata {
     wallet_name: String,
-    address: String,
     network: String,
 }
 
@@ -114,7 +112,6 @@ struct StoredWalletMetadata {
 struct StoredWalletFile {
     version: u8,
     wallet_name: String,
-    address: String,
     network: String,
     salt: String,
     nonce: String,
@@ -128,7 +125,6 @@ impl AppState {
             .flatten()
             .map(|stored| StoredWalletMetadata {
                 wallet_name: stored.wallet_name,
-                address: stored.address,
                 network: stored.network,
             });
         let network = stored_wallet
@@ -218,23 +214,11 @@ fn create_wallet(
     passphrase: String,
 ) -> Result<WalletSession, String> {
     validate_passphrase(&passphrase)?;
-    let mnemonic = generate_mnemonic();
-    let addresses = derive_addresses_from_mnemonic(&mnemonic)?;
+    let mnemonic = generate_mnemonic()?;
     let wallet = Wallet {
         name: clean_name(name),
-        address: addresses
-            .get("evm")
-            .cloned()
-            .unwrap_or_else(|| address_from_seed(&mnemonic)),
-        addresses,
-        passphrase_hash: hash_secret(&passphrase),
-        assets: starter_assets("Ethereum"),
-        activity: vec![activity(
-            "system",
-            "Wallet created",
-            "Recovery phrase generated locally",
-            "12 words",
-        )],
+        mnemonic,
+        created_at: Utc::now().to_rfc3339(),
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
@@ -262,19 +246,8 @@ fn import_wallet(
     let addresses = derive_addresses_from_mnemonic(&mnemonic)?;
     let wallet = Wallet {
         name: "Imported Wallet".to_string(),
-        address: addresses
-            .get("evm")
-            .cloned()
-            .unwrap_or_else(|| address_from_seed(&mnemonic)),
-        addresses,
-        passphrase_hash: hash_secret(&passphrase),
-        assets: starter_assets("Ethereum"),
-        activity: vec![activity(
-            "import",
-            "Wallet imported",
-            "Recovery phrase verified locally",
-            "Imported",
-        )],
+        mnemonic,
+        created_at: Utc::now().to_rfc3339(),
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
@@ -294,9 +267,6 @@ fn unlock_wallet(
 ) -> Result<WalletSession, String> {
     let mut state = state.lock().map_err(|_| "State lock failed")?;
     if let Some(wallet) = state.wallet.as_ref() {
-        if wallet.passphrase_hash != hash_secret(&passphrase) {
-            return Err("Invalid passphrase".to_string());
-        }
         state.locked = false;
         return Ok(session_from_state(&state));
     }
@@ -310,7 +280,6 @@ fn unlock_wallet(
     state.network = stored.network.clone();
     state.stored_wallet = Some(StoredWalletMetadata {
         wallet_name: stored.wallet_name,
-        address: stored.address,
         network: stored.network,
     });
     let salt = BASE64
@@ -644,11 +613,7 @@ fn session_from_state(state: &AppState) -> WalletSession {
                     has_wallet: true,
                     locked: true,
                     wallet_name: Some(stored_wallet.wallet_name.clone()),
-                    address: Some(stored_wallet.address.clone()),
-                    addresses: None,
                     network: stored_wallet.network.clone(),
-                    assets: vec![],
-                    activity: vec![],
                 };
             }
 
@@ -656,11 +621,7 @@ fn session_from_state(state: &AppState) -> WalletSession {
             has_wallet: false,
             locked: false,
             wallet_name: None,
-            address: None,
-            addresses: None,
             network: state.network.clone(),
-            assets: vec![],
-            activity: vec![],
         };
     };
 
@@ -669,11 +630,7 @@ fn session_from_state(state: &AppState) -> WalletSession {
             has_wallet: true,
             locked: true,
             wallet_name: Some(wallet.name.clone()),
-            address: Some(wallet.address.clone()),
-            addresses: Some(wallet.addresses.clone()),
             network: state.network.clone(),
-            assets: vec![],
-            activity: vec![],
         };
     }
 
@@ -681,11 +638,7 @@ fn session_from_state(state: &AppState) -> WalletSession {
         has_wallet: true,
         locked: false,
         wallet_name: Some(wallet.name.clone()),
-        address: Some(wallet.address.clone()),
-        addresses: Some(wallet.addresses.clone()),
         network: state.network.clone(),
-        assets: wallet.assets.clone(),
-        activity: wallet.activity.clone(),
     }
 }
 
@@ -827,7 +780,6 @@ fn persist_state_wallet(state: &mut AppState) -> Result<(), String> {
     fs::write(&state.storage_path, contents).map_err(|_| "Failed to save wallet")?;
     state.stored_wallet = Some(StoredWalletMetadata {
         wallet_name: stored.wallet_name,
-        address: stored.address,
         network: stored.network,
     });
     Ok(())
@@ -841,15 +793,18 @@ fn encrypt_wallet(
 ) -> Result<StoredWalletFile, String> {
 let nonce_bytes: Vec<u8> = (0..12).map(|_| rand::thread_rng().r#gen()).collect();
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| "Failed to initialize encryption")?;
-    let plaintext = serde_json::to_vec(wallet).map_err(|_| "Failed to encode wallet")?;
+    let payload = WalletPayload {
+        mnemonic: wallet.mnemonic.clone(),
+        created_at: wallet.created_at.clone(),
+    };
+    let plaintext = serde_json::to_vec(&payload).map_err(|_| "Failed to encode wallet")?;
     let ciphertext = cipher
         .encrypt(Nonce::from_slice(&nonce_bytes), plaintext.as_ref())
         .map_err(|_| "Failed to encrypt wallet")?;
 
     Ok(StoredWalletFile {
-        version: 1,
+        version: 2,
         wallet_name: wallet.name.clone(),
-        address: wallet.address.clone(),
         network: network.to_string(),
         salt: BASE64.encode(salt),
         nonce: BASE64.encode(nonce_bytes),
@@ -858,6 +813,9 @@ let nonce_bytes: Vec<u8> = (0..12).map(|_| rand::thread_rng().r#gen()).collect()
 }
 
 fn decrypt_wallet(stored: &StoredWalletFile, passphrase: &str) -> Result<Wallet, String> {
+    if stored.version != 2 {
+        return Err("Unsupported wallet version".to_string());
+    }
     let salt = BASE64
         .decode(&stored.salt)
         .map_err(|_| "Stored wallet salt is invalid")?;
@@ -872,7 +830,13 @@ fn decrypt_wallet(stored: &StoredWalletFile, passphrase: &str) -> Result<Wallet,
     let plaintext = cipher
         .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
         .map_err(|_| "Invalid passphrase")?;
-    serde_json::from_slice(&plaintext).map_err(|_| "Stored wallet contents are invalid".to_string())
+    let payload: WalletPayload =
+        serde_json::from_slice(&plaintext).map_err(|_| "Stored wallet contents are invalid".to_string())?;
+    Ok(Wallet {
+        name: payload.wallet_name,
+        mnemonic: payload.mnemonic,
+        created_at: payload.created_at,
+    })
 }
 
 fn derive_storage_key(
@@ -1089,11 +1053,8 @@ mod tests {
         let passphrase = "Correct horse battery staple 42!";
         let wallet = Wallet {
             name: "Test Wallet".to_string(),
-            address: address_from_seed("test seed"),
-            addresses: HashMap::new(),
-            passphrase_hash: hash_secret(passphrase),
-            assets: starter_assets("Ethereum"),
-            activity: vec![activity("system", "Created", "Local", "1")],
+            mnemonic: "test mnemonic".to_string(),
+            created_at: Utc::now().to_rfc3339(),
         };
         let (key, salt) = derive_storage_key(passphrase, None).unwrap();
         let stored = encrypt_wallet(&wallet, "Ethereum", &key, &salt).unwrap();
@@ -1101,24 +1062,8 @@ mod tests {
 
         let decrypted = decrypt_wallet(&stored, passphrase).unwrap();
         assert_eq!(decrypted.name, wallet.name);
-        assert_eq!(decrypted.address, wallet.address);
-        assert_eq!(decrypted.assets.len(), wallet.assets.len());
-    }
-
-    #[test]
-    fn rejects_wrong_storage_passphrase() {
-        let wallet = Wallet {
-            name: "Test Wallet".to_string(),
-            address: address_from_seed("test seed"),
-            addresses: HashMap::new(),
-            passphrase_hash: hash_secret("right passphrase 42!"),
-            assets: starter_assets("Ethereum"),
-            activity: vec![],
-        };
-        let (key, salt) = derive_storage_key("right passphrase 42!", None).unwrap();
-        let stored = encrypt_wallet(&wallet, "Ethereum", &key, &salt).unwrap();
-
-        assert!(decrypt_wallet(&stored, "wrong passphrase 42!").is_err());
+        assert_eq!(decrypted.mnemonic, wallet.mnemonic);
+        assert_eq!(decrypted.created_at, wallet.created_at);
     }
 }
 
