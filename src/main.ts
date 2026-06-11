@@ -33,6 +33,7 @@ type WalletSession = {
   locked: boolean;
   wallet_name: string | null;
   address: string | null;
+  addresses?: Record<string, string> | null;
   network: string;
   assets: Asset[];
   activity: Activity[];
@@ -67,102 +68,6 @@ type SessionCommand = "create_wallet" | "import_wallet" | "unlock_wallet" | "sen
 
 type View = "dashboard" | "send" | "receive" | "swap" | "assets" | "activity" | "security" | "settings";
 
-type EvmReceiveNetworkInput = {
-  kind: "evm";
-  id: string;
-  name: string;
-  chainId: number;
-  ticker: string;
-  vm_type?: "EVM";
-  isL2?: boolean;
-  isTestNet?: boolean;
-};
-
-type EvmReceiveNetwork = Omit<Required<EvmReceiveNetworkInput>, "vm_type"> & {
-  vm_type: "EVM";
-  isL2: boolean;
-  isTestNet: boolean;
-};
-
-type BitcoinReceiveNetworkInput = {
-  kind: "bitcoin";
-  id: string;
-  name: string;
-  ticker: "BTC";
-  isTestNet?: boolean;
-};
-
-type BitcoinReceiveNetwork = Omit<Required<BitcoinReceiveNetworkInput>, "vm_type"> & {
-  vm_type: "FVM",
-  isL2: boolean,
-  isTestNet: boolean,
-}
-
-type LightningReceiveNetworkInput = {
-  kind: "lightning";
-  id: string;
-  name: string;
-  ticker: "BTC";
-  isTestNet?: boolean;
-};
-
-type LightningReceiveNetwork = Omit<Required<LightningReceiveNetworkInput>, "vm_type"> & {
-  vm_type: "FVM",
-  isL2: boolean,
-  isTestNet: boolean,
-}
-
-type SolanaReceiveNetworkInput = {
-  kind: "solana";
-  id: string;
-  name: string;
-  ticker: "SOL";
-  isTestNet?: boolean;
-};
-
-type SolanaReceiveNetwork = Omit<Required<SolanaReceiveNetworkInput>, "vm_type"> & {
-  vm_type: "FVM",
-  isL2: boolean,
-  isTestNet: boolean,
-}
-
-type ZcashReceiveNetworkInput = {
-  kind: "zcash";
-  id: string;
-  name: string;
-  ticker: "ZEC";
-  isTestNet?: boolean;
-}
-
-type ZcashReceiveNetwork = Omit<Required<ZcashReceiveNetworkInput>, "vm_type"> & {
-  vm_type: "FVM",
-  isL2: boolean,
-  isTestNet: boolean,
-}
-
-type FilecoinReceiveNetworkInput = {
-  kind: "filecoin";
-  id: string;
-  name: string;
-  ticker: "FIL";
-  isTestNet?: boolean;
-}
-
-type FilecoinReceiveNetwork = Omit<Required<FilecoinReceiveNetworkInput>, "vm_type"> & {
-  vm_type: "FVM",
-  isL2: boolean,
-  isTestNet: boolean,
-}
-
-type ReceiveNetworkInput =
-  | EvmReceiveNetworkInput
-  | BitcoinReceiveNetworkInput
-  | LightningReceiveNetworkInput
-  | SolanaReceiveNetworkInput
-  | ZcashReceiveNetworkInput
-  | FilecoinReceiveNetworkInput;
-type ReceiveNetwork = EvmReceiveNetwork | BitcoinReceiveNetwork | LightningReceiveNetwork | SolanaReceiveNetwork | ZcashReceiveNetwork | FilecoinReceiveNetwork;
-
 type QrResilience = "L" | "M" | "Q" | "H";
 
 type Toast = {
@@ -174,9 +79,125 @@ type Toast = {
   exiting: boolean;
 };
 
-const rawReceiveNetworks: ReceiveNetworkInput[] = [
+type EvmNetworkInput = {
+  kind: "evm";
+  id: string;
+  name: string;
+  chainId: number;
+  ticker: string;
+  vm_type?: "EVM";
+  isL2?: boolean;
+  isTestNet?: boolean;
+};
+
+type EvmNetwork = Omit<Required<EvmNetworkInput>, "vm_type"> & {
+  vm_type?: "EVM";
+  isL2: boolean;
+  isTestNet: boolean;
+};
+
+type BitcoinNetworkInput = {
+  kind: "bitcoin";
+  id: string;
+  name: string;
+  ticker: "BTC";
+  isTestNet?: boolean;
+};
+
+type BitcoinNetwork = Omit<Required<BitcoinNetworkInput>, "vm_type"> & {
+  vm_type?: "FVM",
+  isL2: boolean,
+  isTestNet: boolean,
+}
+
+type LightningNetworkInput = {
+  kind: "lightning";
+  id: string;
+  name: string;
+  ticker: "BTC";
+  isTestNet?: boolean;
+};
+
+type LightningNetwork = Omit<Required<LightningNetworkInput>, "vm_type"> & {
+  isL2: boolean,
+  isTestNet: boolean,
+}
+
+type SolanaNetworkInput = {
+  kind: "solana";
+  id: string;
+  name: string;
+  ticker: "SOL";
+  isTestNet?: boolean;
+};
+
+type SolanaNetwork = Omit<Required<SolanaNetworkInput>, "vm_type"> & {
+  vm_type?: "SVM",
+  isL2: boolean,
+  isTestNet: boolean,
+}
+
+type ZcashNetworkInput = {
+  kind: "zcash";
+  id: string;
+  name: string;
+  ticker: "ZEC";
+  isTestNet?: boolean;
+}
+
+type ZcashNetwork = Omit<Required<ZcashNetworkInput>, "vm_type"> & {
+  isL2: boolean,
+  isTestNet: boolean,
+}
+
+type FilecoinNetworkInput = {
+  kind: "filecoin";
+  id: string;
+  name: string;
+  ticker: "FIL";
+  isTestNet?: boolean;
+}
+
+type FilecoinNetwork = Omit<Required<FilecoinNetworkInput>, "vm_type"> & {
+  vm_type?: "FVM",
+  isL2: boolean,
+  isTestNet: boolean,
+}
+
+type InjectiveNetworkInput = {
+  kind: "injective";
+  id: string;
+  name: string;
+  ticker: "INJ";
+  isTestNet?: boolean;
+};
+
+type InjectiveNetwork = Omit<Required<InjectiveNetworkInput>, "vm_type"> & {
+  vm_type?: "MultiVM",
+  isL2: boolean,
+  isTestNet: boolean,
+}
+
+type NetworkInput =
+  | EvmNetworkInput
+  | BitcoinNetworkInput
+  | LightningNetworkInput
+  | SolanaNetworkInput
+  | ZcashNetworkInput
+  | FilecoinNetworkInput
+  | InjectiveNetworkInput;
+type Network =
+  | EvmNetwork
+  | BitcoinNetwork
+  | LightningNetwork
+  | SolanaNetwork
+  | ZcashNetwork
+  | FilecoinNetwork
+  | InjectiveNetwork;
+
+const rawNetworks: NetworkInput[] = [
   { kind: "evm", id: "ethereum", name: "Ethereum", chainId: 1, ticker: "ETH", vm_type: "EVM" },
-  { kind: "evm", id: "monad", name: "Monad", chainId: 167004, ticker: "MONAD", vm_type: "EVM" },
+  { kind: "evm", id: "monad", name: "Monad", chainId: 167004, ticker: "MON", vm_type: "EVM" },
   { kind: "evm", id: "polygon", name: "Polygon", chainId: 137, ticker: "MATIC", vm_type: "EVM", isL2: true },
   { kind: "evm", id: "arbitrum_one", name: "Arbitrum One", chainId: 42161, ticker: "ETH", vm_type: "EVM", isL2: true },
   { kind: "evm", id: "base", name: "Base", chainId: 8453, ticker: "ETH", vm_type: "EVM", isL2: true },
@@ -186,26 +207,40 @@ const rawReceiveNetworks: ReceiveNetworkInput[] = [
   { kind: "solana", id: "solana", name: "Solana", ticker: "SOL" },
   { kind: "zcash", id: "zcash", name: "Zcash", ticker: "ZEC" },
   { kind: "filecoin", id: "filecoin", name: "Filecoin", ticker: "FIL" },
+  { kind: "injective", id: "injective", name: "Injective", ticker: "INJ" },
 ];
 
-export const receiveNetworks: ReceiveNetwork[] = rawReceiveNetworks.map(normalizeReceiveNetwork);
+export const networks: Network[] = rawNetworks.map(normalizeNetwork);
 
-function normalizeReceiveNetwork(network: ReceiveNetworkInput): ReceiveNetwork {
+function normalizeNetwork(network: NetworkInput): Network {
   if (network.kind === "evm") {
     return {
       ...network,
-      vm_type: network.vm_type ?? "EVM",
+      vm_type: (network as EvmNetworkInput).vm_type ?? "EVM",
       isL2: network.isL2 ?? false,
       isTestNet: network.isTestNet ?? false,
     };
+  } else if (network.kind === "filecoin") {
+    return {
+      ...network,
+      vm_type: "FVM",
+      isL2: false,
+      isTestNet: network.isTestNet ?? false,
+    };
+  } else if (network.kind === "injective") {
+    return {
+      ...network,
+      vm_type: "MultiVM",
+      isL2: false,
+      isTestNet: network.isTestNet ?? false,
+    };
+  } else {
+    return {
+      ...network,
+      isL2: false,
+      isTestNet: network.isTestNet ?? false,
+    }
   }
-
-  return {
-    ...network,
-    vm_type: "FVM",
-    isL2: false,
-    isTestNet: network.isTestNet ?? false,
-  };
 }
 
 const qrResilienceOptions: Array<{ value: QrResilience; label: string; detail: string }> = [
@@ -233,7 +268,7 @@ const app = document.querySelector<HTMLDivElement>("#app");
 
 let session: WalletSession | null = null;
 let currentView: View = "dashboard";
-let receiveNetworkId = "ethereum";
+let networkId = "ethereum";
 let qrResilience: QrResilience = "M";
 let qrSvg = "";
 let qrKey = "";
@@ -329,7 +364,7 @@ function bindEvents() {
     const target = event.target as HTMLSelectElement;
 
     if (target.matches("[data-receive-network]")) {
-      receiveNetworkId = target.value;
+      networkId = target.value;
       resetQr();
       render();
     }
@@ -497,9 +532,9 @@ async function copyAddress() {
 }
 
 async function copyReceiveAddress() {
-  const address = receiveAddress(selectedReceiveNetwork());
-  if (!address) return;
-  await copyText(address, "Receive address copied.");
+  const addr = address(selectedNetwork());
+  if (!addr) return;
+  await copyText(addr, "Receive address copied.");
 }
 
 async function copyQrPayload() {
@@ -550,7 +585,7 @@ function passphraseScore(value: string) {
 function downloadQrSvg() {
   if (!qrSvg || !session?.address) return;
 
-  const network = selectedReceiveNetwork();
+  const network = selectedNetwork();
   const blob = new Blob([qrSvg], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -601,9 +636,9 @@ function onboarding() {
           <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-300">VaultForge combines a TypeScript interface, TailwindCSS system, and Rust-powered Tauri backend for portfolio management, transfers, swaps, activity tracking, and wallet locking.</p>
         </div>
         <div class="grid gap-4 sm:grid-cols-3">
-          ${featureCard("Rust core", "Wallet state and validations run behind Tauri commands.")}
+          ${featureCard("Blazing fast Rust core", "Wallet state and validations run behind Tauri commands.")}
           ${featureCard("Fast UI", "Vite, TypeScript, and Tailwind power the frontend.")}
-          ${featureCard("Local first", "No hosted service is required for this simulated wallet foundation.")}
+          ${featureCard("Local-first & maximum security", "Runs fully locally on your machine.")}
         </div>
       </div>
       <div class="glass rounded-[2rem] p-6 sm:p-8">
@@ -818,8 +853,8 @@ function signedDetail(label: string, value: string, mono = false) {
 }
 
 function receiveView() {
-  const network = selectedReceiveNetwork();
-  const address = receiveAddress(network);
+  const network = selectedNetwork();
+  const addr = address(network);
   const payload = receivePayload();
   const qrContent = payload ? qrSvg || `<span class="text-sm font-bold text-slate-500">Generating QR...</span>` : `<span class="text-sm font-bold text-slate-500">Receive is not available for this network yet.</span>`;
   const qrActionsDisabled = payload ? "" : "disabled";
@@ -828,7 +863,7 @@ function receiveView() {
       <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Receive</p>
       <h2 class="mt-2 text-3xl font-black">Deposit address</h2>
       <div class="mt-6 grid gap-4 sm:grid-cols-2">
-        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Receive network</span>${receiveNetworkSelect()}</label>
+        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Receive network</span>${networkSelect()}</label>
         <label class="space-y-2"><span class="text-sm font-bold text-slate-300">QR resilience</span>${qrResilienceSelect()}</label>
       </div>
       <div class="mt-6 rounded-3xl border border-dashed border-acid/40 bg-acid/10 p-6 text-center">
@@ -839,12 +874,12 @@ function receiveView() {
         </div>
         <div class="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-left">
           <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <p class="font-black">${escapeHtml(network.name)} receive URI</p>
-            <span class="text-sm text-slate-400">${escapeHtml(receiveNetworkDetail(network))}</span>
+            <p class="font-black">${escapeHtml(network.name)} receive payload</p>
+            <span class="text-sm text-slate-400">${escapeHtml(networkDetail(network))}</span>
           </div>
           <p class="mt-3 break-all font-mono text-xs text-slate-400">${escapeHtml(payload)}</p>
         </div>
-        <p class="mt-5 break-all font-mono text-sm text-slate-200">${escapeHtml(address)}</p>
+        <p class="mt-5 break-all font-mono text-sm text-slate-200">${escapeHtml(addr)}</p>
         <button class="btn-primary mt-5" data-action="copy-receive-address" type="button">Copy address</button>
       </div>
     </section>
@@ -1092,41 +1127,39 @@ function iconDownload() {
   return `<svg aria-hidden="true" class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M12 4v10m0 0 4-4m-4 4-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 16.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 }
 
-function receiveNetworkSelect() {
-  return `<select class="field" data-receive-network>${receiveNetworks.map((network) => `<option value="${network.id}" ${network.id === receiveNetworkId ? "selected" : ""}>${network.name} - ${receiveNetworkDetail(network)}</option>`).join("")}</select>`;
+function networkSelect() {
+  return `<select class="field" data-receive-network>${networks.map((network) => `<option value="${network.id}" ${network.id === networkId ? "selected" : ""}>${network.name} - ${networkDetail(network)}</option>`).join("")}</select>`;
 }
 
 function qrResilienceSelect() {
   return `<select class="field" data-receive-resilience>${qrResilienceOptions.map((option) => `<option value="${option.value}" ${option.value === qrResilience ? "selected" : ""}>${option.label} (${option.value}) - ${option.detail}</option>`).join("")}</select>`;
 }
 
-function selectedReceiveNetwork() {
-  return receiveNetworks.find((network) => network.id === receiveNetworkId) ?? receiveNetworks[0];
+function selectedNetwork() {
+  return networks.find((network) => network.id === networkId) ?? networks[0];
 }
 
-function receiveNetworkDetail(network: ReceiveNetwork) {
-  if (network.kind === "evm") return `Chain ID ${network.chainId} - ${network.ticker}`;
-  if (network.kind === "bitcoin") return network.ticker + " - " + (network.isTestNet ? "Testnet" : "Mainnet");
-  return `${network.ticker} - Simulated`;
+function networkDetail(network: Network, short = true) {
+  if (network.kind === "evm") return `${network.ticker}${short ? "" : ` - Chain ID ${network.chainId}`}`;
+  if (network.kind === "bitcoin") return network.ticker;
+  return `${network.ticker}`;
 }
 
 function receivePayload() {
-  const network = selectedReceiveNetwork();
-  const address = receiveAddress(network);
-  if (!address) return "";
-  if (network.kind === "evm") return `ethereum:${address}@${network.chainId}`;
-  if (network.kind === "bitcoin") return `bitcoin:${address}`;
-  if (network.kind === "solana") return `solana:${address}`;
-  return "";
+  const network = selectedNetwork();
+  const addr = address(network);
+  if (!addr) return "";
+  if (network.kind === "bitcoin") return `bitcoin:${addr}`;
+  if (network.kind === "evm") return `ethereum:${addr}@${network.chainId}`;
+  if (network.kind === "solana") return `solana:${addr}`;
+  return addr;
 }
 
-function receiveAddress(network: ReceiveNetwork) {
-  const address = session?.address ?? "";
-  if (!address) return "";
-  const seed = address.replace(/[^a-fA-F0-9]/g, "");
-  if (network.kind === "bitcoin") return `bc1q${seed.toLowerCase().padEnd(38, "0").slice(0, 38)}`;
-  if (network.kind === "solana") return seed.padEnd(44, "7").slice(0, 44);
-  return address;
+function address(network: Network) {
+  const fallback = session?.address ?? "";
+  if (!fallback) return "";
+  if (!session?.addresses) return fallback;
+  return session.addresses[network.kind] ?? fallback;
 }
 
 async function ensureReceiveQr() {
