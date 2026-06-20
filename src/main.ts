@@ -293,7 +293,6 @@ const walletApi = {
   signTransaction: (args: { to: string; symbol: string; amount: number; note: string }) => invoke<SignedTransaction>("sign_transaction", args),
   sendTransaction: (args: { signed: SignedTransaction }) => invoke<WalletSession>("send_transaction", args),
   swapTokens: (args: { fromSymbol: string; toSymbol: string; amount: number }) => invoke<WalletSession>("swap_tokens", args),
-  setNetwork: (args: { network: string }) => invoke<WalletSession>("set_network", args),
 };
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -395,7 +394,6 @@ function bindEvents() {
     if (action === "unlock-wallet") void unlockWallet(form);
     if (action === "sign-transaction") void signTransaction(form);
     if (action === "swap-tokens") void swapTokens(form);
-    if (action === "set-network") void setNetwork(form);
   });
 
   document.addEventListener("change", (event) => {
@@ -507,13 +505,6 @@ async function swapTokens(form: HTMLFormElement) {
     fromSymbol: String(formData.get("fromSymbol") || "ETH"),
     toSymbol: String(formData.get("toSymbol") || "USDC"),
     amount: Number(formData.get("amount") || 0),
-  }));
-}
-
-async function setNetwork(form: HTMLFormElement) {
-  const formData = new FormData(form);
-  await runCommand("set_network", () => walletApi.setNetwork({
-    network: normalizeNetworkId(String(formData.get("network") || session?.network || DEFAULT_NETWORK_ID)),
   }));
 }
 
@@ -1056,14 +1047,6 @@ function settingsView() {
       <section class="glass rounded-[2rem] p-6">
         <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Preferences</p>
         <h2 class="mt-2 text-3xl font-black">Wallet settings</h2>
-        <form data-action="set-network" class="mt-6 space-y-4">
-          <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Active network</span>
-            <select class="field" name="network">
-              ${evmNetworks().map((network) => `<option value="${network.id}" ${session?.network === network.id ? "selected" : ""}>${network.name}</option>`).join("")}
-            </select>
-          </label>
-          <button class="btn-primary" type="submit">Save network</button>
-        </form>
         <div class="mt-6 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm text-amber-100">This build simulates balances and transactions. Connect audited chain clients and hardware-backed signing before using real funds.</div>
       </section>
       <section class="glass rounded-[2rem] p-6">
@@ -1415,7 +1398,6 @@ function successMessage(command: string) {
     sign_transaction: "Transaction signed locally.",
     send_transaction: "Signed transaction broadcast to the local simulator.",
     swap_tokens: "Swap completed in the local simulator.",
-    set_network: "Network updated.",
     refresh_prices: "Market prices refreshed.",
   };
   return messages[command] ?? "Updated.";
