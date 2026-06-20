@@ -288,7 +288,7 @@ async fn refresh_prices(state: State<'_, Mutex<AppState>>) -> Result<WalletSessi
 }
 
 #[tauri::command]
-fn create_wallet(
+async fn create_wallet(
     state: State<'_, Mutex<AppState>>,
     name: String,
     passphrase: String,
@@ -300,6 +300,9 @@ fn create_wallet(
         .get("evm")
         .cloned()
         .unwrap_or_else(|| address_from_seed(&mnemonic));
+
+    let assets = fetch_native_assets(DEFAULT_NETWORK_ID, &primary_address).await;
+
     let wallet = Wallet {
         name: clean_name(name),
         mnemonic,
@@ -307,7 +310,7 @@ fn create_wallet(
         address: primary_address,
         addresses,
         passphrase_hash: hash_secret(&passphrase),
-        assets: starter_assets(DEFAULT_NETWORK_ID),
+        assets,
         activity: vec![activity(
             "system",
             "Wallet created",
@@ -327,7 +330,7 @@ fn create_wallet(
 }
 
 #[tauri::command]
-fn import_wallet(
+async fn import_wallet(
     state: State<'_, Mutex<AppState>>,
     mnemonic: String,
     passphrase: String,
@@ -344,6 +347,9 @@ fn import_wallet(
         .get("evm")
         .cloned()
         .unwrap_or_else(|| address_from_seed(&mnemonic));
+
+    let assets = fetch_native_assets(DEFAULT_NETWORK_ID, &primary_address).await;
+
     let wallet = Wallet {
         name: "Imported Wallet".to_string(),
         mnemonic,
@@ -351,7 +357,7 @@ fn import_wallet(
         address: primary_address,
         addresses,
         passphrase_hash: hash_secret(&passphrase),
-        assets: starter_assets(DEFAULT_NETWORK_ID),
+        assets,
         activity: vec![activity(
             "import",
             "Wallet imported",
@@ -371,40 +377,60 @@ fn import_wallet(
 }
 
 #[tauri::command]
-fn unlock_wallet(
+async fn unlock_wallet(
     state: State<'_, Mutex<AppState>>,
     passphrase: String,
 ) -> Result<WalletSession, String> {
-    let mut state = state.lock().map_err(|_| "State lock failed")?;
-    if let Some(wallet) = state.wallet.as_ref() {
-        if wallet.passphrase_hash != hash_secret(&passphrase) {
-            return Err("Invalid passphrase".to_string());
-        }
-        state.locked = false;
-        return Ok(session_from_state(&state));
-    }
+    let passphrase_hash = hash_secret(&passphrase);
 
-    let stored = read_stored_wallet(&state.storage_path)?
-        .ok_or_else(|| "No wallet exists yet".to_string())?;
-    let wallet = decrypt_wallet(&stored, &passphrase)?;
-    if wallet.passphrase_hash != hash_secret(&passphrase) {
-        return Err("Invalid passphrase".to_string());
+    let (network, address) = {
+        let mut state = state.lock().map_err(|_| "State lock failed")?;
+
+        let in_memory = state.wallet.as_ref().map(|w| {
+            (w.passphrase_hash.clone(), w.address.clone())
+        });
+
+        if let Some((stored_hash, addr)) = in_memory {
+            if stored_hash != passphrase_hash {
+                return Err("Invalid passphrase".to_string());
+            }
+            state.locked = false;
+            (state.network.clone(), addr)
+        } else {
+            let stored = read_stored_wallet(&state.storage_path)?
+                .ok_or_else(|| "No wallet exists yet".to_string())?;
+            let wallet = decrypt_wallet(&stored, &passphrase)?;
+            if wallet.passphrase_hash != passphrase_hash {
+                return Err("Invalid passphrase".to_string());
+            }
+            let network = normalize_network_id(&stored.network)
+                .ok_or_else(|| "Stored wallet network is unsupported".to_string())?
+                .to_string();
+            state.network = network.clone();
+            state.stored_wallet = Some(StoredWalletMetadata {
+                wallet_name: stored.wallet_name,
+                network: state.network.clone(),
+            });
+            let salt = BASE64
+                .decode(stored.salt)
+                .map_err(|_| "Stored wallet salt is invalid")?;
+            let (key, salt) = derive_storage_key(&passphrase, Some(&salt))?;
+            state.encryption_key = Some(key);
+            state.storage_salt = Some(salt);
+            let address = wallet.address.clone();
+            state.wallet = Some(wallet);
+            state.locked = false;
+            (network, address)
+        }
+    };
+
+    let fresh_assets = fetch_native_assets(&network, &address).await;
+
+    let mut state = state.lock().map_err(|_| "State lock failed")?;
+    if let Some(wallet) = state.wallet.as_mut() {
+        wallet.assets = fresh_assets;
     }
-    state.network = normalize_network_id(&stored.network)
-        .ok_or_else(|| "Stored wallet network is unsupported".to_string())?
-        .to_string();
-    state.stored_wallet = Some(StoredWalletMetadata {
-        wallet_name: stored.wallet_name,
-        network: state.network.clone(),
-    });
-    let salt = BASE64
-        .decode(stored.salt)
-        .map_err(|_| "Stored wallet salt is invalid")?;
-    let (key, salt) = derive_storage_key(&passphrase, Some(&salt))?;
-    state.encryption_key = Some(key);
-    state.storage_salt = Some(salt);
-    state.wallet = Some(wallet);
-    state.locked = false;
+    persist_state_wallet(&mut state)?;
     Ok(session_from_state(&state))
 }
 
@@ -782,43 +808,6 @@ fn session_from_state(state: &AppState) -> WalletSession {
     }
 }
 
-fn starter_assets(network: &str) -> Vec<Asset> {
-    vec![
-        Asset {
-            symbol: "ETH".to_string(),
-            name: "Ethereum".to_string(),
-            balance: 2.4821,
-            price_usd: 3480.62,
-            change_24h: 2.84,
-            network: network.to_string(),
-        },
-        Asset {
-            symbol: "BTC".to_string(),
-            name: "Bitcoin".to_string(),
-            balance: 0.1842,
-            price_usd: 102_240.12,
-            change_24h: -0.62,
-            network: network.to_string(),
-        },
-        Asset {
-            symbol: "SOL".to_string(),
-            name: "Solana".to_string(),
-            balance: 82.45,
-            price_usd: 184.33,
-            change_24h: 5.18,
-            network: network.to_string(),
-        },
-        Asset {
-            symbol: "USDC".to_string(),
-            name: "USD Coin".to_string(),
-            balance: 8_420.0,
-            price_usd: 1.0,
-            change_24h: 0.01,
-            network: network.to_string(),
-        },
-    ]
-}
-
 fn evm_network_config(id: &str) -> Option<&'static EvmNetworkConfig> {
     EVM_NETWORKS.iter().find(|network| network.id == id)
 }
@@ -876,6 +865,68 @@ async fn fetch_market_prices(ids: &[&str]) -> Result<CoinGeckoPriceResponse, Str
         .json::<CoinGeckoPriceResponse>()
         .await
         .map_err(|_| "Price service returned invalid data".to_string())
+}
+
+async fn fetch_evm_native_balance(config: &EvmNetworkConfig, address: &str) -> Result<u128, String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_getBalance",
+        "params": [address, "latest"],
+        "id": 1,
+    });
+
+    let response = reqwest::Client::new()
+        .post(config.rpc_url)
+        .json(&body)
+        .header("user-agent", "VaultForge Wallet/0.1.0")
+        .send()
+        .await
+        .map_err(|e| format!("RPC request failed: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("RPC returned HTTP {}", response.status()));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("RPC response parse failed: {e}"))?;
+
+    let balance_hex = json["result"]
+        .as_str()
+        .ok_or_else(|| "RPC response missing result field".to_string())?;
+
+    u128::from_str_radix(balance_hex.trim_start_matches("0x"), 16)
+        .map_err(|e| format!("Invalid balance hex: {e}"))
+}
+
+fn wei_to_native(wei: u128, decimals: u32) -> f64 {
+    let divisor = 10u128.pow(decimals);
+    (wei / divisor) as f64 + (wei % divisor) as f64 / divisor as f64
+}
+
+async fn fetch_native_assets(network: &str, address: &str) -> Vec<Asset> {
+    let Some(config) = evm_network_config(network) else {
+        return vec![];
+    };
+    match fetch_evm_native_balance(config, address).await {
+        Ok(wei) => vec![Asset {
+            symbol: config.native_symbol.to_string(),
+            name: config.display_name.to_string(),
+            balance: wei_to_native(wei, 18),
+            price_usd: 0.0,
+            change_24h: 0.0,
+            network: network.to_string(),
+        }],
+        Err(_) => vec![Asset {
+            symbol: config.native_symbol.to_string(),
+            name: config.display_name.to_string(),
+            balance: 0.0,
+            price_usd: 0.0,
+            change_24h: 0.0,
+            network: network.to_string(),
+        }],
+    }
 }
 
 fn activity(kind: &str, title: &str, subtitle: &str, amount: &str) -> Activity {
@@ -1178,6 +1229,43 @@ fn short_address(address: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn starter_assets(network: &str) -> Vec<Asset> {
+        vec![
+            Asset {
+                symbol: "ETH".to_string(),
+                name: "Ethereum".to_string(),
+                balance: 2.4821,
+                price_usd: 3480.62,
+                change_24h: 2.84,
+                network: network.to_string(),
+            },
+            Asset {
+                symbol: "BTC".to_string(),
+                name: "Bitcoin".to_string(),
+                balance: 0.1842,
+                price_usd: 102_240.12,
+                change_24h: -0.62,
+                network: network.to_string(),
+            },
+            Asset {
+                symbol: "SOL".to_string(),
+                name: "Solana".to_string(),
+                balance: 82.45,
+                price_usd: 184.33,
+                change_24h: 5.18,
+                network: network.to_string(),
+            },
+            Asset {
+                symbol: "USDC".to_string(),
+                name: "USD Coin".to_string(),
+                balance: 8_420.0,
+                price_usd: 1.0,
+                change_24h: 0.01,
+                network: network.to_string(),
+            },
+        ]
+    }
 
     #[test]
     fn validates_asset_address_formats() {
