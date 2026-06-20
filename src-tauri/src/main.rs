@@ -8,7 +8,7 @@ use chrono::Utc;
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
 use k256::{ecdsa::SigningKey, EncodedPoint};
 use rand::{seq::SliceRandom, Rng};
-use ripemd160::Ripemd160;
+use ripemd::Ripemd160;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as Sha2Digest, Sha256};
 use sha3::{Digest as Sha3Digest, Keccak256};
