@@ -1,17 +1,17 @@
 use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
 use argon2::Argon2;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use bip39::{Language, Mnemonic, MnemonicType, Seed};
+use bip39::{Language, Mnemonic};
 use bech32::{self, ToBase32, Variant};
 use bs58;
 use chrono::Utc;
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
-use k256::{ecdsa::SigningKey, EncodedPoint};
-use rand::{seq::SliceRandom, Rng};
+use k256::ecdsa::SigningKey;
+use rand::Rng;
 use ripemd::Ripemd160;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as Sha2Digest, Sha256};
-use sha3::{Digest as Sha3Digest, Keccak256};
+use sha3::Keccak256;
 use std::{collections::HashMap, fs, path::PathBuf, sync::Mutex};
 use tauri::{Manager, State};
 
@@ -20,12 +20,23 @@ struct Wallet {
     name: String,
     mnemonic: String,
     created_at: String,
+    address: String,
+    addresses: HashMap<String, String>,
+    passphrase_hash: String,
+    assets: Vec<Asset>,
+    activity: Vec<Activity>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
 struct WalletPayload {
+    wallet_name: String,
     mnemonic: String,
     created_at: String,
+    address: String,
+    addresses: HashMap<String, String>,
+    passphrase_hash: String,
+    assets: Vec<Asset>,
+    activity: Vec<Activity>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -61,7 +72,11 @@ struct WalletSession {
     has_wallet: bool,
     locked: bool,
     wallet_name: Option<String>,
+    address: Option<String>,
+    addresses: Option<HashMap<String, String>>,
     network: String,
+    assets: Vec<Asset>,
+    activity: Vec<Activity>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -215,10 +230,25 @@ fn create_wallet(
 ) -> Result<WalletSession, String> {
     validate_passphrase(&passphrase)?;
     let mnemonic = generate_mnemonic()?;
+    let addresses = derive_addresses_from_mnemonic(&mnemonic)?;
+    let primary_address = addresses
+        .get("evm")
+        .cloned()
+        .unwrap_or_else(|| address_from_seed(&mnemonic));
     let wallet = Wallet {
         name: clean_name(name),
         mnemonic,
         created_at: Utc::now().to_rfc3339(),
+        address: primary_address,
+        addresses,
+        passphrase_hash: hash_secret(&passphrase),
+        assets: starter_assets("Ethereum"),
+        activity: vec![activity(
+            "system",
+            "Wallet created",
+            "Recovery phrase generated locally",
+            "12 words",
+        )],
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
@@ -243,11 +273,26 @@ fn import_wallet(
     }
     validate_passphrase(&passphrase)?;
 
+    let mnemonic = mnemonic.trim().to_string();
     let addresses = derive_addresses_from_mnemonic(&mnemonic)?;
+    let primary_address = addresses
+        .get("evm")
+        .cloned()
+        .unwrap_or_else(|| address_from_seed(&mnemonic));
     let wallet = Wallet {
         name: "Imported Wallet".to_string(),
         mnemonic,
         created_at: Utc::now().to_rfc3339(),
+        address: primary_address,
+        addresses,
+        passphrase_hash: hash_secret(&passphrase),
+        assets: starter_assets("Ethereum"),
+        activity: vec![activity(
+            "import",
+            "Wallet imported",
+            "Recovery phrase verified locally",
+            "Imported",
+        )],
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
@@ -267,6 +312,9 @@ fn unlock_wallet(
 ) -> Result<WalletSession, String> {
     let mut state = state.lock().map_err(|_| "State lock failed")?;
     if let Some(wallet) = state.wallet.as_ref() {
+        if wallet.passphrase_hash != hash_secret(&passphrase) {
+            return Err("Invalid passphrase".to_string());
+        }
         state.locked = false;
         return Ok(session_from_state(&state));
     }
@@ -613,7 +661,11 @@ fn session_from_state(state: &AppState) -> WalletSession {
                     has_wallet: true,
                     locked: true,
                     wallet_name: Some(stored_wallet.wallet_name.clone()),
+                    address: None,
+                    addresses: None,
                     network: stored_wallet.network.clone(),
+                    assets: vec![],
+                    activity: vec![],
                 };
             }
 
@@ -621,7 +673,11 @@ fn session_from_state(state: &AppState) -> WalletSession {
             has_wallet: false,
             locked: false,
             wallet_name: None,
+            address: None,
+            addresses: None,
             network: state.network.clone(),
+            assets: vec![],
+            activity: vec![],
         };
     };
 
@@ -630,7 +686,11 @@ fn session_from_state(state: &AppState) -> WalletSession {
             has_wallet: true,
             locked: true,
             wallet_name: Some(wallet.name.clone()),
+            address: None,
+            addresses: None,
             network: state.network.clone(),
+            assets: vec![],
+            activity: vec![],
         };
     }
 
@@ -638,7 +698,11 @@ fn session_from_state(state: &AppState) -> WalletSession {
         has_wallet: true,
         locked: false,
         wallet_name: Some(wallet.name.clone()),
+        address: Some(wallet.address.clone()),
+        addresses: Some(wallet.addresses.clone()),
         network: state.network.clone(),
+        assets: wallet.assets.clone(),
+        activity: wallet.activity.clone(),
     }
 }
 
@@ -794,8 +858,14 @@ fn encrypt_wallet(
 let nonce_bytes: Vec<u8> = (0..12).map(|_| rand::thread_rng().r#gen()).collect();
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| "Failed to initialize encryption")?;
     let payload = WalletPayload {
+        wallet_name: wallet.name.clone(),
         mnemonic: wallet.mnemonic.clone(),
         created_at: wallet.created_at.clone(),
+        address: wallet.address.clone(),
+        addresses: wallet.addresses.clone(),
+        passphrase_hash: wallet.passphrase_hash.clone(),
+        assets: wallet.assets.clone(),
+        activity: wallet.activity.clone(),
     };
     let plaintext = serde_json::to_vec(&payload).map_err(|_| "Failed to encode wallet")?;
     let ciphertext = cipher
@@ -836,6 +906,11 @@ fn decrypt_wallet(stored: &StoredWalletFile, passphrase: &str) -> Result<Wallet,
         name: payload.wallet_name,
         mnemonic: payload.mnemonic,
         created_at: payload.created_at,
+        address: payload.address,
+        addresses: payload.addresses,
+        passphrase_hash: payload.passphrase_hash,
+        assets: payload.assets,
+        activity: payload.activity,
     })
 }
 
@@ -853,18 +928,13 @@ fn derive_storage_key(
     Ok((key, salt))
 }
 
-fn generate_mnemonic() -> String {
-    const WORDS: &[&str] = &[
-        "amber", "anchor", "atlas", "binary", "cactus", "cannon", "carbon", "copper", "cosmic",
-        "delta", "ember", "fabric", "galaxy", "harbor", "island", "jungle", "kernel", "ladder",
-        "magnet", "matrix", "nebula", "orbit", "pioneer", "quantum", "rocket", "saddle", "signal",
-        "silver", "summit", "token", "velvet", "voyage", "window", "yellow", "zenith", "zero",
-    ];
+fn generate_mnemonic() -> Result<String, String> {
+    let mut entropy = [0u8; 16];
     let mut rng = rand::thread_rng();
-    (0..12)
-        .map(|_| WORDS.choose(&mut rng).unwrap_or(&"vault").to_string())
-        .collect::<Vec<_>>()
-        .join(" ")
+    rng.fill(&mut entropy);
+    Mnemonic::from_entropy_in(Language::English, &entropy)
+        .map(|mnemonic| mnemonic.to_string())
+        .map_err(|_| "Failed to generate recovery phrase".to_string())
 }
 
 fn validate_passphrase(passphrase: &str) -> Result<(), String> {
@@ -888,11 +958,11 @@ fn address_from_seed(seed: &str) -> String {
 }
 
 fn derive_addresses_from_mnemonic(mnemonic: &str) -> Result<HashMap<String, String>, String> {
-    let mnemonic = Mnemonic::from_phrase(mnemonic, Language::English)
+    let mnemonic = Mnemonic::parse_in_normalized(Language::English, mnemonic)
         .map_err(|_| "Invalid recovery phrase".to_string())?;
-    let seed = Seed::new(&mnemonic, "");
-    let seed_bytes = seed.as_bytes();
-    let private_key = Sha256::digest(seed_bytes);
+    let seed = mnemonic.to_seed("");
+    let seed_bytes = seed.as_ref();
+    let private_key: [u8; 32] = Sha256::digest(seed_bytes).into();
 
     let evm_address = ethereum_address_from_private_key(&private_key)?;
     let bitcoin_address = bitcoin_bech32_address(&private_key, false)?;
@@ -911,8 +981,12 @@ fn derive_addresses_from_mnemonic(mnemonic: &str) -> Result<HashMap<String, Stri
     Ok(addresses)
 }
 
-fn ethereum_address_from_private_key(private_key: &[u8]) -> Result<String, String> {
-    let signing_key = SigningKey::from_bytes(private_key).map_err(|_| "Invalid private key".to_string())?;
+fn signing_key_from_private_key(private_key: &[u8; 32]) -> Result<SigningKey, String> {
+    SigningKey::from_bytes(private_key.into()).map_err(|_| "Invalid private key".to_string())
+}
+
+fn ethereum_address_from_private_key(private_key: &[u8; 32]) -> Result<String, String> {
+    let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
     let public_key = verifying_key.to_encoded_point(false);
     let public_bytes = public_key.as_bytes();
@@ -920,24 +994,23 @@ fn ethereum_address_from_private_key(private_key: &[u8]) -> Result<String, Strin
     Ok(format!("0x{}", hex::encode(&hash[12..])))
 }
 
-fn bitcoin_bech32_address(private_key: &[u8], is_testnet: bool) -> Result<String, String> {
-    let signing_key = SigningKey::from_bytes(private_key).map_err(|_| "Invalid private key".to_string())?;
+fn bitcoin_bech32_address(private_key: &[u8; 32], is_testnet: bool) -> Result<String, String> {
+    let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
-    let public_bytes = verifying_key.to_encoded_point(true).as_bytes();
+    let encoded = verifying_key.to_encoded_point(true);
+    let public_bytes = encoded.as_bytes();
     let hashed = Ripemd160::digest(&Sha256::digest(public_bytes));
     let hrp = if is_testnet { "tb" } else { "bc" };
-    let mut data = Vec::with_capacity(1 + hashed.len());
-    data.push(0);
-    data.extend(hashed);
     let mut bech32_data = vec![bech32::u5::try_from_u8(0).map_err(|_| "Failed to encode address")?];
-    bech32_data.extend(bech32::convert_bits(&data[1..], 8, 5, true).map_err(|_| "Failed to encode address")?);
+    bech32_data.extend(hashed.to_base32());
     bech32::encode(hrp, bech32_data, Variant::Bech32).map_err(|_| "Failed to encode address".to_string())
 }
 
-fn zcash_transparent_address(private_key: &[u8], is_testnet: bool) -> Result<String, String> {
-    let signing_key = SigningKey::from_bytes(private_key).map_err(|_| "Invalid private key".to_string())?;
+fn zcash_transparent_address(private_key: &[u8; 32], is_testnet: bool) -> Result<String, String> {
+    let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
-    let public_bytes = verifying_key.to_encoded_point(true).as_bytes();
+    let encoded = verifying_key.to_encoded_point(true);
+    let public_bytes = encoded.as_bytes();
     let payload = Ripemd160::digest(&Sha256::digest(public_bytes));
     let prefix = if is_testnet { vec![0x1d, 0x25] } else { vec![0x1c, 0xb8] };
     let mut bytes = prefix;
@@ -952,23 +1025,24 @@ fn solana_address_from_seed(seed_bytes: &[u8]) -> Result<String, String> {
     Ok(bs58::encode(public.as_bytes()).into_string())
 }
 
-fn filecoin_address_from_private_key(private_key: &[u8]) -> Result<String, String> {
-    let signing_key = SigningKey::from_bytes(private_key).map_err(|_| "Invalid private key".to_string())?;
+fn filecoin_address_from_private_key(private_key: &[u8; 32]) -> Result<String, String> {
+    let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
-    let public_bytes = verifying_key.to_encoded_point(true).as_bytes();
+    let encoded = verifying_key.to_encoded_point(true);
+    let public_bytes = encoded.as_bytes();
     let payload = Ripemd160::digest(&Sha256::digest(public_bytes));
     let mut bytes = vec![0x01];
     bytes.extend(payload);
     Ok(format!("f{}", bs58::encode(bytes).into_string()))
 }
 
-fn bech32_account_address(private_key: &[u8], hrp: &str) -> Result<String, String> {
-    let signing_key = SigningKey::from_bytes(private_key).map_err(|_| "Invalid private key".to_string())?;
+fn bech32_account_address(private_key: &[u8; 32], hrp: &str) -> Result<String, String> {
+    let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
-    let public_bytes = verifying_key.to_encoded_point(true).as_bytes();
+    let encoded = verifying_key.to_encoded_point(true);
+    let public_bytes = encoded.as_bytes();
     let payload = Ripemd160::digest(&Sha256::digest(public_bytes));
-    let mut bech32_data = vec![];
-    bech32_data.extend(bech32::convert_bits(&payload, 8, 5, true).map_err(|_| "Failed to encode address")?);
+    let bech32_data = payload.to_base32();
     bech32::encode(hrp, bech32_data, Variant::Bech32).map_err(|_| "Failed to encode address".to_string())
 }
 
@@ -1055,6 +1129,11 @@ mod tests {
             name: "Test Wallet".to_string(),
             mnemonic: "test mnemonic".to_string(),
             created_at: Utc::now().to_rfc3339(),
+            address: address_from_seed("test seed"),
+            addresses: HashMap::new(),
+            passphrase_hash: hash_secret(passphrase),
+            assets: starter_assets("Ethereum"),
+            activity: vec![activity("system", "Created", "Local", "1")],
         };
         let (key, salt) = derive_storage_key(passphrase, None).unwrap();
         let stored = encrypt_wallet(&wallet, "Ethereum", &key, &salt).unwrap();
