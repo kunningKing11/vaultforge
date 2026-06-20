@@ -70,6 +70,20 @@ type View = "dashboard" | "send" | "receive" | "swap" | "assets" | "activity" | 
 
 type QrResilience = "L" | "M" | "Q" | "H";
 
+type NetworkId =
+  | "ethereum"
+  | "monad"
+  | "polygon"
+  | "arbitrum_one"
+  | "base"
+  | "optimism"
+  | "avalanche_c"
+  | "bitcoin"
+  | "solana"
+  | "zcash"
+  | "filecoin"
+  | "injective";
+
 type Toast = {
   id: number;
   message: string;
@@ -81,7 +95,7 @@ type Toast = {
 
 type EvmNetworkInput = {
   kind: "evm";
-  id: string;
+  id: NetworkId;
   name: string;
   chainId: number;
   ticker: string;
@@ -98,7 +112,7 @@ type EvmNetwork = Omit<Required<EvmNetworkInput>, "vm_type"> & {
 
 type BitcoinNetworkInput = {
   kind: "bitcoin";
-  id: string;
+  id: NetworkId;
   name: string;
   ticker: "BTC";
   isTestNet?: boolean;
@@ -112,7 +126,7 @@ type BitcoinNetwork = Omit<Required<BitcoinNetworkInput>, "vm_type"> & {
 
 type LightningNetworkInput = {
   kind: "lightning";
-  id: string;
+  id: NetworkId;
   name: string;
   ticker: "BTC";
   isTestNet?: boolean;
@@ -125,7 +139,7 @@ type LightningNetwork = Omit<Required<LightningNetworkInput>, "vm_type"> & {
 
 type SolanaNetworkInput = {
   kind: "solana";
-  id: string;
+  id: NetworkId;
   name: string;
   ticker: "SOL";
   isTestNet?: boolean;
@@ -139,7 +153,7 @@ type SolanaNetwork = Omit<Required<SolanaNetworkInput>, "vm_type"> & {
 
 type ZcashNetworkInput = {
   kind: "zcash";
-  id: string;
+  id: NetworkId;
   name: string;
   ticker: "ZEC";
   isTestNet?: boolean;
@@ -152,7 +166,7 @@ type ZcashNetwork = Omit<Required<ZcashNetworkInput>, "vm_type"> & {
 
 type FilecoinNetworkInput = {
   kind: "filecoin";
-  id: string;
+  id: NetworkId;
   name: string;
   ticker: "FIL";
   isTestNet?: boolean;
@@ -166,7 +180,7 @@ type FilecoinNetwork = Omit<Required<FilecoinNetworkInput>, "vm_type"> & {
 
 type InjectiveNetworkInput = {
   kind: "injective";
-  id: string;
+  id: NetworkId;
   name: string;
   ticker: "INJ";
   isTestNet?: boolean;
@@ -195,7 +209,9 @@ type Network =
   | FilecoinNetwork
   | InjectiveNetwork;
 
-const rawNetworks: NetworkInput[] = [
+const DEFAULT_NETWORK_ID: NetworkId = "ethereum";
+
+const networkDefinitions: NetworkInput[] = [
   { kind: "evm", id: "ethereum", name: "Ethereum", chainId: 1, ticker: "ETH", vm_type: "EVM" },
   { kind: "evm", id: "monad", name: "Monad", chainId: 167004, ticker: "MON", vm_type: "EVM" },
   { kind: "evm", id: "polygon", name: "Polygon", chainId: 137, ticker: "MATIC", vm_type: "EVM", isL2: true },
@@ -210,7 +226,7 @@ const rawNetworks: NetworkInput[] = [
   { kind: "injective", id: "injective", name: "Injective", ticker: "INJ" },
 ];
 
-export const networks: Network[] = rawNetworks.map(normalizeNetwork);
+export const networks: Network[] = networkDefinitions.map(normalizeNetwork);
 
 function normalizeNetwork(network: NetworkInput): Network {
   if (network.kind === "evm") {
@@ -243,6 +259,22 @@ function normalizeNetwork(network: NetworkInput): Network {
   }
 }
 
+function normalizeNetworkId(value: string): NetworkId {
+  return networks.find((network) => network.id === value)?.id ?? DEFAULT_NETWORK_ID;
+}
+
+function networkById(id: string) {
+  return networks.find((network) => network.id === id) ?? null;
+}
+
+function networkDisplayName(id: string) {
+  return networkById(id)?.name ?? id;
+}
+
+function evmNetworks() {
+  return networks.filter((network): network is EvmNetwork => network.kind === "evm");
+}
+
 const qrResilienceOptions: Array<{ value: QrResilience; label: string; detail: string }> = [
   { value: "L", label: "Low", detail: "~7% recovery" },
   { value: "M", label: "Medium", detail: "~15% recovery" },
@@ -268,7 +300,7 @@ const app = document.querySelector<HTMLDivElement>("#app");
 
 let session: WalletSession | null = null;
 let currentView: View = "dashboard";
-let networkId = "ethereum";
+let receiveNetworkId: NetworkId = DEFAULT_NETWORK_ID;
 let qrResilience: QrResilience = "M";
 let qrSvg = "";
 let qrKey = "";
@@ -279,6 +311,9 @@ let selectedActivityId = "";
 let busy = false;
 let toastId = 0;
 let toasts: Toast[] = [];
+let lockedDeleteStep: "idle" | "confirm" | "countdown" = "idle";
+let lockedDeleteRemaining = 10;
+let lockedDeleteTimer: number | null = null;
 
 const enteredToasts = new Set<number>();
 
@@ -327,6 +362,9 @@ function bindEvents() {
 
     if (action === "lock") void lockWallet();
     if (action === "clear-wallet") void clearWallet();
+    if (action === "show-locked-delete-wallet") showLockedDeleteWallet();
+    if (action === "cancel-locked-delete-wallet") cancelLockedDeleteWallet();
+    if (action === "start-locked-delete-wallet-countdown") startLockedDeleteWalletCountdown();
     if (action === "refresh") void refreshPrices();
     if (action === "copy-address") void copyAddress();
     if (action === "copy-receive-address") void copyReceiveAddress();
@@ -363,8 +401,8 @@ function bindEvents() {
   document.addEventListener("change", (event) => {
     const target = event.target as HTMLSelectElement;
 
-    if (target.matches("[data-receive-network]")) {
-      networkId = target.value;
+    if (target.matches("[data-receive-network-id]")) {
+      receiveNetworkId = normalizeNetworkId(target.value);
       resetQr();
       render();
     }
@@ -418,9 +456,10 @@ async function importWallet(form: HTMLFormElement) {
 
 async function unlockWallet(form: HTMLFormElement) {
   const formData = new FormData(form);
-  await runCommand("unlock_wallet", () => walletApi.unlockWallet({
+  const ok = await runCommand("unlock_wallet", () => walletApi.unlockWallet({
     passphrase: String(formData.get("passphrase") || ""),
   }));
+  if (ok) resetLockedDeleteWallet();
 }
 
 async function signTransaction(form: HTMLFormElement) {
@@ -474,7 +513,7 @@ async function swapTokens(form: HTMLFormElement) {
 async function setNetwork(form: HTMLFormElement) {
   const formData = new FormData(form);
   await runCommand("set_network", () => walletApi.setNetwork({
-    network: String(formData.get("network") || "Ethereum"),
+    network: normalizeNetworkId(String(formData.get("network") || session?.network || DEFAULT_NETWORK_ID)),
   }));
 }
 
@@ -496,12 +535,60 @@ async function lockWallet() {
 
 async function clearWallet() {
   if (!window.confirm("Remove the encrypted local wallet and return to onboarding? This cannot be undone.")) return;
+  const ok = await deleteStoredWallet();
+  if (ok) render();
+}
+
+async function deleteStoredWallet() {
+  stopLockedDeleteTimer();
+  resetLockedDeleteWallet();
   const ok = await runCommand("clear_wallet", () => walletApi.clearWallet());
   if (ok) {
     currentView = "dashboard";
     signedTransaction = null;
     sendDraft = { to: "", symbol: "ETH", amount: "", note: "" };
+  }
+  return ok;
+}
+
+function showLockedDeleteWallet() {
+  stopLockedDeleteTimer();
+  lockedDeleteStep = "confirm";
+  lockedDeleteRemaining = 10;
+  render();
+}
+
+function cancelLockedDeleteWallet() {
+  stopLockedDeleteTimer();
+  resetLockedDeleteWallet();
+  render();
+}
+
+function resetLockedDeleteWallet() {
+  lockedDeleteStep = "idle";
+  lockedDeleteRemaining = 10;
+}
+
+function startLockedDeleteWalletCountdown() {
+  stopLockedDeleteTimer();
+  lockedDeleteStep = "countdown";
+  lockedDeleteRemaining = 10;
+  render();
+
+  lockedDeleteTimer = window.setInterval(() => {
+    lockedDeleteRemaining -= 1;
+    if (lockedDeleteRemaining <= 0) {
+      void deleteStoredWallet();
+      return;
+    }
     render();
+  }, 1_000);
+}
+
+function stopLockedDeleteTimer() {
+  if (lockedDeleteTimer !== null) {
+    window.clearInterval(lockedDeleteTimer);
+    lockedDeleteTimer = null;
   }
 }
 
@@ -603,6 +690,7 @@ function render() {
     <main class="noise min-h-screen px-4 py-5 text-slate-100 sm:px-6 lg:px-8">
       ${busy ? loadingBar() : ""}
       ${renderBody()}
+      ${lockedDeleteWalletModal()}
     </main>
   `;
   void ensureReceiveQr();
@@ -682,11 +770,47 @@ function lockedWallet() {
           <label class="block space-y-2"><span class="text-sm font-bold text-slate-300">Passphrase</span><input class="field" name="passphrase" type="password" required /></label>
           <button class="btn-primary w-full" type="submit">Unlock wallet</button>
         </form>
+        <div class="mt-7 border-t border-rose-400/20 pt-5 text-left">
+          <button class="btn-danger w-full" data-action="show-locked-delete-wallet" type="button">Delete stored wallet</button>
+          <p class="mt-3 text-sm leading-6 text-rose-200/80">Only use this if you need to remove the encrypted local wallet from this device and your seed is backed up.</p>
+        </div>
       </div>
     </section>
   `;
 }
 
+function lockedDeleteWalletModal() {
+  if (!session?.locked || lockedDeleteStep === "idle") return "";
+
+  if (lockedDeleteStep === "confirm") {
+    return `
+      <div class="destructive-modal fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-md">
+        <section class="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-slate-950/95 p-6 text-left text-slate-100 shadow-[0_30px_120px_rgba(2,6,23,0.72)] sm:p-8">
+          <p class="text-xs font-black uppercase tracking-[0.3em] text-rose-300">Destructive Action</p>
+          <h2 class="mt-3 text-3xl font-black text-white">Are you sure you want to do this?</h2>
+          <p class="mt-4 text-sm leading-6 text-slate-300">Deleting stored wallet files is destructive. You could lose all your funds if your wallet seed is not backed up.</p>
+          <div class="mt-6 rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4 text-sm font-bold leading-6 text-rose-100">Only continue if you have verified your recovery phrase is backed up and usable.</div>
+          <div class="mt-6 flex flex-col gap-3 sm:flex-row">
+            <button class="btn-secondary flex-1" data-action="cancel-locked-delete-wallet" type="button">Cancel</button>
+            <button class="btn-danger flex-1 whitespace-nowrap" data-action="start-locked-delete-wallet-countdown" type="button">Yes, I have backed up my wallet</button>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="destructive-modal fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-md">
+      <section class="w-full max-w-md rounded-[2rem] border border-rose-400/50 bg-rose-950/90 p-6 text-center text-rose-100 shadow-[0_30px_120px_rgba(127,29,29,0.55)] sm:p-8">
+        <p class="text-xs font-black uppercase tracking-[0.3em] text-rose-300">Deletion Pending</p>
+        <h2 class="mt-3 text-2xl font-black text-rose-50">Deleting wallet files in</h2>
+        <p class="mt-5 text-7xl font-black text-rose-50">${lockedDeleteRemaining}</p>
+        <p class="mt-5 text-sm leading-6 text-rose-100/80">This will permanently remove the encrypted local wallet from this device.</p>
+        <button class="btn-secondary mt-6 w-full" data-action="cancel-locked-delete-wallet" type="button">Cancel</button>
+      </section>
+    </div>
+  `;
+}
 function walletShell() {
   if (!session) return "";
   return `
@@ -694,7 +818,7 @@ function walletShell() {
       <aside class="glass hidden rounded-[2rem] p-5 lg:sticky lg:top-5 lg:block lg:h-[calc(100vh-2.5rem)]">
         <div class="mb-8 flex items-center gap-3">
           <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-acid text-xl font-black text-ink">VF</div>
-          <div><p class="font-black">${escapeHtml(session.wallet_name ?? "VaultForge")}</p><p class="text-sm text-slate-500">${escapeHtml(session.network)}</p></div>
+          <div><p class="font-black">${escapeHtml(session.wallet_name ?? "VaultForge")}</p><p class="text-sm text-slate-500">${escapeHtml(networkDisplayName(session.network))}</p></div>
         </div>
         <nav class="space-y-2">
           ${navButton("dashboard", "Dashboard")}
@@ -827,7 +951,7 @@ function signedTransactionView(signed: SignedTransaction) {
         ${signedDetail("Total debit", `${signed.totalDebit.toFixed(6)} ${signed.symbol}`)}
         ${signedDetail("Post-send balance", `${signed.postBalance.toFixed(6)} ${signed.symbol}`)}
         ${signedDetail("Estimated value", money(signed.fiatValue))}
-        ${signedDetail("Network", signed.network)}
+        ${signedDetail("Network", networkDisplayName(signed.network))}
         ${signedDetail("Nonce", signed.nonce)}
         ${signedDetail("Signed", new Date(signed.signedAt).toLocaleString())}
       </div>
@@ -863,7 +987,7 @@ function receiveView() {
       <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Receive</p>
       <h2 class="mt-2 text-3xl font-black">Deposit address</h2>
       <div class="mt-6 grid gap-4 sm:grid-cols-2">
-        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Receive network</span>${networkSelect()}</label>
+        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Receive network</span>${receiveNetworkSelect()}</label>
         <label class="space-y-2"><span class="text-sm font-bold text-slate-300">QR resilience</span>${qrResilienceSelect()}</label>
       </div>
       <div class="mt-6 rounded-3xl border border-dashed border-acid/40 bg-acid/10 p-6 text-center">
@@ -935,7 +1059,7 @@ function settingsView() {
         <form data-action="set-network" class="mt-6 space-y-4">
           <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Active network</span>
             <select class="field" name="network">
-              ${["Ethereum", "Polygon", "Arbitrum", "Base", "Optimism"].map((network) => `<option ${session?.network === network ? "selected" : ""}>${network}</option>`).join("")}
+              ${evmNetworks().map((network) => `<option value="${network.id}" ${session?.network === network.id ? "selected" : ""}>${network.name}</option>`).join("")}
             </select>
           </label>
           <button class="btn-primary" type="submit">Save network</button>
@@ -1082,7 +1206,7 @@ function activityDetails(item: Activity | null) {
         ${detailRow("Status", item.status)}
         ${detailRow("Amount", item.amount ?? "n/a")}
         ${detailRow("Fee", item.fee ?? "n/a")}
-        ${detailRow("Network", item.network ?? session?.network ?? "n/a")}
+        ${detailRow("Network", networkDisplayName(item.network ?? session?.network ?? "n/a"))}
         ${detailRow("Timestamp", new Date(item.timestamp).toLocaleString())}
         ${copyableDetailRow("Transaction hash", item.hash)}
         ${item.from ? copyableDetailRow("From", item.from) : ""}
@@ -1127,8 +1251,8 @@ function iconDownload() {
   return `<svg aria-hidden="true" class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M12 4v10m0 0 4-4m-4 4-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 16.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 }
 
-function networkSelect() {
-  return `<select class="field" data-receive-network>${networks.map((network) => `<option value="${network.id}" ${network.id === networkId ? "selected" : ""}>${network.name} - ${networkDetail(network)}</option>`).join("")}</select>`;
+function receiveNetworkSelect() {
+  return `<select class="field" data-receive-network-id>${networks.map((network) => `<option value="${network.id}" ${network.id === receiveNetworkId ? "selected" : ""}>${network.name} - ${networkDetail(network)}</option>`).join("")}</select>`;
 }
 
 function qrResilienceSelect() {
@@ -1136,7 +1260,7 @@ function qrResilienceSelect() {
 }
 
 function selectedNetwork() {
-  return networks.find((network) => network.id === networkId) ?? networks[0];
+  return networks.find((network) => network.id === receiveNetworkId) ?? networks[0];
 }
 
 function networkDetail(network: Network, short = true) {

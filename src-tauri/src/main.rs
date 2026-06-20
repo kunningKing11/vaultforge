@@ -1,8 +1,8 @@
-use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
+use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
 use argon2::Argon2;
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use bip39::{Language, Mnemonic};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use bech32::{self, ToBase32, Variant};
+use bip39::{Language, Mnemonic};
 use bs58;
 use chrono::Utc;
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
@@ -99,6 +99,69 @@ struct SignedTransaction {
     fiat_value: f64,
 }
 
+#[derive(Clone, Copy)]
+struct EvmNetworkConfig {
+    id: &'static str,
+    display_name: &'static str,
+    chain_id: u64,
+    native_symbol: &'static str,
+    rpc_url: &'static str,
+}
+
+const DEFAULT_NETWORK_ID: &str = "ethereum";
+
+const EVM_NETWORKS: &[EvmNetworkConfig] = &[
+    EvmNetworkConfig {
+        id: "ethereum",
+        display_name: "Ethereum",
+        chain_id: 1,
+        native_symbol: "ETH",
+        rpc_url: "https://ethereum-rpc.publicnode.com",
+    },
+    EvmNetworkConfig {
+        id: "monad",
+        display_name: "Monad",
+        chain_id: 167004,
+        native_symbol: "MON",
+        rpc_url: "https://rpc.monad.xyz",
+    },
+    EvmNetworkConfig {
+        id: "polygon",
+        display_name: "Polygon",
+        chain_id: 137,
+        native_symbol: "MATIC",
+        rpc_url: "https://polygon-bor-rpc.publicnode.com",
+    },
+    EvmNetworkConfig {
+        id: "arbitrum_one",
+        display_name: "Arbitrum One",
+        chain_id: 42161,
+        native_symbol: "ETH",
+        rpc_url: "https://arbitrum-one-rpc.publicnode.com",
+    },
+    EvmNetworkConfig {
+        id: "base",
+        display_name: "Base",
+        chain_id: 8453,
+        native_symbol: "ETH",
+        rpc_url: "https://base-rpc.publicnode.com",
+    },
+    EvmNetworkConfig {
+        id: "optimism",
+        display_name: "Optimism",
+        chain_id: 10,
+        native_symbol: "ETH",
+        rpc_url: "https://optimism-rpc.publicnode.com",
+    },
+    EvmNetworkConfig {
+        id: "avalanche_c",
+        display_name: "Avalanche C-Chain",
+        chain_id: 43114,
+        native_symbol: "AVAX",
+        rpc_url: "https://avalanche-c-chain-rpc.publicnode.com",
+    },
+];
+
 #[derive(Deserialize)]
 struct CoinGeckoPrice {
     usd: f64,
@@ -140,12 +203,14 @@ impl AppState {
             .flatten()
             .map(|stored| StoredWalletMetadata {
                 wallet_name: stored.wallet_name,
-                network: stored.network,
+                network: normalize_network_id(&stored.network)
+                    .unwrap_or(DEFAULT_NETWORK_ID)
+                    .to_string(),
             });
         let network = stored_wallet
             .as_ref()
             .map(|wallet| wallet.network.clone())
-            .unwrap_or_else(|| "Ethereum".to_string());
+            .unwrap_or_else(|| DEFAULT_NETWORK_ID.to_string());
 
         Self {
             wallet: None,
@@ -242,7 +307,7 @@ fn create_wallet(
         address: primary_address,
         addresses,
         passphrase_hash: hash_secret(&passphrase),
-        assets: starter_assets("Ethereum"),
+        assets: starter_assets(DEFAULT_NETWORK_ID),
         activity: vec![activity(
             "system",
             "Wallet created",
@@ -286,7 +351,7 @@ fn import_wallet(
         address: primary_address,
         addresses,
         passphrase_hash: hash_secret(&passphrase),
-        assets: starter_assets("Ethereum"),
+        assets: starter_assets(DEFAULT_NETWORK_ID),
         activity: vec![activity(
             "import",
             "Wallet imported",
@@ -325,10 +390,12 @@ fn unlock_wallet(
     if wallet.passphrase_hash != hash_secret(&passphrase) {
         return Err("Invalid passphrase".to_string());
     }
-    state.network = stored.network.clone();
+    state.network = normalize_network_id(&stored.network)
+        .ok_or_else(|| "Stored wallet network is unsupported".to_string())?
+        .to_string();
     state.stored_wallet = Some(StoredWalletMetadata {
         wallet_name: stored.wallet_name,
-        network: stored.network,
+        network: state.network.clone(),
     });
     let salt = BASE64
         .decode(stored.salt)
@@ -364,7 +431,7 @@ fn clear_wallet(state: State<'_, Mutex<AppState>>) -> Result<WalletSession, Stri
     state.encryption_key = None;
     state.storage_salt = None;
     state.locked = false;
-    state.network = "Ethereum".to_string();
+    state.network = DEFAULT_NETWORK_ID.to_string();
     Ok(session_from_state(&state))
 }
 
@@ -538,10 +605,11 @@ fn set_network(
     state: State<'_, Mutex<AppState>>,
     network: String,
 ) -> Result<WalletSession, String> {
-    let supported = ["Ethereum", "Polygon", "Arbitrum", "Base", "Optimism"];
-    if !supported.contains(&network.as_str()) {
-        return Err("Unsupported network".to_string());
-    }
+    let network = normalize_network_id(&network)
+        .ok_or_else(|| "Unsupported network".to_string())?
+        .to_string();
+    let network_config =
+        evm_network_config(&network).ok_or_else(|| "Unsupported network".to_string())?;
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
     state.network = network.clone();
@@ -551,7 +619,15 @@ fn set_network(
         }
         wallet.activity.insert(
             0,
-            activity("network", "Network changed", &network, "Updated"),
+            activity(
+                "network",
+                "Network changed",
+                network_config.display_name,
+                &format!(
+                    "Chain ID {} · {} · {}",
+                    network_config.chain_id, network_config.native_symbol, network_config.rpc_url
+                ),
+            ),
         );
     }
     persist_state_wallet(&mut state)?;
@@ -657,17 +733,17 @@ fn transaction_signature(wallet: &Wallet, payload_hash: &str) -> String {
 fn session_from_state(state: &AppState) -> WalletSession {
     let Some(wallet) = state.wallet.as_ref() else {
         if let Some(stored_wallet) = state.stored_wallet.as_ref() {
-                return WalletSession {
-                    has_wallet: true,
-                    locked: true,
-                    wallet_name: Some(stored_wallet.wallet_name.clone()),
-                    address: None,
-                    addresses: None,
-                    network: stored_wallet.network.clone(),
-                    assets: vec![],
-                    activity: vec![],
-                };
-            }
+            return WalletSession {
+                has_wallet: true,
+                locked: true,
+                wallet_name: Some(stored_wallet.wallet_name.clone()),
+                address: None,
+                addresses: None,
+                network: stored_wallet.network.clone(),
+                assets: vec![],
+                activity: vec![],
+            };
+        }
 
         return WalletSession {
             has_wallet: false,
@@ -741,6 +817,32 @@ fn starter_assets(network: &str) -> Vec<Asset> {
             network: network.to_string(),
         },
     ]
+}
+
+fn evm_network_config(id: &str) -> Option<&'static EvmNetworkConfig> {
+    EVM_NETWORKS.iter().find(|network| network.id == id)
+}
+
+fn is_supported_network_id(id: &str) -> bool {
+    evm_network_config(id).is_some()
+}
+
+fn normalize_network_id(value: &str) -> Option<&'static str> {
+    let value = value.trim();
+    if is_supported_network_id(value) {
+        return Some(evm_network_config(value)?.id);
+    }
+
+    match value {
+        "Ethereum" => Some("ethereum"),
+        "Monad" => Some("monad"),
+        "Polygon" => Some("polygon"),
+        "Arbitrum" | "Arbitrum One" => Some("arbitrum_one"),
+        "Base" => Some("base"),
+        "Optimism" => Some("optimism"),
+        "Avalanche" | "Avalanche C-Chain" => Some("avalanche_c"),
+        _ => None,
+    }
 }
 
 fn price_id_for_symbol(symbol: &str) -> Option<&'static str> {
@@ -855,7 +957,8 @@ fn encrypt_wallet(
     key: &[u8; 32],
     salt: &[u8],
 ) -> Result<StoredWalletFile, String> {
-let nonce_bytes: Vec<u8> = (0..12).map(|_| rand::thread_rng().r#gen()).collect();
+    let nonce_bytes: Vec<u8> = (0..12).map(|_| rand::thread_rng().r#gen()).collect();
+    let network = normalize_network_id(network).ok_or_else(|| "Unsupported network".to_string())?;
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| "Failed to initialize encryption")?;
     let payload = WalletPayload {
         wallet_name: wallet.name.clone(),
@@ -900,8 +1003,8 @@ fn decrypt_wallet(stored: &StoredWalletFile, passphrase: &str) -> Result<Wallet,
     let plaintext = cipher
         .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
         .map_err(|_| "Invalid passphrase")?;
-    let payload: WalletPayload =
-        serde_json::from_slice(&plaintext).map_err(|_| "Stored wallet contents are invalid".to_string())?;
+    let payload: WalletPayload = serde_json::from_slice(&plaintext)
+        .map_err(|_| "Stored wallet contents are invalid".to_string())?;
     Ok(Wallet {
         name: payload.wallet_name,
         mnemonic: payload.mnemonic,
@@ -1003,7 +1106,8 @@ fn bitcoin_bech32_address(private_key: &[u8; 32], is_testnet: bool) -> Result<St
     let hrp = if is_testnet { "tb" } else { "bc" };
     let mut bech32_data = vec![bech32::u5::try_from_u8(0).map_err(|_| "Failed to encode address")?];
     bech32_data.extend(hashed.to_base32());
-    bech32::encode(hrp, bech32_data, Variant::Bech32).map_err(|_| "Failed to encode address".to_string())
+    bech32::encode(hrp, bech32_data, Variant::Bech32)
+        .map_err(|_| "Failed to encode address".to_string())
 }
 
 fn zcash_transparent_address(private_key: &[u8; 32], is_testnet: bool) -> Result<String, String> {
@@ -1012,7 +1116,11 @@ fn zcash_transparent_address(private_key: &[u8; 32], is_testnet: bool) -> Result
     let encoded = verifying_key.to_encoded_point(true);
     let public_bytes = encoded.as_bytes();
     let payload = Ripemd160::digest(&Sha256::digest(public_bytes));
-    let prefix = if is_testnet { vec![0x1d, 0x25] } else { vec![0x1c, 0xb8] };
+    let prefix = if is_testnet {
+        vec![0x1d, 0x25]
+    } else {
+        vec![0x1c, 0xb8]
+    };
     let mut bytes = prefix;
     bytes.extend(payload);
     Ok(bs58::encode(bytes).with_check().into_string())
@@ -1020,7 +1128,8 @@ fn zcash_transparent_address(private_key: &[u8; 32], is_testnet: bool) -> Result
 
 fn solana_address_from_seed(seed_bytes: &[u8]) -> Result<String, String> {
     let secret_bytes = Sha256::digest(seed_bytes);
-    let secret = DalekSecretKey::from_bytes(&secret_bytes).map_err(|_| "Failed to derive Solana key".to_string())?;
+    let secret = DalekSecretKey::from_bytes(&secret_bytes)
+        .map_err(|_| "Failed to derive Solana key".to_string())?;
     let public = DalekPublicKey::from(&secret);
     Ok(bs58::encode(public.as_bytes()).into_string())
 }
@@ -1043,7 +1152,8 @@ fn bech32_account_address(private_key: &[u8; 32], hrp: &str) -> Result<String, S
     let public_bytes = encoded.as_bytes();
     let payload = Ripemd160::digest(&Sha256::digest(public_bytes));
     let bech32_data = payload.to_base32();
-    bech32::encode(hrp, bech32_data, Variant::Bech32).map_err(|_| "Failed to encode address".to_string())
+    bech32::encode(hrp, bech32_data, Variant::Bech32)
+        .map_err(|_| "Failed to encode address".to_string())
 }
 
 fn hash_secret(value: &str) -> String {
@@ -1097,7 +1207,7 @@ mod tests {
             symbol: "ETH".to_string(),
             amount: 1.0,
             note: "memo".to_string(),
-            network: "Ethereum".to_string(),
+            network: DEFAULT_NETWORK_ID.to_string(),
             nonce: "abc".to_string(),
             signed_at: "2026-01-01T00:00:00Z".to_string(),
             payload_hash: String::new(),
@@ -1132,17 +1242,44 @@ mod tests {
             address: address_from_seed("test seed"),
             addresses: HashMap::new(),
             passphrase_hash: hash_secret(passphrase),
-            assets: starter_assets("Ethereum"),
+            assets: starter_assets(DEFAULT_NETWORK_ID),
             activity: vec![activity("system", "Created", "Local", "1")],
         };
         let (key, salt) = derive_storage_key(passphrase, None).unwrap();
-        let stored = encrypt_wallet(&wallet, "Ethereum", &key, &salt).unwrap();
+        let stored = encrypt_wallet(&wallet, DEFAULT_NETWORK_ID, &key, &salt).unwrap();
         assert!(!stored.ciphertext.contains(&wallet.address));
+        assert_eq!(stored.network, DEFAULT_NETWORK_ID);
 
         let decrypted = decrypt_wallet(&stored, passphrase).unwrap();
         assert_eq!(decrypted.name, wallet.name);
         assert_eq!(decrypted.mnemonic, wallet.mnemonic);
         assert_eq!(decrypted.created_at, wallet.created_at);
+    }
+
+    #[test]
+    fn looks_up_evm_network_configs() {
+        let ethereum = evm_network_config("ethereum").unwrap();
+        assert_eq!(ethereum.display_name, "Ethereum");
+        assert_eq!(ethereum.chain_id, 1);
+        assert_eq!(ethereum.native_symbol, "ETH");
+        assert_eq!(ethereum.rpc_url, "https://ethereum-rpc.publicnode.com");
+
+        let avalanche = evm_network_config("avalanche_c").unwrap();
+        assert_eq!(avalanche.chain_id, 43114);
+        assert_eq!(avalanche.native_symbol, "AVAX");
+    }
+
+    #[test]
+    fn normalizes_legacy_network_names() {
+        assert_eq!(normalize_network_id("ethereum"), Some("ethereum"));
+        assert_eq!(normalize_network_id("Ethereum"), Some("ethereum"));
+        assert_eq!(normalize_network_id("Arbitrum"), Some("arbitrum_one"));
+        assert_eq!(normalize_network_id("Arbitrum One"), Some("arbitrum_one"));
+        assert_eq!(
+            normalize_network_id("Avalanche C-Chain"),
+            Some("avalanche_c")
+        );
+        assert_eq!(normalize_network_id("Unsupported"), None);
     }
 }
 
