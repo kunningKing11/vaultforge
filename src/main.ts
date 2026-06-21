@@ -55,6 +55,8 @@ type SignedTransaction = {
   totalDebit: number;
   postBalance: number;
   fiatValue: number;
+  rawTx?: string | null;
+  txHash?: string | null;
 };
 
 type SendDraft = {
@@ -488,7 +490,7 @@ async function signTransaction(form: HTMLFormElement) {
 
 async function broadcastSignedTransaction() {
   if (!signedTransaction) return;
-  if (!window.confirm("Broadcast this signed transaction to the local simulator?")) return;
+  if (!window.confirm("Broadcast this signed transaction to the chain RPC?")) return;
   const signed = signedTransaction;
 
   const ok = await runCommand("send_transaction", () => walletApi.sendTransaction({ signed }));
@@ -909,7 +911,7 @@ function sendView() {
     <section class="glass max-w-3xl rounded-[2rem] p-6">
       <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Transfer</p>
       <h2 class="mt-2 text-3xl font-black">Send crypto</h2>
-      <p class="mt-3 text-sm leading-6 text-slate-400">Transactions are signed locally before broadcast to the simulator. Review the signature before funds leave your simulated balance.</p>
+      <p class="mt-3 text-sm leading-6 text-slate-400">Transactions are signed locally before broadcast to the chain RPC. Review the signature before funds leave your balance.</p>
       <form data-action="sign-transaction" class="mt-6 grid gap-4">
         <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Recipient address</span><input class="field" name="to" data-recipient-address placeholder="${addressPlaceholder(selectedSymbol)}" value="${escapeHtml(sendDraft.to)}" required /></label>
         <div class="grid gap-4 sm:grid-cols-2">
@@ -930,7 +932,7 @@ function signedTransactionView(signed: SignedTransaction) {
         <div>
           <p class="text-sm uppercase tracking-[0.3em] text-acid">Signed transfer</p>
           <h2 class="mt-2 text-3xl font-black">Review signature</h2>
-          <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-400">The backend signed this simulated transaction locally. Broadcast only if the details match your intent.</p>
+          <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-400">The backend signed this EIP-1559 transaction with the derived private key. Broadcast only if the details match your intent.</p>
         </div>
         <span class="rounded-full bg-acid/15 px-3 py-1 text-xs font-black uppercase tracking-[0.2em] text-acid">Ready</span>
       </div>
@@ -1055,7 +1057,7 @@ function settingsView() {
         <div class="mt-6 grid gap-3 sm:grid-cols-2">
           ${securityTile("Storage", "AES-GCM encrypted")}
           ${securityTile("Key derivation", "Argon2 passphrase key")}
-          ${securityTile("Mode", "Simulated signing")}
+          ${securityTile("Mode", "ECDSA signing (EIP-1559)")}
           ${securityTile("Lock state", session?.locked ? "Locked" : "Unlocked")}
         </div>
         <div class="mt-6 rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4">
@@ -1396,7 +1398,7 @@ function successMessage(command: string) {
     lock_wallet: "Wallet locked.",
     clear_wallet: "Local wallet cleared.",
     sign_transaction: "Transaction signed locally.",
-    send_transaction: "Signed transaction broadcast to the local simulator.",
+    send_transaction: "Signed transaction broadcast to the RPC provider.",
     swap_tokens: "Swap completed in the local simulator.",
     refresh_prices: "Market prices refreshed.",
   };

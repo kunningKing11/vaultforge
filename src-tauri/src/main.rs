@@ -6,6 +6,7 @@ use bip39::{Language, Mnemonic};
 use bs58;
 use chrono::Utc;
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
+use k256::ecdsa::signature::hazmat::PrehashSigner;
 use k256::ecdsa::SigningKey;
 use rand::Rng;
 use ripemd::Ripemd160;
@@ -97,6 +98,8 @@ struct SignedTransaction {
     total_debit: f64,
     post_balance: f64,
     fiat_value: f64,
+    raw_tx: Option<String>,
+    tx_hash: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -462,7 +465,7 @@ fn clear_wallet(state: State<'_, Mutex<AppState>>) -> Result<WalletSession, Stri
 }
 
 #[tauri::command]
-fn sign_transaction(
+async fn sign_transaction(
     state: State<'_, Mutex<AppState>>,
     to: String,
     symbol: String,
@@ -471,106 +474,164 @@ fn sign_transaction(
 ) -> Result<SignedTransaction, String> {
     validate_unlocked(&state)?;
 
-    let state = state.lock().map_err(|_| "State lock failed")?;
-    let wallet = state
-        .wallet
-        .as_ref()
-        .ok_or_else(|| "No wallet exists yet".to_string())?;
-    validate_transfer(wallet, &to, &symbol, amount)?;
-    let asset = wallet
-        .assets
-        .iter()
-        .find(|asset| asset.symbol == symbol)
-        .ok_or_else(|| "Asset not found".to_string())?;
-    let fee_amount = transaction_fee(&symbol, amount);
-    let total_debit = amount + fee_amount;
-    if asset.balance < total_debit {
+    let (wallet_info, network, config) = {
+        let state = state.lock().map_err(|_| "State lock failed")?;
+        let wallet = state
+            .wallet
+            .as_ref()
+            .ok_or_else(|| "No wallet exists yet".to_string())?;
+        validate_transfer(wallet, &to, &symbol, amount)?;
+        let config = evm_network_config(&state.network)
+            .ok_or_else(|| "Active network is not an EVM chain".to_string())?;
+        (
+            (
+                wallet.address.clone(),
+                wallet.mnemonic.clone(),
+                wallet.assets.clone(),
+            ),
+            state.network.clone(),
+            *config,
+        )
+    };
+
+    let (address, mnemonic, assets) = wallet_info;
+    let to = to.trim().to_string();
+
+    if !symbol.eq_ignore_ascii_case(config.native_symbol) {
         return Err(format!(
-            "Insufficient {} balance for amount plus fee",
-            symbol
+            "Only native {} transfers are supported",
+            config.native_symbol
         ));
     }
 
-    let signed_at = Utc::now().to_rfc3339();
-    let nonce = random_hex(6);
-    let mut signed = SignedTransaction {
-        from: wallet.address.clone(),
-        to: to.trim().to_string(),
-        symbol: symbol.clone(),
-        amount,
-        note: note.trim().to_string(),
-        network: state.network.clone(),
+    let value_wei = to_wei(amount, 18);
+    let nonce = fetch_evm_nonce(&config, &address).await?;
+    let gas_price = fetch_evm_gas_price(&config).await?;
+    let gas_limit = fetch_evm_estimate_gas(&config, &address, &to, value_wei).await?;
+
+    let max_priority_fee_per_gas = gas_price;
+    let max_fee_per_gas = gas_price;
+    let total_fee_wei = gas_limit as u128 * max_fee_per_gas;
+    let total_debit_wei = value_wei + total_fee_wei;
+
+    let signing_key = signing_key_from_mnemonic(&mnemonic)?;
+    let (_, tx_hash, raw_tx_hex, r_hex, s_hex) = sign_eip1559_transfer(
+        &signing_key,
+        config.chain_id,
         nonce,
-        signed_at,
-        payload_hash: String::new(),
-        signature: String::new(),
+        max_priority_fee_per_gas,
+        max_fee_per_gas,
+        gas_limit,
+        &to,
+        value_wei,
+    )?;
+
+    let fee_amount = wei_to_native(total_fee_wei, 18);
+    let total_debit = wei_to_native(total_debit_wei, 18);
+    let amount_native = wei_to_native(value_wei, 18);
+    let signature_str = format!("0x{}{}", r_hex, s_hex);
+
+    let default_asset = Asset {
+        symbol: symbol.clone(),
+        name: String::new(),
+        balance: 0.0,
+        price_usd: 0.0,
+        change_24h: 0.0,
+        network: network.clone(),
+    };
+    let asset = assets
+        .iter()
+        .find(|a| a.symbol == symbol)
+        .unwrap_or(&default_asset);
+
+    let signed = SignedTransaction {
+        from: address,
+        to: to.clone(),
+        symbol: symbol.clone(),
+        amount: amount_native,
+        note: note.trim().to_string(),
+        network,
+        nonce: nonce.to_string(),
+        signed_at: Utc::now().to_rfc3339(),
+        payload_hash: tx_hash.clone(),
+        signature: signature_str,
         fee_amount,
         fee_symbol: symbol.clone(),
         total_debit,
         post_balance: asset.balance - total_debit,
-        fiat_value: amount * asset.price_usd,
+        fiat_value: amount_native * asset.price_usd,
+        raw_tx: Some(raw_tx_hex),
+        tx_hash: Some(tx_hash),
     };
-    signed.payload_hash = transaction_payload_hash(&signed);
-    signed.signature = transaction_signature(wallet, &signed.payload_hash);
 
     Ok(signed)
 }
 
 #[tauri::command]
-fn send_transaction(
+async fn send_transaction(
     state: State<'_, Mutex<AppState>>,
     signed: SignedTransaction,
 ) -> Result<WalletSession, String> {
     validate_unlocked(&state)?;
 
-    let mut state = state.lock().map_err(|_| "State lock failed")?;
-    let active_network = state.network.clone();
-    let wallet = state
-        .wallet
-        .as_mut()
-        .ok_or_else(|| "No wallet exists yet".to_string())?;
-    validate_transfer(wallet, &signed.to, &signed.symbol, signed.amount)?;
-    if signed.from != wallet.address.as_str() {
-        return Err("Signed transaction does not match this wallet".to_string());
-    }
-    if signed.network != active_network {
-        return Err("Signed transaction network no longer matches the active network".to_string());
-    }
-    let expected_hash = transaction_payload_hash(&signed);
-    if signed.payload_hash != expected_hash {
-        return Err("Signed transaction payload was modified".to_string());
-    }
-    if signed.signature != transaction_signature(wallet, &signed.payload_hash) {
-        return Err("Invalid transaction signature".to_string());
-    }
-    if signed.fee_amount != transaction_fee(&signed.symbol, signed.amount)
-        || signed.fee_symbol != signed.symbol
-        || (signed.total_debit - (signed.amount + signed.fee_amount)).abs() > f64::EPSILON
-    {
-        return Err("Signed transaction fee details are invalid".to_string());
-    }
+    let (_address, network) = {
+        let state = state.lock().map_err(|_| "State lock failed")?;
+        let wallet = state
+            .wallet
+            .as_ref()
+            .ok_or_else(|| "No wallet exists yet".to_string())?;
+        if signed.from != wallet.address {
+            return Err("Signed transaction does not match this wallet".to_string());
+        }
+        if signed.network != state.network {
+            return Err(
+                "Signed transaction network no longer matches the active network".to_string(),
+            );
+        }
+        (wallet.address.clone(), state.network.clone())
+    };
 
-    let asset = wallet
-        .assets
-        .iter_mut()
-        .find(|asset| asset.symbol == signed.symbol)
-        .ok_or_else(|| "Asset not found".to_string())?;
-    if asset.balance < signed.total_debit {
-        return Err(format!(
-            "Insufficient {} balance for amount plus fee",
-            signed.symbol
-        ));
-    }
+    let raw_tx = signed
+        .raw_tx
+        .as_ref()
+        .ok_or_else(|| "No raw transaction data".to_string())?;
 
-    asset.balance -= signed.total_debit;
+    let config = evm_network_config(&network)
+        .ok_or_else(|| "Active network is not an EVM chain".to_string())?;
+
+    let tx_hash = broadcast_evm_transaction(config, raw_tx).await?;
+
     let memo = if signed.note.is_empty() {
         format!("Sent to {}", short_address(&signed.to))
     } else {
         signed.note.clone()
     };
-    wallet.activity.insert(0, send_activity(&signed, &memo));
+
+    let mut state = state.lock().map_err(|_| "State lock failed")?;
+    if let Some(wallet) = state.wallet.as_mut() {
+        wallet.activity.insert(
+            0,
+            Activity {
+                id: random_hex(8),
+                kind: "send".to_string(),
+                title: "Transfer sent".to_string(),
+                subtitle: memo,
+                amount: format!("-{:.6} {}", signed.amount, signed.symbol),
+                status: "pending".to_string(),
+                timestamp: Utc::now().to_rfc3339(),
+                hash: tx_hash.clone(),
+                from: Some(signed.from.clone()),
+                to: Some(signed.to.clone()),
+                network: Some(signed.network.clone()),
+                payload_hash: signed.tx_hash.clone(),
+                signature: Some(signed.signature.clone()),
+                fee: Some(format!("{:.6} {}", signed.fee_amount, signed.fee_symbol)),
+            },
+        );
+    }
     persist_state_wallet(&mut state)?;
-    Ok(session_from_state(&state))
+    let session = session_from_state(&state);
+    Ok(session)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -716,44 +777,6 @@ fn validate_address_for_symbol(address: &str, symbol: &str) -> Result<(), String
             }
         }
     }
-}
-
-fn transaction_fee(symbol: &str, amount: f64) -> f64 {
-    match symbol {
-        "BTC" => 0.00001,
-        "SOL" => 0.000005,
-        "USDC" => (amount * 0.001).max(0.25),
-        _ => 0.00042,
-    }
-}
-
-fn transaction_payload_hash(signed: &SignedTransaction) -> String {
-    hash_secret(&format!(
-        "from={};to={};symbol={};amount={:.12};note={};network={};nonce={};signed_at={};fee_amount={:.12};fee_symbol={};total_debit={:.12};post_balance={:.12};fiat_value={:.12}",
-        signed.from,
-        signed.to,
-        signed.symbol,
-        signed.amount,
-        signed.note,
-        signed.network,
-        signed.nonce,
-        signed.signed_at,
-        signed.fee_amount,
-        signed.fee_symbol,
-        signed.total_debit,
-        signed.post_balance,
-        signed.fiat_value
-    ))
-}
-
-fn transaction_signature(wallet: &Wallet, payload_hash: &str) -> String {
-    format!(
-        "0x{}",
-        hash_secret(&format!(
-            "{}:{}:{}",
-            wallet.address, wallet.passphrase_hash, payload_hash
-        ))
-    )
 }
 
 fn session_from_state(state: &AppState) -> WalletSession {
@@ -929,6 +952,246 @@ async fn fetch_native_assets(network: &str, address: &str) -> Vec<Asset> {
     }
 }
 
+fn u128_to_be_bytes(value: u128) -> Vec<u8> {
+    let be = value.to_be_bytes();
+    let start = be.iter().position(|&b| b != 0).unwrap_or(be.len() - 1);
+    be[start..].to_vec()
+}
+
+fn to_wei(amount: f64, decimals: u32) -> u128 {
+    (amount * 10u128.pow(decimals) as f64) as u128
+}
+
+async fn fetch_evm_nonce(config: &EvmNetworkConfig, address: &str) -> Result<u64, String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_getTransactionCount",
+        "params": [address, "latest"],
+        "id": 1,
+    });
+    let response = reqwest::Client::new()
+        .post(config.rpc_url)
+        .json(&body)
+        .header("user-agent", "VaultForge Wallet/0.1.0")
+        .send()
+        .await
+        .map_err(|e| format!("Nonce RPC failed: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("Nonce RPC returned HTTP {}", response.status()));
+    }
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Nonce response parse failed: {e}"))?;
+    let hex_str = json["result"]
+        .as_str()
+        .ok_or_else(|| "Nonce RPC missing result".to_string())?;
+    u64::from_str_radix(hex_str.trim_start_matches("0x"), 16)
+        .map_err(|e| format!("Invalid nonce hex: {e}"))
+}
+
+async fn fetch_evm_gas_price(config: &EvmNetworkConfig) -> Result<u128, String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_gasPrice",
+        "params": [],
+        "id": 1,
+    });
+    let response = reqwest::Client::new()
+        .post(config.rpc_url)
+        .json(&body)
+        .header("user-agent", "VaultForge Wallet/0.1.0")
+        .send()
+        .await
+        .map_err(|e| format!("Gas price RPC failed: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("Gas price RPC returned HTTP {}", response.status()));
+    }
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Gas price response parse failed: {e}"))?;
+    let hex_str = json["result"]
+        .as_str()
+        .ok_or_else(|| "Gas price RPC missing result".to_string())?;
+    u128::from_str_radix(hex_str.trim_start_matches("0x"), 16)
+        .map_err(|e| format!("Invalid gas price hex: {e}"))
+}
+
+async fn fetch_evm_estimate_gas(
+    config: &EvmNetworkConfig,
+    from: &str,
+    to: &str,
+    value: u128,
+) -> Result<u64, String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_estimateGas",
+        "params": [{
+            "from": from,
+            "to": to,
+            "value": format!("0x{:x}", value),
+        }],
+        "id": 1,
+    });
+    let response = reqwest::Client::new()
+        .post(config.rpc_url)
+        .json(&body)
+        .header("user-agent", "VaultForge Wallet/0.1.0")
+        .send()
+        .await
+        .map_err(|e| format!("Estimate gas RPC failed: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Estimate gas RPC returned HTTP {}",
+            response.status()
+        ));
+    }
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Estimate gas response parse failed: {e}"))?;
+    let hex_str = json["result"]
+        .as_str()
+        .ok_or_else(|| "Estimate gas RPC missing result".to_string())?;
+    u64::from_str_radix(hex_str.trim_start_matches("0x"), 16)
+        .map_err(|e| format!("Invalid gas estimate hex: {e}"))
+}
+
+async fn broadcast_evm_transaction(
+    config: &EvmNetworkConfig,
+    raw_tx_hex: &str,
+) -> Result<String, String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_sendRawTransaction",
+        "params": [raw_tx_hex],
+        "id": 1,
+    });
+    let response = reqwest::Client::new()
+        .post(config.rpc_url)
+        .json(&body)
+        .header("user-agent", "VaultForge Wallet/0.1.0")
+        .send()
+        .await
+        .map_err(|e| format!("Broadcast RPC failed: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Broadcast RPC returned HTTP {}",
+            response.status()
+        ));
+    }
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Broadcast response parse failed: {e}"))?;
+    json["result"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| {
+            json["error"]["message"]
+                .as_str()
+                .unwrap_or("Unknown broadcast error")
+                .to_string()
+        })
+}
+
+fn signing_key_from_mnemonic(mnemonic: &str) -> Result<k256::ecdsa::SigningKey, String> {
+    let parsed = Mnemonic::parse_in_normalized(Language::English, mnemonic)
+        .map_err(|_| "Invalid mnemonic".to_string())?;
+    let seed = parsed.to_seed("");
+    let seed_bytes = seed.as_ref();
+    let private_key: [u8; 32] = Sha256::digest(seed_bytes).into();
+    k256::ecdsa::SigningKey::from_bytes((&private_key).into())
+        .map_err(|_| "Failed to create signing key".to_string())
+}
+
+fn sign_eip1559_transfer(
+    private_key: &k256::ecdsa::SigningKey,
+    chain_id: u64,
+    nonce: u64,
+    max_priority_fee_per_gas: u128,
+    max_fee_per_gas: u128,
+    gas_limit: u64,
+    to: &str,
+    value: u128,
+) -> Result<(Vec<u8>, String, String, String, String), String> {
+    let to_bytes = hex::decode(to.trim_start_matches("0x"))
+        .map_err(|_| "Invalid to address".to_string())?;
+    let empty: Vec<u8> = vec![];
+
+    let max_priority_bytes = u128_to_be_bytes(max_priority_fee_per_gas);
+    let max_fee_bytes = u128_to_be_bytes(max_fee_per_gas);
+    let value_bytes = u128_to_be_bytes(value);
+
+    let mut stream = rlp::RlpStream::new();
+    stream.begin_list(9);
+    stream.append(&chain_id);
+    stream.append(&nonce);
+    stream.append(&max_priority_bytes);
+    stream.append(&max_fee_bytes);
+    stream.append(&gas_limit);
+    stream.append(&to_bytes);
+    stream.append(&value_bytes);
+    stream.append(&empty);
+    stream.begin_list(0);
+
+    let unsigned_data = stream.out().to_vec();
+
+    let mut sig_hash_input = vec![0x02u8];
+    sig_hash_input.extend_from_slice(&unsigned_data);
+    let sig_hash = Keccak256::digest(&sig_hash_input);
+
+    let signature: k256::ecdsa::Signature = private_key
+        .sign_prehash(&sig_hash)
+        .map_err(|_| "Transaction signing failed".to_string())?;
+
+    let sig_bytes = signature.to_bytes();
+    let r_bytes = &sig_bytes[..32];
+    let s_bytes = &sig_bytes[32..];
+    let r_vec: Vec<u8> = r_bytes.to_vec();
+    let s_vec: Vec<u8> = s_bytes.to_vec();
+
+    let mut y_parity: u64 = 0;
+    let verifying_key = private_key.verifying_key();
+    for is_odd in [false, true] {
+        let rid = k256::ecdsa::RecoveryId::new(is_odd, false);
+        if let Ok(recovered) =
+            k256::ecdsa::VerifyingKey::recover_from_prehash(&sig_hash, &signature, rid)
+        {
+            if &recovered == verifying_key {
+                y_parity = if is_odd { 1 } else { 0 };
+                break;
+            }
+        }
+    }
+
+    let mut tx_stream = rlp::RlpStream::new();
+    tx_stream.begin_list(12);
+    tx_stream.append(&chain_id);
+    tx_stream.append(&nonce);
+    tx_stream.append(&max_priority_bytes);
+    tx_stream.append(&max_fee_bytes);
+    tx_stream.append(&gas_limit);
+    tx_stream.append(&to_bytes);
+    tx_stream.append(&value_bytes);
+    tx_stream.append(&empty);
+    tx_stream.begin_list(0);
+    tx_stream.append(&y_parity);
+    tx_stream.append(&r_vec);
+    tx_stream.append(&s_vec);
+
+    let mut signed_data = vec![0x02u8];
+    signed_data.extend_from_slice(&tx_stream.out());
+
+    let tx_hash = format!("0x{}", hex::encode(Keccak256::digest(&signed_data)));
+    let raw_tx_hex = format!("0x{}", hex::encode(&signed_data));
+    let r_hex = hex::encode(r_bytes);
+    let s_hex = hex::encode(s_bytes);
+
+    Ok((signed_data, tx_hash, raw_tx_hex, r_hex, s_hex))
+}
+
 fn activity(kind: &str, title: &str, subtitle: &str, amount: &str) -> Activity {
     Activity {
         id: random_hex(8),
@@ -945,25 +1208,6 @@ fn activity(kind: &str, title: &str, subtitle: &str, amount: &str) -> Activity {
         payload_hash: None,
         signature: None,
         fee: None,
-    }
-}
-
-fn send_activity(signed: &SignedTransaction, subtitle: &str) -> Activity {
-    Activity {
-        id: random_hex(8),
-        kind: "send".to_string(),
-        title: "Transfer sent".to_string(),
-        subtitle: subtitle.to_string(),
-        amount: format!("-{:.6} {}", signed.amount, signed.symbol),
-        status: "confirmed".to_string(),
-        timestamp: Utc::now().to_rfc3339(),
-        hash: format!("0x{}", &signed.payload_hash[..32]),
-        from: Some(signed.from.clone()),
-        to: Some(signed.to.clone()),
-        network: Some(signed.network.clone()),
-        payload_hash: Some(signed.payload_hash.clone()),
-        signature: Some(signed.signature.clone()),
-        fee: Some(format!("{:.6} {}", signed.fee_amount, signed.fee_symbol)),
     }
 }
 
@@ -1279,36 +1523,35 @@ mod tests {
     }
 
     #[test]
-    fn calculates_simulated_fees() {
-        assert_eq!(transaction_fee("BTC", 1.0), 0.00001);
-        assert_eq!(transaction_fee("SOL", 1.0), 0.000005);
-        assert_eq!(transaction_fee("ETH", 1.0), 0.00042);
-        assert_eq!(transaction_fee("USDC", 100.0), 0.25);
-        assert_eq!(transaction_fee("USDC", 1_000.0), 1.0);
+    fn constructs_valid_eip1559_signature() {
+        use k256::ecdsa::SigningKey;
+        let private_key = [0xabu8; 32];
+        let signing_key = SigningKey::from_bytes((&private_key).into()).unwrap();
+        let result = sign_eip1559_transfer(
+            &signing_key,
+            1,
+            0,
+            1_000_000_000,
+            1_000_000_000,
+            21000,
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            1_000_000_000_000_000_000u128,
+        );
+        assert!(result.is_ok());
+        let (_raw, tx_hash, _raw_hex, r, s) = result.unwrap();
+        assert!(tx_hash.starts_with("0x"));
+        assert_eq!(tx_hash.len(), 66);
+        assert_eq!(r.len(), 64);
+        assert_eq!(s.len(), 64);
+        assert!(!_raw.is_empty());
     }
 
     #[test]
-    fn payload_hash_changes_when_details_change() {
-        let mut signed = SignedTransaction {
-            from: "0xfrom".to_string(),
-            to: "0xto".to_string(),
-            symbol: "ETH".to_string(),
-            amount: 1.0,
-            note: "memo".to_string(),
-            network: DEFAULT_NETWORK_ID.to_string(),
-            nonce: "abc".to_string(),
-            signed_at: "2026-01-01T00:00:00Z".to_string(),
-            payload_hash: String::new(),
-            signature: String::new(),
-            fee_amount: 0.00042,
-            fee_symbol: "ETH".to_string(),
-            total_debit: 1.00042,
-            post_balance: 2.0,
-            fiat_value: 3480.62,
-        };
-        let first = transaction_payload_hash(&signed);
-        signed.amount = 2.0;
-        assert_ne!(first, transaction_payload_hash(&signed));
+    fn converts_wei_to_native_correctly() {
+        let result = wei_to_native(1_000_000_000_000_000_000u128, 18);
+        assert!((result - 1.0).abs() < 0.0001);
+        let result = wei_to_native(1u128, 18);
+        assert!((result - 1e-18).abs() < 1e-20);
     }
 
     #[test]
