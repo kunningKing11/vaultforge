@@ -2,6 +2,7 @@ use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
 use argon2::Argon2;
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use bech32::{self, ToBase32, Variant};
+use zeroize::Zeroize;
 use bip39::{Language, Mnemonic};
 use bs58;
 use chrono::Utc;
@@ -204,6 +205,44 @@ fn evm_tokens_for_network(network_id: &str) -> &[EvmTokenConfig] {
         .unwrap_or(&[])
 }
 
+async fn rpc_post(url: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+
+    let mut last_err = String::new();
+    for attempt in 1..=3 {
+        let response = match client
+            .post(url)
+            .json(body)
+            .header("user-agent", "VaultForge Wallet/0.1.0")
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                last_err = format!("RPC request failed (attempt {attempt}/3): {e}");
+                if attempt < 3 {
+                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+                }
+                continue;
+            }
+        };
+
+        if !response.status().is_success() {
+            last_err = format!("RPC returned HTTP {} (attempt {attempt}/3)", response.status());
+            if attempt < 3 {
+                tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+            }
+            continue;
+        }
+
+        return response.json().await.map_err(|e| format!("RPC response parse failed: {e}"));
+    }
+    Err(last_err)
+}
+
 async fn fetch_evm_token_balance(config: &EvmNetworkConfig, token: &EvmTokenConfig, address: &str) -> Result<u128, String> {
     let addr_hex = address.trim_start_matches("0x");
     let addr_bytes = hex::decode(addr_hex).map_err(|_| "Invalid address".to_string())?;
@@ -223,23 +262,7 @@ async fn fetch_evm_token_balance(config: &EvmNetworkConfig, token: &EvmTokenConf
         "id": 1,
     });
 
-    let response = reqwest::Client::new()
-        .post(config.rpc_url)
-        .json(&body)
-        .header("user-agent", "VaultForge Wallet/0.1.0")
-        .send()
-        .await
-        .map_err(|e| format!("Token balance RPC failed: {e}"))?;
-
-    if !response.status().is_success() {
-        return Err(format!("Token balance RPC returned HTTP {}", response.status()));
-    }
-
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("Token balance response parse failed: {e}"))?;
-
+    let json = rpc_post(config.rpc_url, &body).await?;
     let hex_str = json["result"]
         .as_str()
         .ok_or_else(|| "Token balance RPC missing result".to_string())?;
@@ -504,15 +527,27 @@ async fn unlock_wallet(
     Ok(session_from_state(&state))
 }
 
+fn clear_secret_string(s: &mut String) {
+    let buf = unsafe { s.as_bytes_mut() };
+    buf.fill(0);
+}
+
 #[tauri::command]
 fn lock_wallet(state: State<'_, Mutex<AppState>>) -> Result<(), String> {
     let mut state = state.lock().map_err(|_| "State lock failed")?;
-    if state.wallet.is_some() {
-        state.wallet = None;
-        state.encryption_key = None;
-        state.storage_salt = None;
-        state.locked = true;
+    if let Some(ref mut wallet) = state.wallet {
+        clear_secret_string(&mut wallet.mnemonic);
     }
+    state.wallet = None;
+    if let Some(ref mut key) = state.encryption_key {
+        key.zeroize();
+    }
+    state.encryption_key = None;
+    if let Some(ref mut salt) = state.storage_salt {
+        salt.fill(0);
+    }
+    state.storage_salt = None;
+    state.locked = true;
     Ok(())
 }
 
@@ -522,12 +557,20 @@ fn clear_wallet(state: State<'_, Mutex<AppState>>) -> Result<WalletSession, Stri
     if state.storage_path.exists() {
         fs::remove_file(&state.storage_path).map_err(|_| "Failed to remove stored wallet")?;
     }
+    if let Some(ref mut wallet) = state.wallet {
+        clear_secret_string(&mut wallet.mnemonic);
+    }
     state.wallet = None;
     state.stored_wallet = None;
+    if let Some(ref mut key) = state.encryption_key {
+        key.zeroize();
+    }
     state.encryption_key = None;
+    if let Some(ref mut salt) = state.storage_salt {
+        salt.fill(0);
+    }
     state.storage_salt = None;
     state.locked = false;
-    // network concept removed
     Ok(session_from_state(&state))
 }
 
@@ -799,30 +842,137 @@ fn validate_transfer(wallet: &Wallet, to: &str, symbol: &str, amount_wei: &str) 
 
 fn validate_address_for_symbol(address: &str, symbol: &str) -> Result<(), String> {
     match symbol {
-        "BTC" => {
-            let valid_prefix =
-                address.starts_with("bc1") || address.starts_with('1') || address.starts_with('3');
-            if valid_prefix && address.len() >= 26 && address.len() <= 62 {
-                Ok(())
-            } else {
-                Err("Recipient must be a valid Bitcoin address".to_string())
+        "BTC" => validate_bitcoin_address(address),
+        "SOL" => validate_solana_address(address),
+        "ZEC" => validate_zcash_address(address),
+        "FIL" => validate_filecoin_address(address),
+        "INJ" => validate_injective_address(address),
+        _ => validate_evm_address(address),
+    }
+}
+
+fn validate_evm_address(address: &str) -> Result<(), String> {
+    let hex_part = address.strip_prefix("0x").unwrap_or(address);
+    if hex_part.len() != 40 || !hex_part.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("Recipient must be a valid 0x-prefixed 40-hex-char EVM address".to_string());
+    }
+
+    let has_lower = hex_part.chars().any(|c| c.is_ascii_lowercase());
+    let has_upper = hex_part.chars().any(|c| c.is_ascii_uppercase());
+    if has_lower && has_upper {
+        let hex_lower = hex_part.to_lowercase();
+        let hash = Keccak256::digest(hex_lower.as_bytes());
+        let hash_hex = hex::encode(hash);
+        for (i, c) in hex_part.chars().enumerate() {
+            if c.is_ascii_digit() {
+                continue;
             }
-        }
-        "SOL" => {
-            if !address.starts_with("0x") && address.len() >= 32 && address.len() <= 44 {
-                Ok(())
-            } else {
-                Err("Recipient must be a valid Solana address".to_string())
-            }
-        }
-        _ => {
-            if address.starts_with("0x") && address.len() >= 12 {
-                Ok(())
-            } else {
-                Err("Recipient must be a valid 0x address".to_string())
+            let nibble = u8::from_str_radix(&hash_hex[i..i + 1], 16).unwrap_or(0);
+            let should_be_upper = nibble >= 8;
+            if should_be_upper != c.is_ascii_uppercase() {
+                return Err("EIP-55 checksum validation failed".to_string());
             }
         }
     }
+
+    Ok(())
+}
+
+fn validate_bitcoin_address(address: &str) -> Result<(), String> {
+    if address.starts_with("bc1") || address.starts_with("tb1") {
+        bech32::decode(address).map_err(|_| "Recipient must be a valid Bitcoin bech32 address".to_string())?;
+        return Ok(());
+    }
+    if address.starts_with('1') || address.starts_with('3') || address.starts_with('2') || address.starts_with('m') || address.starts_with('n') {
+        bs58::decode(address).with_check(None).into_vec()
+            .map_err(|_| "Recipient must be a valid Bitcoin base58 address".to_string())?;
+        return Ok(());
+    }
+    Err("Recipient must be a valid Bitcoin address (bc1, 1, or 3)".to_string())
+}
+
+fn validate_solana_address(address: &str) -> Result<(), String> {
+    let bytes = bs58::decode(address).into_vec()
+        .map_err(|_| "Recipient must be a valid base58 Solana address".to_string())?;
+    if bytes.len() != 32 {
+        return Err("Solana address must decode to 32 bytes".to_string());
+    }
+    Ok(())
+}
+
+fn validate_zcash_address(address: &str) -> Result<(), String> {
+    if address.starts_with("zs1") || address.starts_with("ztestsapling") {
+        return Err("Zcash shielded addresses are not yet supported".to_string());
+    }
+    if address.starts_with("t1") || address.starts_with("t3") || address.starts_with("tm") {
+        let bytes = bs58::decode(address).into_vec()
+            .map_err(|_| "Recipient must be a valid Zcash transparent address".to_string())?;
+        if bytes.len() != 26 {
+            return Err("Zcash transparent address must decode to 26 bytes".to_string());
+        }
+        let payload = &bytes[..22];
+        let checksum = &bytes[22..];
+        let hash = Sha256::digest(&Sha256::digest(payload));
+        if &hash[..4] != checksum {
+            return Err("Zcash transparent address checksum invalid".to_string());
+        }
+        return Ok(());
+    }
+    Err("Recipient must be a valid Zcash address (t1 or tm)".to_string())
+}
+
+fn validate_filecoin_address(address: &str) -> Result<(), String> {
+    if !address.starts_with('f') && !address.starts_with('t') {
+        return Err("Filecoin address must start with f or t".to_string());
+    }
+    if address.len() < 3 {
+        return Err("Filecoin address too short".to_string());
+    }
+    let protocol = address.chars().nth(1).unwrap_or(' ');
+    match protocol {
+        '0' => {
+            if !address[2..].chars().all(|c| c.is_ascii_digit()) {
+                return Err("Filecoin ID address must contain only digits after f0".to_string());
+            }
+            Ok(())
+        }
+        '1' => {
+            let bytes = bs58::decode(&address[2..]).with_check(Some(0x01)).into_vec()
+                .map_err(|_| "Invalid Filecoin f1 address".to_string())?;
+            if bytes.len() != 21 {
+                return Err("Filecoin f1 address must decode to 21 bytes (1 prefix + 20 payload)".to_string());
+            }
+            if bytes[0] != 1 {
+                return Err("Filecoin f1 address has wrong protocol byte".to_string());
+            }
+            Ok(())
+        }
+        '3' => {
+            let bytes = bs58::decode(&address[2..]).with_check(Some(0x03)).into_vec()
+                .map_err(|_| "Invalid Filecoin f3 address".to_string())?;
+            if bytes.len() != 48 {
+                return Err("Filecoin f3 (BLS) address must decode to 48 bytes".to_string());
+            }
+            Ok(())
+        }
+        '4' => {
+            if address.starts_with("f410") || address.starts_with("t410") {
+                bech32::decode(address).map_err(|_| "Invalid Filecoin f4 (delegated) address".to_string())?;
+                Ok(())
+            } else {
+                Err("Filecoin f4 address must start with f410".to_string())
+            }
+        }
+        _ => Err("Unknown Filecoin address protocol".to_string()),
+    }
+}
+
+fn validate_injective_address(address: &str) -> Result<(), String> {
+    if !address.starts_with("inj1") {
+        return Err("Injective address must start with inj1".to_string());
+    }
+    bech32::decode(address).map_err(|_| "Recipient must be a valid Injective bech32 address".to_string())?;
+    Ok(())
 }
 
 fn session_from_state(state: &AppState) -> WalletSession {
@@ -918,23 +1068,7 @@ async fn fetch_evm_native_balance(config: &EvmNetworkConfig, address: &str) -> R
         "id": 1,
     });
 
-    let response = reqwest::Client::new()
-        .post(config.rpc_url)
-        .json(&body)
-        .header("user-agent", "VaultForge Wallet/0.1.0")
-        .send()
-        .await
-        .map_err(|e| format!("RPC request failed: {e}"))?;
-
-    if !response.status().is_success() {
-        return Err(format!("RPC returned HTTP {}", response.status()));
-    }
-
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("RPC response parse failed: {e}"))?;
-
+    let json = rpc_post(config.rpc_url, &body).await?;
     let balance_hex = json["result"]
         .as_str()
         .ok_or_else(|| "RPC response missing result field".to_string())?;
@@ -1000,20 +1134,7 @@ async fn fetch_evm_nonce(config: &EvmNetworkConfig, address: &str) -> Result<u64
         "params": [address, "latest"],
         "id": 1,
     });
-    let response = reqwest::Client::new()
-        .post(config.rpc_url)
-        .json(&body)
-        .header("user-agent", "VaultForge Wallet/0.1.0")
-        .send()
-        .await
-        .map_err(|e| format!("Nonce RPC failed: {e}"))?;
-    if !response.status().is_success() {
-        return Err(format!("Nonce RPC returned HTTP {}", response.status()));
-    }
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("Nonce response parse failed: {e}"))?;
+    let json = rpc_post(config.rpc_url, &body).await?;
     let hex_str = json["result"]
         .as_str()
         .ok_or_else(|| "Nonce RPC missing result".to_string())?;
@@ -1028,20 +1149,7 @@ async fn fetch_evm_gas_price(config: &EvmNetworkConfig) -> Result<u128, String> 
         "params": [],
         "id": 1,
     });
-    let response = reqwest::Client::new()
-        .post(config.rpc_url)
-        .json(&body)
-        .header("user-agent", "VaultForge Wallet/0.1.0")
-        .send()
-        .await
-        .map_err(|e| format!("Gas price RPC failed: {e}"))?;
-    if !response.status().is_success() {
-        return Err(format!("Gas price RPC returned HTTP {}", response.status()));
-    }
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("Gas price response parse failed: {e}"))?;
+    let json = rpc_post(config.rpc_url, &body).await?;
     let hex_str = json["result"]
         .as_str()
         .ok_or_else(|| "Gas price RPC missing result".to_string())?;
@@ -1065,23 +1173,7 @@ async fn fetch_evm_estimate_gas(
         }],
         "id": 1,
     });
-    let response = reqwest::Client::new()
-        .post(config.rpc_url)
-        .json(&body)
-        .header("user-agent", "VaultForge Wallet/0.1.0")
-        .send()
-        .await
-        .map_err(|e| format!("Estimate gas RPC failed: {e}"))?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "Estimate gas RPC returned HTTP {}",
-            response.status()
-        ));
-    }
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("Estimate gas response parse failed: {e}"))?;
+    let json = rpc_post(config.rpc_url, &body).await?;
     let hex_str = json["result"]
         .as_str()
         .ok_or_else(|| "Estimate gas RPC missing result".to_string())?;
@@ -1099,23 +1191,7 @@ async fn broadcast_evm_transaction(
         "params": [raw_tx_hex],
         "id": 1,
     });
-    let response = reqwest::Client::new()
-        .post(config.rpc_url)
-        .json(&body)
-        .header("user-agent", "VaultForge Wallet/0.1.0")
-        .send()
-        .await
-        .map_err(|e| format!("Broadcast RPC failed: {e}"))?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "Broadcast RPC returned HTTP {}",
-            response.status()
-        ));
-    }
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("Broadcast response parse failed: {e}"))?;
+    let json = rpc_post(config.rpc_url, &body).await?;
     json["result"]
         .as_str()
         .map(|s| s.to_string())
@@ -1134,20 +1210,7 @@ async fn fetch_tx_status(config: &EvmNetworkConfig, tx_hash: &str) -> Result<Opt
         "params": [tx_hash],
         "id": 1,
     });
-    let response = reqwest::Client::new()
-        .post(config.rpc_url)
-        .json(&body)
-        .header("user-agent", "VaultForge Wallet/0.1.0")
-        .send()
-        .await
-        .map_err(|e| format!("Tx status RPC failed: {e}"))?;
-    if !response.status().is_success() {
-        return Err(format!("Tx status RPC returned HTTP {}", response.status()));
-    }
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("Tx status response parse failed: {e}"))?;
+    let json = rpc_post(config.rpc_url, &body).await?;
 
     if json["result"].is_null() {
         return Ok(None);
@@ -1545,6 +1608,77 @@ fn short_address(address: &str) -> String {
     format!("{}...{}", &address[..8], &address[address.len() - 6..])
 }
 
+#[allow(dead_code)]
+trait ChainProvider: Send + Sync {
+    fn chain_name(&self) -> &'static str;
+    fn symbol(&self) -> &'static str;
+    fn validate_address(&self, address: &str) -> Result<(), String>;
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String>;
+}
+
+struct EvmProvider;
+struct BitcoinProvider;
+struct SolanaProvider;
+struct ZcashProvider;
+struct FilecoinProvider;
+struct InjectiveProvider;
+
+impl ChainProvider for EvmProvider {
+    fn chain_name(&self) -> &'static str { "EVM" }
+    fn symbol(&self) -> &'static str { "ETH" }
+    fn validate_address(&self, address: &str) -> Result<(), String> { validate_evm_address(address) }
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> { ethereum_address_from_private_key(private_key) }
+}
+
+impl ChainProvider for BitcoinProvider {
+    fn chain_name(&self) -> &'static str { "Bitcoin" }
+    fn symbol(&self) -> &'static str { "BTC" }
+    fn validate_address(&self, address: &str) -> Result<(), String> { validate_bitcoin_address(address) }
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> { bitcoin_bech32_address(private_key, false) }
+}
+
+impl ChainProvider for SolanaProvider {
+    fn chain_name(&self) -> &'static str { "Solana" }
+    fn symbol(&self) -> &'static str { "SOL" }
+    fn validate_address(&self, address: &str) -> Result<(), String> { validate_solana_address(address) }
+    fn derive_address(&self, _private_key: &[u8; 32]) -> Result<String, String> {
+        Err("Solana derivation requires seed bytes, not secp256k1 key".to_string())
+    }
+}
+
+impl ChainProvider for ZcashProvider {
+    fn chain_name(&self) -> &'static str { "Zcash" }
+    fn symbol(&self) -> &'static str { "ZEC" }
+    fn validate_address(&self, address: &str) -> Result<(), String> { validate_zcash_address(address) }
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> { zcash_transparent_address(private_key, false) }
+}
+
+impl ChainProvider for FilecoinProvider {
+    fn chain_name(&self) -> &'static str { "Filecoin" }
+    fn symbol(&self) -> &'static str { "FIL" }
+    fn validate_address(&self, address: &str) -> Result<(), String> { validate_filecoin_address(address) }
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> { filecoin_address_from_private_key(private_key) }
+}
+
+impl ChainProvider for InjectiveProvider {
+    fn chain_name(&self) -> &'static str { "Injective" }
+    fn symbol(&self) -> &'static str { "INJ" }
+    fn validate_address(&self, address: &str) -> Result<(), String> { validate_injective_address(address) }
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> { bech32_account_address(private_key, "inj") }
+}
+
+#[allow(dead_code)]
+fn get_provider(symbol: &str) -> Option<Box<dyn ChainProvider>> {
+    match symbol {
+        "BTC" => Some(Box::new(BitcoinProvider)),
+        "SOL" => Some(Box::new(SolanaProvider)),
+        "ZEC" => Some(Box::new(ZcashProvider)),
+        "FIL" => Some(Box::new(FilecoinProvider)),
+        "INJ" => Some(Box::new(InjectiveProvider)),
+        _ => Some(Box::new(EvmProvider)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1592,13 +1726,64 @@ mod tests {
 
     #[test]
     fn validates_asset_address_formats() {
-        assert!(validate_address_for_symbol("0x123456789abc", "ETH").is_ok());
-        assert!(
-            validate_address_for_symbol("bc1q123456789012345678901234567890123456", "BTC").is_ok()
-        );
-        assert!(validate_address_for_symbol("7".repeat(44).as_str(), "SOL").is_ok());
-        assert!(validate_address_for_symbol("0x123456789abc", "BTC").is_err());
-        assert!(validate_address_for_symbol("0x123456789abc", "SOL").is_err());
+        assert!(validate_address_for_symbol("0xdAC17F958D2ee523a2206206994597C13D831ec7", "ETH").is_ok());
+        assert!(validate_address_for_symbol("0xdac17f958d2ee523a2206206994597c13d831ec7", "ETH").is_ok());
+        assert!(validate_address_for_symbol("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq", "BTC").is_ok());
+        assert!(validate_address_for_symbol("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "BTC").is_ok());
+        assert!(validate_address_for_symbol("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy", "BTC").is_ok());
+        assert!(validate_address_for_symbol("7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ", "SOL").is_ok());
+        assert!(validate_address_for_symbol("t1eB29zcZ2v3AQvAEtcNrERsWQPmxyTN4DF", "ZEC").is_ok());
+        assert!(validate_address_for_symbol("f1ke28mVhmmiSdiFRybu3ak3NnEqpx3o3Bk", "FIL").is_ok());
+        assert!(validate_address_for_symbol("inj1m6kmamcpqgpsgpgxquyqjyq3zgf3g9gkzz8lqn", "INJ").is_ok());
+        assert!(validate_address_for_symbol("0xdAC17F958D2ee523a2206206994597C13D831ec7", "MATIC").is_ok());
+        assert!(validate_address_for_symbol("0xinvalid", "ETH").is_err());
+        assert!(validate_address_for_symbol("bc1q", "BTC").is_err());
+        assert!(validate_address_for_symbol("invalid", "SOL").is_err());
+    }
+
+    #[test]
+    fn validates_eip55_checksum() {
+        assert!(validate_evm_address("0xdAC17F958D2ee523a2206206994597C13D831ec7").is_ok());
+        assert!(validate_evm_address("0xdac17f958d2ee523a2206206994597c13d831ec7").is_ok());
+        assert!(validate_evm_address("0xDAc17f958D2eE523a2206206994597C13D831ec7").is_err());
+        assert!(validate_evm_address("0xDbC17F958D2ee523a2206206994597C13D831ec7").is_err());
+        assert!(validate_evm_address("0x0000000000000000000000000000000000000000").is_ok());
+        assert!(validate_evm_address("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF").is_ok());
+    }
+
+    #[test]
+    fn provider_trait_covers_all_chains() {
+        for symbol in &["ETH", "BTC", "SOL", "ZEC", "FIL", "INJ", "MATIC"] {
+            let provider = get_provider(symbol);
+            assert!(provider.is_some(), "No provider for symbol {symbol}");
+        }
+    }
+
+    #[test]
+    fn locked_session_does_not_expose_secrets() {
+        let mut state = AppState::from_storage(PathBuf::from("/nonexistent/wallet.json"));
+        let wallet = Wallet {
+            name: "Secret Wallet".to_string(),
+            mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about".to_string(),
+            created_at: "2025-01-01T00:00:00Z".to_string(),
+            address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
+            addresses: HashMap::new(),
+            passphrase_hash: "deadbeef".to_string(),
+            assets: vec![],
+            activity: vec![],
+        };
+        state.wallet = Some(wallet);
+        state.locked = true;
+        state.stored_wallet = Some(StoredWalletMetadata {
+            wallet_name: "Secret Wallet".to_string(),
+        });
+        let session = session_from_state(&state);
+        assert_eq!(session.has_wallet, true);
+        assert_eq!(session.locked, true);
+        assert!(session.address.is_none());
+        assert!(session.addresses.is_none());
+        assert!(session.assets.is_empty());
+        assert!(session.activity.is_empty());
     }
 
     #[test]

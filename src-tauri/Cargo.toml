@@ -27,4 +27,6 @@ ripemd = "0.1"
 bs58 = { version = "0.5", features = ["check"] }
 bech32 = "0.8"
 ed25519-dalek = "1.0"
+zeroize = { version = "1", features = ["zeroize_derive"] }
+tokio = { version = "1", features = ["time"] }
 tauri = { version = "2", features = [] }

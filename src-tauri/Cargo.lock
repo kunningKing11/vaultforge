@@ -4438,6 +4438,8 @@ dependencies = [
  "sha3",
  "tauri",
  "tauri-build",
+ "tokio",
+ "zeroize",
 ]
 
 [[package]]
