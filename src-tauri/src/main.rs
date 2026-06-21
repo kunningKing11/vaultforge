@@ -75,7 +75,6 @@ struct WalletSession {
     wallet_name: Option<String>,
     address: Option<String>,
     addresses: Option<HashMap<String, String>>,
-    network: String,
     assets: Vec<Asset>,
     activity: Vec<Activity>,
 }
@@ -111,7 +110,7 @@ struct EvmNetworkConfig {
     rpc_url: &'static str,
 }
 
-const DEFAULT_NETWORK_ID: &str = "ethereum";
+const DEFAULT_EVM_CONFIG: &EvmNetworkConfig = &EVM_NETWORKS[0];
 
 const EVM_NETWORKS: &[EvmNetworkConfig] = &[
     EvmNetworkConfig {
@@ -176,7 +175,6 @@ type CoinGeckoPriceResponse = HashMap<String, CoinGeckoPrice>;
 struct AppState {
     wallet: Option<Wallet>,
     locked: bool,
-    network: String,
     stored_wallet: Option<StoredWalletMetadata>,
     encryption_key: Option<[u8; 32]>,
     storage_salt: Option<Vec<u8>>,
@@ -186,7 +184,6 @@ struct AppState {
 #[derive(Clone)]
 struct StoredWalletMetadata {
     wallet_name: String,
-    network: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -206,19 +203,10 @@ impl AppState {
             .flatten()
             .map(|stored| StoredWalletMetadata {
                 wallet_name: stored.wallet_name,
-                network: normalize_network_id(&stored.network)
-                    .unwrap_or(DEFAULT_NETWORK_ID)
-                    .to_string(),
             });
-        let network = stored_wallet
-            .as_ref()
-            .map(|wallet| wallet.network.clone())
-            .unwrap_or_else(|| DEFAULT_NETWORK_ID.to_string());
-
         Self {
             wallet: None,
             locked: stored_wallet.is_some(),
-            network,
             stored_wallet,
             encryption_key: None,
             storage_salt: None,
@@ -304,7 +292,7 @@ async fn create_wallet(
         .cloned()
         .unwrap_or_else(|| address_from_seed(&mnemonic));
 
-    let assets = fetch_native_assets(DEFAULT_NETWORK_ID, &primary_address).await;
+    let assets = fetch_native_assets(DEFAULT_EVM_CONFIG, &primary_address).await;
 
     let wallet = Wallet {
         name: clean_name(name),
@@ -351,7 +339,7 @@ async fn import_wallet(
         .cloned()
         .unwrap_or_else(|| address_from_seed(&mnemonic));
 
-    let assets = fetch_native_assets(DEFAULT_NETWORK_ID, &primary_address).await;
+    let assets = fetch_native_assets(DEFAULT_EVM_CONFIG, &primary_address).await;
 
     let wallet = Wallet {
         name: "Imported Wallet".to_string(),
@@ -386,7 +374,7 @@ async fn unlock_wallet(
 ) -> Result<WalletSession, String> {
     let passphrase_hash = hash_secret(&passphrase);
 
-    let (network, address) = {
+    let address = {
         let mut state = state.lock().map_err(|_| "State lock failed")?;
 
         let in_memory = state.wallet.as_ref().map(|w| {
@@ -398,7 +386,7 @@ async fn unlock_wallet(
                 return Err("Invalid passphrase".to_string());
             }
             state.locked = false;
-            (state.network.clone(), addr)
+            addr
         } else {
             let stored = read_stored_wallet(&state.storage_path)?
                 .ok_or_else(|| "No wallet exists yet".to_string())?;
@@ -406,13 +394,8 @@ async fn unlock_wallet(
             if wallet.passphrase_hash != passphrase_hash {
                 return Err("Invalid passphrase".to_string());
             }
-            let network = normalize_network_id(&stored.network)
-                .ok_or_else(|| "Stored wallet network is unsupported".to_string())?
-                .to_string();
-            state.network = network.clone();
             state.stored_wallet = Some(StoredWalletMetadata {
                 wallet_name: stored.wallet_name,
-                network: state.network.clone(),
             });
             let salt = BASE64
                 .decode(stored.salt)
@@ -423,11 +406,11 @@ async fn unlock_wallet(
             let address = wallet.address.clone();
             state.wallet = Some(wallet);
             state.locked = false;
-            (network, address)
+            address
         }
     };
 
-    let fresh_assets = fetch_native_assets(&network, &address).await;
+    let fresh_assets = fetch_native_assets(DEFAULT_EVM_CONFIG, &address).await;
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
     if let Some(wallet) = state.wallet.as_mut() {
@@ -460,7 +443,7 @@ fn clear_wallet(state: State<'_, Mutex<AppState>>) -> Result<WalletSession, Stri
     state.encryption_key = None;
     state.storage_salt = None;
     state.locked = false;
-    state.network = DEFAULT_NETWORK_ID.to_string();
+    // network concept removed
     Ok(session_from_state(&state))
 }
 
@@ -474,35 +457,25 @@ async fn sign_transaction(
 ) -> Result<SignedTransaction, String> {
     validate_unlocked(&state)?;
 
-    let (wallet_info, network, config) = {
+    let (mnemonic, address, assets) = {
         let state = state.lock().map_err(|_| "State lock failed")?;
         let wallet = state
             .wallet
             .as_ref()
             .ok_or_else(|| "No wallet exists yet".to_string())?;
         validate_transfer(wallet, &to, &symbol, amount)?;
-        let config = evm_network_config(&state.network)
-            .ok_or_else(|| "Active network is not an EVM chain".to_string())?;
         (
-            (
-                wallet.address.clone(),
-                wallet.mnemonic.clone(),
-                wallet.assets.clone(),
-            ),
-            state.network.clone(),
-            *config,
+            wallet.mnemonic.clone(),
+            wallet.address.clone(),
+            wallet.assets.clone(),
         )
     };
 
-    let (address, mnemonic, assets) = wallet_info;
     let to = to.trim().to_string();
 
-    if !symbol.eq_ignore_ascii_case(config.native_symbol) {
-        return Err(format!(
-            "Only native {} transfers are supported",
-            config.native_symbol
-        ));
-    }
+    let config = evm_config_for_symbol(&symbol)
+        .copied()
+        .ok_or_else(|| format!("No EVM chain configured for {}", symbol))?;
 
     let value_wei = to_wei(amount, 18);
     let nonce = fetch_evm_nonce(&config, &address).await?;
@@ -537,7 +510,7 @@ async fn sign_transaction(
         balance: 0.0,
         price_usd: 0.0,
         change_24h: 0.0,
-        network: network.clone(),
+        network: config.id.to_string(),
     };
     let asset = assets
         .iter()
@@ -550,7 +523,7 @@ async fn sign_transaction(
         symbol: symbol.clone(),
         amount: amount_native,
         note: note.trim().to_string(),
-        network,
+        network: config.id.to_string(),
         nonce: nonce.to_string(),
         signed_at: Utc::now().to_rfc3339(),
         payload_hash: tx_hash.clone(),
@@ -574,7 +547,7 @@ async fn send_transaction(
 ) -> Result<WalletSession, String> {
     validate_unlocked(&state)?;
 
-    let (_address, network) = {
+    {
         let state = state.lock().map_err(|_| "State lock failed")?;
         let wallet = state
             .wallet
@@ -583,21 +556,15 @@ async fn send_transaction(
         if signed.from != wallet.address {
             return Err("Signed transaction does not match this wallet".to_string());
         }
-        if signed.network != state.network {
-            return Err(
-                "Signed transaction network no longer matches the active network".to_string(),
-            );
-        }
-        (wallet.address.clone(), state.network.clone())
-    };
+    }
 
     let raw_tx = signed
         .raw_tx
         .as_ref()
         .ok_or_else(|| "No raw transaction data".to_string())?;
 
-    let config = evm_network_config(&network)
-        .ok_or_else(|| "Active network is not an EVM chain".to_string())?;
+    let config = evm_config_for_symbol(&signed.symbol)
+        .ok_or_else(|| format!("No EVM chain configured for {}", signed.symbol))?;
 
     let tx_hash = broadcast_evm_transaction(config, raw_tx).await?;
 
@@ -687,40 +654,6 @@ fn swap_tokens(
     Ok(session_from_state(&state))
 }
 
-#[tauri::command]
-fn set_network(
-    state: State<'_, Mutex<AppState>>,
-    network: String,
-) -> Result<WalletSession, String> {
-    let network = normalize_network_id(&network)
-        .ok_or_else(|| "Unsupported network".to_string())?
-        .to_string();
-    let network_config =
-        evm_network_config(&network).ok_or_else(|| "Unsupported network".to_string())?;
-
-    let mut state = state.lock().map_err(|_| "State lock failed")?;
-    state.network = network.clone();
-    if let Some(wallet) = state.wallet.as_mut() {
-        for asset in &mut wallet.assets {
-            asset.network = network.clone();
-        }
-        wallet.activity.insert(
-            0,
-            activity(
-                "network",
-                "Network changed",
-                network_config.display_name,
-                &format!(
-                    "Chain ID {} · {} · {}",
-                    network_config.chain_id, network_config.native_symbol, network_config.rpc_url
-                ),
-            ),
-        );
-    }
-    persist_state_wallet(&mut state)?;
-    Ok(session_from_state(&state))
-}
-
 fn validate_unlocked(state: &State<'_, Mutex<AppState>>) -> Result<(), String> {
     let state = state.lock().map_err(|_| "State lock failed")?;
     if state.wallet.is_none() {
@@ -788,7 +721,6 @@ fn session_from_state(state: &AppState) -> WalletSession {
                 wallet_name: Some(stored_wallet.wallet_name.clone()),
                 address: None,
                 addresses: None,
-                network: stored_wallet.network.clone(),
                 assets: vec![],
                 activity: vec![],
             };
@@ -800,7 +732,6 @@ fn session_from_state(state: &AppState) -> WalletSession {
             wallet_name: None,
             address: None,
             addresses: None,
-            network: state.network.clone(),
             assets: vec![],
             activity: vec![],
         };
@@ -813,7 +744,6 @@ fn session_from_state(state: &AppState) -> WalletSession {
             wallet_name: Some(wallet.name.clone()),
             address: None,
             addresses: None,
-            network: state.network.clone(),
             assets: vec![],
             activity: vec![],
         };
@@ -825,36 +755,13 @@ fn session_from_state(state: &AppState) -> WalletSession {
         wallet_name: Some(wallet.name.clone()),
         address: Some(wallet.address.clone()),
         addresses: Some(wallet.addresses.clone()),
-        network: state.network.clone(),
         assets: wallet.assets.clone(),
         activity: wallet.activity.clone(),
     }
 }
 
-fn evm_network_config(id: &str) -> Option<&'static EvmNetworkConfig> {
-    EVM_NETWORKS.iter().find(|network| network.id == id)
-}
-
-fn is_supported_network_id(id: &str) -> bool {
-    evm_network_config(id).is_some()
-}
-
-fn normalize_network_id(value: &str) -> Option<&'static str> {
-    let value = value.trim();
-    if is_supported_network_id(value) {
-        return Some(evm_network_config(value)?.id);
-    }
-
-    match value {
-        "Ethereum" => Some("ethereum"),
-        "Monad" => Some("monad"),
-        "Polygon" => Some("polygon"),
-        "Arbitrum" | "Arbitrum One" => Some("arbitrum_one"),
-        "Base" => Some("base"),
-        "Optimism" => Some("optimism"),
-        "Avalanche" | "Avalanche C-Chain" => Some("avalanche_c"),
-        _ => None,
-    }
+fn evm_config_for_symbol(symbol: &str) -> Option<&'static EvmNetworkConfig> {
+    EVM_NETWORKS.iter().find(|c| c.native_symbol == symbol)
 }
 
 fn price_id_for_symbol(symbol: &str) -> Option<&'static str> {
@@ -928,10 +835,7 @@ fn wei_to_native(wei: u128, decimals: u32) -> f64 {
     (wei / divisor) as f64 + (wei % divisor) as f64 / divisor as f64
 }
 
-async fn fetch_native_assets(network: &str, address: &str) -> Vec<Asset> {
-    let Some(config) = evm_network_config(network) else {
-        return vec![];
-    };
+async fn fetch_native_assets(config: &EvmNetworkConfig, address: &str) -> Vec<Asset> {
     match fetch_evm_native_balance(config, address).await {
         Ok(wei) => vec![Asset {
             symbol: config.native_symbol.to_string(),
@@ -939,7 +843,7 @@ async fn fetch_native_assets(network: &str, address: &str) -> Vec<Asset> {
             balance: wei_to_native(wei, 18),
             price_usd: 0.0,
             change_24h: 0.0,
-            network: network.to_string(),
+            network: config.id.to_string(),
         }],
         Err(_) => vec![Asset {
             symbol: config.native_symbol.to_string(),
@@ -947,7 +851,7 @@ async fn fetch_native_assets(network: &str, address: &str) -> Vec<Asset> {
             balance: 0.0,
             price_usd: 0.0,
             change_24h: 0.0,
-            network: network.to_string(),
+            network: config.id.to_string(),
         }],
     }
 }
@@ -1233,7 +1137,7 @@ fn persist_state_wallet(state: &mut AppState) -> Result<(), String> {
         .clone()
         .ok_or_else(|| "Wallet encryption salt is not available".to_string())?;
 
-    let stored = encrypt_wallet(wallet, &state.network, &key, &salt)?;
+    let stored = encrypt_wallet(wallet, &key, &salt)?;
     if let Some(parent) = state.storage_path.parent() {
         fs::create_dir_all(parent).map_err(|_| "Failed to create wallet storage directory")?;
     }
@@ -1241,19 +1145,16 @@ fn persist_state_wallet(state: &mut AppState) -> Result<(), String> {
     fs::write(&state.storage_path, contents).map_err(|_| "Failed to save wallet")?;
     state.stored_wallet = Some(StoredWalletMetadata {
         wallet_name: stored.wallet_name,
-        network: stored.network,
     });
     Ok(())
 }
 
 fn encrypt_wallet(
     wallet: &Wallet,
-    network: &str,
     key: &[u8; 32],
     salt: &[u8],
 ) -> Result<StoredWalletFile, String> {
     let nonce_bytes: Vec<u8> = (0..12).map(|_| rand::thread_rng().r#gen()).collect();
-    let network = normalize_network_id(network).ok_or_else(|| "Unsupported network".to_string())?;
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| "Failed to initialize encryption")?;
     let payload = WalletPayload {
         wallet_name: wallet.name.clone(),
@@ -1273,7 +1174,7 @@ fn encrypt_wallet(
     Ok(StoredWalletFile {
         version: 2,
         wallet_name: wallet.name.clone(),
-        network: network.to_string(),
+        network: "ethereum".to_string(),
         salt: BASE64.encode(salt),
         nonce: BASE64.encode(nonce_bytes),
         ciphertext: BASE64.encode(ciphertext),
@@ -1573,13 +1474,12 @@ mod tests {
             address: address_from_seed("test seed"),
             addresses: HashMap::new(),
             passphrase_hash: hash_secret(passphrase),
-            assets: starter_assets(DEFAULT_NETWORK_ID),
+            assets: starter_assets("ethereum"),
             activity: vec![activity("system", "Created", "Local", "1")],
         };
         let (key, salt) = derive_storage_key(passphrase, None).unwrap();
-        let stored = encrypt_wallet(&wallet, DEFAULT_NETWORK_ID, &key, &salt).unwrap();
+        let stored = encrypt_wallet(&wallet, &key, &salt).unwrap();
         assert!(!stored.ciphertext.contains(&wallet.address));
-        assert_eq!(stored.network, DEFAULT_NETWORK_ID);
 
         let decrypted = decrypt_wallet(&stored, passphrase).unwrap();
         assert_eq!(decrypted.name, wallet.name);
@@ -1589,29 +1489,17 @@ mod tests {
 
     #[test]
     fn looks_up_evm_network_configs() {
-        let ethereum = evm_network_config("ethereum").unwrap();
+        let ethereum = EVM_NETWORKS.iter().find(|c| c.id == "ethereum").unwrap();
         assert_eq!(ethereum.display_name, "Ethereum");
         assert_eq!(ethereum.chain_id, 1);
         assert_eq!(ethereum.native_symbol, "ETH");
         assert_eq!(ethereum.rpc_url, "https://ethereum-rpc.publicnode.com");
 
-        let avalanche = evm_network_config("avalanche_c").unwrap();
+        let avalanche = EVM_NETWORKS.iter().find(|c| c.id == "avalanche_c").unwrap();
         assert_eq!(avalanche.chain_id, 43114);
         assert_eq!(avalanche.native_symbol, "AVAX");
     }
 
-    #[test]
-    fn normalizes_legacy_network_names() {
-        assert_eq!(normalize_network_id("ethereum"), Some("ethereum"));
-        assert_eq!(normalize_network_id("Ethereum"), Some("ethereum"));
-        assert_eq!(normalize_network_id("Arbitrum"), Some("arbitrum_one"));
-        assert_eq!(normalize_network_id("Arbitrum One"), Some("arbitrum_one"));
-        assert_eq!(
-            normalize_network_id("Avalanche C-Chain"),
-            Some("avalanche_c")
-        );
-        assert_eq!(normalize_network_id("Unsupported"), None);
-    }
 }
 
 fn main() {
@@ -1636,7 +1524,6 @@ fn main() {
             sign_transaction,
             send_transaction,
             swap_tokens,
-            set_network,
         ])
         .run(tauri::generate_context!())
         .expect("error while running VaultForge Wallet");

@@ -66,7 +66,7 @@ type SendDraft = {
   note: string;
 };
 
-type SessionCommand = "create_wallet" | "import_wallet" | "unlock_wallet" | "send_transaction" | "swap_tokens" | "set_network" | "clear_wallet" | "refresh_prices";
+type SessionCommand = "create_wallet" | "import_wallet" | "unlock_wallet" | "send_transaction" | "swap_tokens" | "clear_wallet" | "refresh_prices";
 
 type View = "dashboard" | "send" | "receive" | "swap" | "assets" | "activity" | "security" | "settings";
 
@@ -897,7 +897,6 @@ function dashboardView() {
       </div>
       <aside class="space-y-5">
         ${quickActions()}
-        ${networkCard()}
       </aside>
     </div>
   `;
@@ -1082,19 +1081,6 @@ function quickActions() {
         <button class="btn-primary w-full" data-view="send" type="button">Send</button>
         <button class="btn-secondary w-full" data-view="receive" type="button">Receive</button>
         <button class="btn-secondary w-full" data-view="swap" type="button">Swap</button>
-      </div>
-    </section>
-  `;
-}
-
-function networkCard() {
-  return `
-    <section class="glass rounded-[2rem] p-5">
-      <h2 class="text-xl font-black">Network health</h2>
-      <div class="mt-4 space-y-3 text-sm text-slate-300">
-        <div class="flex justify-between"><span>RPC latency</span><strong class="text-acid">42 ms</strong></div>
-        <div class="flex justify-between"><span>Gas estimate</span><strong>18 gwei</strong></div>
-        <div class="flex justify-between"><span>Protections</span><strong>Enabled</strong></div>
       </div>
     </section>
   `;
