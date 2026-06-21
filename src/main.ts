@@ -5,7 +5,8 @@ import "./styles.css";
 type Asset = {
   symbol: string;
   name: string;
-  balance: number;
+  balance: string;
+  decimals: number;
   price_usd: number;
   change_24h: number;
   network: string;
@@ -34,7 +35,6 @@ type WalletSession = {
   wallet_name: string | null;
   address: string | null;
   addresses?: Record<string, string> | null;
-  network: string;
   assets: Asset[];
   activity: Activity[];
 };
@@ -43,17 +43,18 @@ type SignedTransaction = {
   from: string;
   to: string;
   symbol: string;
-  amount: number;
+  amount: string;
   note: string;
   network: string;
   nonce: string;
   signedAt: string;
   payloadHash: string;
   signature: string;
-  feeAmount: number;
+  feeAmount: string;
   feeSymbol: string;
-  totalDebit: number;
-  postBalance: number;
+  totalDebit: string;
+  postBalance: string;
+  decimals: number;
   fiatValue: number;
   rawTx?: string | null;
   txHash?: string | null;
@@ -292,9 +293,10 @@ const walletApi = {
   unlockWallet: (args: { passphrase: string }) => invoke<WalletSession>("unlock_wallet", args),
   lockWallet: () => invoke<null>("lock_wallet"),
   clearWallet: () => invoke<WalletSession>("clear_wallet"),
-  signTransaction: (args: { to: string; symbol: string; amount: number; note: string }) => invoke<SignedTransaction>("sign_transaction", args),
+  signTransaction: (args: { to: string; symbol: string; amount: string; note: string }) => invoke<SignedTransaction>("sign_transaction", args),
   sendTransaction: (args: { signed: SignedTransaction }) => invoke<WalletSession>("send_transaction", args),
-  swapTokens: (args: { fromSymbol: string; toSymbol: string; amount: number }) => invoke<WalletSession>("swap_tokens", args),
+  swapTokens: (args: { fromSymbol: string; toSymbol: string; amount: string }) => invoke<WalletSession>("swap_tokens", args),
+  checkTransactionStatus: (args: { txHash: string; network: string }) => invoke<string | null>("check_transaction_status", args),
 };
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -315,6 +317,7 @@ let toasts: Toast[] = [];
 let lockedDeleteStep: "idle" | "confirm" | "countdown" = "idle";
 let lockedDeleteRemaining = 10;
 let lockedDeleteTimer: number | null = null;
+let pendingTxTimer: number | null = null;
 
 const enteredToasts = new Set<number>();
 
@@ -476,7 +479,7 @@ async function signTransaction(form: HTMLFormElement) {
     signedTransaction = await walletApi.signTransaction({
       to: sendDraft.to,
       symbol: sendDraft.symbol,
-      amount: Number(sendDraft.amount || 0),
+      amount: toWei(sendDraft.amount || "0", 18),
       note: sendDraft.note,
     });
     pushToast(successMessage("sign_transaction"), "success");
@@ -497,6 +500,51 @@ async function broadcastSignedTransaction() {
   if (ok) {
     signedTransaction = null;
     sendDraft = { to: "", symbol: "ETH", amount: "", note: "" };
+    startPendingTxPolling();
+    render();
+  }
+}
+
+function startPendingTxPolling() {
+  stopPendingTxPolling();
+  pendingTxTimer = window.setInterval(() => {
+    void pollPendingTransactions();
+  }, 10_000);
+}
+
+function stopPendingTxPolling() {
+  if (pendingTxTimer !== null) {
+    window.clearInterval(pendingTxTimer);
+    pendingTxTimer = null;
+  }
+}
+
+async function pollPendingTransactions() {
+  if (!session) return;
+  const pending = session.activity.filter((a) => a.status === "pending" && a.hash && a.network);
+  if (pending.length === 0) {
+    stopPendingTxPolling();
+    return;
+  }
+
+  let updated = false;
+  for (const item of pending) {
+    try {
+      const status = await walletApi.checkTransactionStatus({
+        txHash: item.hash!,
+        network: item.network!,
+      });
+      if (status) {
+        item.status = status;
+        updated = true;
+      }
+    } catch {
+      // skip errors, retry next poll
+    }
+  }
+
+  if (updated) {
+    session = { ...session, activity: [...session.activity] };
     render();
   }
 }
@@ -506,7 +554,7 @@ async function swapTokens(form: HTMLFormElement) {
   await runCommand("swap_tokens", () => walletApi.swapTokens({
     fromSymbol: String(formData.get("fromSymbol") || "ETH"),
     toSymbol: String(formData.get("toSymbol") || "USDC"),
-    amount: Number(formData.get("amount") || 0),
+    amount: toWei(String(formData.get("amount") || "0"), 18),
   }));
 }
 
@@ -515,6 +563,7 @@ async function lockWallet() {
   render();
   try {
     await walletApi.lockWallet();
+    stopPendingTxPolling();
     session = await walletApi.getWallet();
     currentView = "dashboard";
     pushToast(successMessage("lock_wallet"), "success");
@@ -537,6 +586,7 @@ async function deleteStoredWallet() {
   resetLockedDeleteWallet();
   const ok = await runCommand("clear_wallet", () => walletApi.clearWallet());
   if (ok) {
+    stopPendingTxPolling();
     currentView = "dashboard";
     signedTransaction = null;
     sendDraft = { to: "", symbol: "ETH", amount: "", note: "" };
@@ -811,7 +861,7 @@ function walletShell() {
       <aside class="glass hidden rounded-[2rem] p-5 lg:sticky lg:top-5 lg:block lg:h-[calc(100vh-2.5rem)]">
         <div class="mb-8 flex items-center gap-3">
           <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-acid text-xl font-black text-ink">VF</div>
-          <div><p class="font-black">${escapeHtml(session.wallet_name ?? "VaultForge")}</p><p class="text-sm text-slate-500">${escapeHtml(networkDisplayName(session.network))}</p></div>
+          <div><p class="font-black">${escapeHtml(session.wallet_name ?? "VaultForge")}</p></div>
         </div>
         <nav class="space-y-2">
           ${navButton("dashboard", "Dashboard")}
@@ -938,10 +988,10 @@ function signedTransactionView(signed: SignedTransaction) {
       <div class="mt-6 grid gap-4 sm:grid-cols-2">
         ${signedDetail("From", shortAddress(signed.from))}
         ${signedDetail("To", shortAddress(signed.to))}
-        ${signedDetail("Amount", `${signed.amount.toFixed(6)} ${signed.symbol}`)}
-        ${signedDetail("Network fee", `${signed.feeAmount.toFixed(6)} ${signed.feeSymbol}`)}
-        ${signedDetail("Total debit", `${signed.totalDebit.toFixed(6)} ${signed.symbol}`)}
-        ${signedDetail("Post-send balance", `${signed.postBalance.toFixed(6)} ${signed.symbol}`)}
+        ${signedDetail("Amount", `${formatWei(signed.amount, signed.decimals)} ${signed.symbol}`)}
+        ${signedDetail("Network fee", `${formatWei(signed.feeAmount, signed.decimals)} ${signed.feeSymbol}`)}
+        ${signedDetail("Total debit", `${formatWei(signed.totalDebit, signed.decimals)} ${signed.symbol}`)}
+        ${signedDetail("Post-send balance", `${formatWei(signed.postBalance, signed.decimals)} ${signed.symbol}`)}
         ${signedDetail("Estimated value", money(signed.fiatValue))}
         ${signedDetail("Network", networkDisplayName(signed.network))}
         ${signedDetail("Nonce", signed.nonce)}
@@ -1126,7 +1176,7 @@ function assetCard(asset: Asset) {
         <span class="asset-change rounded-full ${positive ? "bg-emerald-400/10 text-emerald-300" : "bg-rose-400/10 text-rose-300"} px-3 py-1 text-xs font-bold">${positive ? "+" : ""}${asset.change_24h.toFixed(2)}%</span>
       </div>
       <p class="asset-value mt-5 text-2xl font-black">${money(value)}</p>
-      <p class="mt-1 text-sm text-slate-400">${asset.balance.toFixed(asset.symbol === "USDC" ? 2 : 5)} ${escapeHtml(asset.symbol)}</p>
+      <p class="mt-1 text-sm text-slate-400">${formatWei(asset.balance, asset.decimals)} ${escapeHtml(asset.symbol)}</p>
       <div class="mt-4">
         <div class="flex justify-between text-xs font-bold text-slate-500"><span>Allocation</span><span>${allocation.toFixed(1)}%</span></div>
         <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-900"><div class="h-full rounded-full bg-acid" style="width: ${Math.max(2, allocation).toFixed(1)}%"></div></div>
@@ -1136,7 +1186,7 @@ function assetCard(asset: Asset) {
 }
 
 function assetValue(asset: Asset) {
-  return asset.balance * asset.price_usd;
+  return weiToNumber(asset.balance, asset.decimals) * asset.price_usd;
 }
 
 function portfolioChange() {
@@ -1177,7 +1227,7 @@ function activityDetails(item: Activity | null) {
         ${detailRow("Status", item.status)}
         ${detailRow("Amount", item.amount ?? "n/a")}
         ${detailRow("Fee", item.fee ?? "n/a")}
-        ${detailRow("Network", networkDisplayName(item.network ?? session?.network ?? "n/a"))}
+        ${detailRow("Network", networkDisplayName(item.network ?? "n/a"))}
         ${detailRow("Timestamp", new Date(item.timestamp).toLocaleString())}
         ${copyableDetailRow("Transaction hash", item.hash)}
         ${item.from ? copyableDetailRow("From", item.from) : ""}
@@ -1393,6 +1443,26 @@ function successMessage(command: string) {
 
 function formatError(error: unknown) {
   return `Error: ${String(error)}`;
+}
+
+function toWei(amount: string, decimals: number): string {
+  const parts = amount.split(".");
+  const intPart = parts[0] || "0";
+  const fracPart = (parts[1] || "").padEnd(decimals, "0").slice(0, decimals);
+  const combined = intPart + fracPart;
+  return combined.replace(/^0+/, "") || "0";
+}
+
+function formatWei(wei: string, decimals: number, displayDecimals = 6): string {
+  const padded = wei.padStart(decimals + 1, "0");
+  const intPart = padded.slice(0, padded.length - decimals) || "0";
+  const fracPart = padded.slice(padded.length - decimals).replace(/0+$/, "") || "0";
+  if (displayDecimals === 0) return intPart;
+  return `${intPart}.${fracPart.slice(0, displayDecimals)}`;
+}
+
+function weiToNumber(wei: string, decimals: number): number {
+  return Number(formatWei(wei, decimals, decimals));
 }
 
 function money(value: number) {

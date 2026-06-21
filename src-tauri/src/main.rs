@@ -44,7 +44,8 @@ struct WalletPayload {
 struct Asset {
     symbol: String,
     name: String,
-    balance: f64,
+    balance: String,
+    decimals: u32,
     price_usd: f64,
     change_24h: f64,
     network: String,
@@ -85,17 +86,18 @@ struct SignedTransaction {
     from: String,
     to: String,
     symbol: String,
-    amount: f64,
+    amount: String,
     note: String,
     network: String,
     nonce: String,
     signed_at: String,
     payload_hash: String,
     signature: String,
-    fee_amount: f64,
+    fee_amount: String,
     fee_symbol: String,
-    total_debit: f64,
-    post_balance: f64,
+    total_debit: String,
+    post_balance: String,
+    decimals: u32,
     fiat_value: f64,
     raw_tx: Option<String>,
     tx_hash: Option<String>,
@@ -163,6 +165,88 @@ const EVM_NETWORKS: &[EvmNetworkConfig] = &[
         rpc_url: "https://avalanche-c-chain-rpc.publicnode.com",
     },
 ];
+
+#[derive(Clone, Copy)]
+struct EvmTokenConfig {
+    symbol: &'static str,
+    name: &'static str,
+    contract: &'static str,
+    decimals: u32,
+}
+
+const EVM_TOKENS: &[(&str, &[EvmTokenConfig])] = &[
+    ("ethereum", &[
+        EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 },
+        EvmTokenConfig { symbol: "USDT", name: "Tether USD", contract: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 },
+    ]),
+    ("polygon", &[
+        EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6 },
+        EvmTokenConfig { symbol: "USDT", name: "Tether USD", contract: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6 },
+    ]),
+    ("arbitrum_one", &[
+        EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 },
+    ]),
+    ("base", &[
+        EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+    ]),
+    ("optimism", &[
+        EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", decimals: 6 },
+    ]),
+    ("avalanche_c", &[
+        EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", decimals: 6 },
+    ]),
+];
+
+fn evm_tokens_for_network(network_id: &str) -> &[EvmTokenConfig] {
+    EVM_TOKENS.iter()
+        .find(|(id, _)| *id == network_id)
+        .map(|(_, tokens)| *tokens)
+        .unwrap_or(&[])
+}
+
+async fn fetch_evm_token_balance(config: &EvmNetworkConfig, token: &EvmTokenConfig, address: &str) -> Result<u128, String> {
+    let addr_hex = address.trim_start_matches("0x");
+    let addr_bytes = hex::decode(addr_hex).map_err(|_| "Invalid address".to_string())?;
+    let mut padded = vec![0u8; 32];
+    padded[32 - addr_bytes.len()..].copy_from_slice(&addr_bytes);
+
+    let mut data = vec![0x70, 0xa0, 0x82, 0x31]; // keccak256("balanceOf(address)")[..4]
+    data.extend_from_slice(&padded);
+
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_call",
+        "params": [{
+            "to": token.contract,
+            "data": format!("0x{}", hex::encode(&data))
+        }, "latest"],
+        "id": 1,
+    });
+
+    let response = reqwest::Client::new()
+        .post(config.rpc_url)
+        .json(&body)
+        .header("user-agent", "VaultForge Wallet/0.1.0")
+        .send()
+        .await
+        .map_err(|e| format!("Token balance RPC failed: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Token balance RPC returned HTTP {}", response.status()));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Token balance response parse failed: {e}"))?;
+
+    let hex_str = json["result"]
+        .as_str()
+        .ok_or_else(|| "Token balance RPC missing result".to_string())?;
+
+    u128::from_str_radix(hex_str.trim_start_matches("0x"), 16)
+        .map_err(|e| format!("Invalid token balance hex: {e}"))
+}
 
 #[derive(Deserialize)]
 struct CoinGeckoPrice {
@@ -292,7 +376,7 @@ async fn create_wallet(
         .cloned()
         .unwrap_or_else(|| address_from_seed(&mnemonic));
 
-    let assets = fetch_native_assets(DEFAULT_EVM_CONFIG, &primary_address).await;
+    let assets = fetch_evm_assets(DEFAULT_EVM_CONFIG, &primary_address).await;
 
     let wallet = Wallet {
         name: clean_name(name),
@@ -339,7 +423,7 @@ async fn import_wallet(
         .cloned()
         .unwrap_or_else(|| address_from_seed(&mnemonic));
 
-    let assets = fetch_native_assets(DEFAULT_EVM_CONFIG, &primary_address).await;
+    let assets = fetch_evm_assets(DEFAULT_EVM_CONFIG, &primary_address).await;
 
     let wallet = Wallet {
         name: "Imported Wallet".to_string(),
@@ -410,7 +494,7 @@ async fn unlock_wallet(
         }
     };
 
-    let fresh_assets = fetch_native_assets(DEFAULT_EVM_CONFIG, &address).await;
+    let fresh_assets = fetch_evm_assets(DEFAULT_EVM_CONFIG, &address).await;
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
     if let Some(wallet) = state.wallet.as_mut() {
@@ -452,22 +536,29 @@ async fn sign_transaction(
     state: State<'_, Mutex<AppState>>,
     to: String,
     symbol: String,
-    amount: f64,
+    amount: String,
     note: String,
 ) -> Result<SignedTransaction, String> {
     validate_unlocked(&state)?;
 
-    let (mnemonic, address, assets) = {
+    let (mnemonic, address, assets, decimals) = {
         let state = state.lock().map_err(|_| "State lock failed")?;
         let wallet = state
             .wallet
             .as_ref()
             .ok_or_else(|| "No wallet exists yet".to_string())?;
-        validate_transfer(wallet, &to, &symbol, amount)?;
+        validate_transfer(wallet, &to, &symbol, &amount)?;
+        let decimals = wallet
+            .assets
+            .iter()
+            .find(|a| a.symbol == symbol)
+            .map(|a| a.decimals)
+            .unwrap_or(18);
         (
             wallet.mnemonic.clone(),
             wallet.address.clone(),
             wallet.assets.clone(),
+            decimals,
         )
     };
 
@@ -477,7 +568,7 @@ async fn sign_transaction(
         .copied()
         .ok_or_else(|| format!("No EVM chain configured for {}", symbol))?;
 
-    let value_wei = to_wei(amount, 18);
+    let value_wei: u128 = amount.parse().map_err(|_| "Invalid amount".to_string())?;
     let nonce = fetch_evm_nonce(&config, &address).await?;
     let gas_price = fetch_evm_gas_price(&config).await?;
     let gas_limit = fetch_evm_estimate_gas(&config, &address, &to, value_wei).await?;
@@ -499,15 +590,16 @@ async fn sign_transaction(
         value_wei,
     )?;
 
-    let fee_amount = wei_to_native(total_fee_wei, 18);
-    let total_debit = wei_to_native(total_debit_wei, 18);
-    let amount_native = wei_to_native(value_wei, 18);
+    let amount_str = value_wei.to_string();
+    let fee_str = total_fee_wei.to_string();
+    let total_debit_str = total_debit_wei.to_string();
     let signature_str = format!("0x{}{}", r_hex, s_hex);
 
     let default_asset = Asset {
         symbol: symbol.clone(),
         name: String::new(),
-        balance: 0.0,
+        balance: "0".to_string(),
+        decimals: 18,
         price_usd: 0.0,
         change_24h: 0.0,
         network: config.id.to_string(),
@@ -517,22 +609,30 @@ async fn sign_transaction(
         .find(|a| a.symbol == symbol)
         .unwrap_or(&default_asset);
 
+    let post_balance_wei: u128 = asset.balance.parse().unwrap_or(0);
+    let post_balance = if post_balance_wei >= total_debit_wei {
+        (post_balance_wei - total_debit_wei).to_string()
+    } else {
+        "0".to_string()
+    };
+
     let signed = SignedTransaction {
         from: address,
         to: to.clone(),
         symbol: symbol.clone(),
-        amount: amount_native,
+        amount: amount_str,
         note: note.trim().to_string(),
         network: config.id.to_string(),
         nonce: nonce.to_string(),
         signed_at: Utc::now().to_rfc3339(),
         payload_hash: tx_hash.clone(),
         signature: signature_str,
-        fee_amount,
+        fee_amount: fee_str,
         fee_symbol: symbol.clone(),
-        total_debit,
-        post_balance: asset.balance - total_debit,
-        fiat_value: amount_native * asset.price_usd,
+        total_debit: total_debit_str,
+        post_balance,
+        decimals,
+        fiat_value: 0.0,
         raw_tx: Some(raw_tx_hex),
         tx_hash: Some(tx_hash),
     };
@@ -583,7 +683,7 @@ async fn send_transaction(
                 kind: "send".to_string(),
                 title: "Transfer sent".to_string(),
                 subtitle: memo,
-                amount: format!("-{:.6} {}", signed.amount, signed.symbol),
+                amount: format!("-{} {}", signed.amount, signed.symbol),
                 status: "pending".to_string(),
                 timestamp: Utc::now().to_rfc3339(),
                 hash: tx_hash.clone(),
@@ -592,7 +692,7 @@ async fn send_transaction(
                 network: Some(signed.network.clone()),
                 payload_hash: signed.tx_hash.clone(),
                 signature: Some(signed.signature.clone()),
-                fee: Some(format!("{:.6} {}", signed.fee_amount, signed.fee_symbol)),
+                fee: Some(format!("{} {}", signed.fee_amount, signed.fee_symbol)),
             },
         );
     }
@@ -606,13 +706,15 @@ fn swap_tokens(
     state: State<'_, Mutex<AppState>>,
     from_symbol: String,
     to_symbol: String,
-    amount: f64,
+    amount: String,
 ) -> Result<WalletSession, String> {
     validate_unlocked(&state)?;
     if from_symbol == to_symbol {
         return Err("Choose two different assets".to_string());
     }
-    if amount <= 0.0 || !amount.is_finite() {
+
+    let amount_wei: u128 = amount.parse().map_err(|_| "Invalid amount".to_string())?;
+    if amount_wei == 0 {
         return Err("Amount must be greater than zero".to_string());
     }
 
@@ -633,21 +735,29 @@ fn swap_tokens(
         .position(|asset| asset.symbol == to_symbol)
         .ok_or_else(|| "Destination asset not found".to_string())?;
 
-    if wallet.assets[from_index].balance < amount {
+    let from_balance: u128 = wallet.assets[from_index].balance.parse().unwrap_or(0);
+    if from_balance < amount_wei {
         return Err(format!("Insufficient {} balance", from_symbol));
     }
 
-    let source_value = amount * wallet.assets[from_index].price_usd;
-    let received = (source_value / wallet.assets[to_index].price_usd) * 0.995;
-    wallet.assets[from_index].balance -= amount;
-    wallet.assets[to_index].balance += received;
+    let source_value = amount_wei as f64 / 1e18 * wallet.assets[from_index].price_usd;
+    let received_wei = if wallet.assets[to_index].price_usd > 0.0 {
+        let received_f64 = (source_value / wallet.assets[to_index].price_usd) * 0.995;
+        (received_f64 * 1e18) as u128
+    } else {
+        0
+    };
+
+    wallet.assets[from_index].balance = (from_balance - amount_wei).to_string();
+    let to_balance: u128 = wallet.assets[to_index].balance.parse().unwrap_or(0);
+    wallet.assets[to_index].balance = (to_balance + received_wei).to_string();
     wallet.activity.insert(
         0,
         activity(
             "swap",
             "Swap executed",
             &format!("{} to {} with 0.5% route fee", from_symbol, to_symbol),
-            &format!("{amount:.6} {from_symbol} -> {received:.6} {to_symbol}"),
+            &format!("{amount_wei} {from_symbol} -> {received_wei} {to_symbol}"),
         ),
     );
     persist_state_wallet(&mut state)?;
@@ -665,18 +775,21 @@ fn validate_unlocked(state: &State<'_, Mutex<AppState>>) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_transfer(wallet: &Wallet, to: &str, symbol: &str, amount: f64) -> Result<(), String> {
+fn validate_transfer(wallet: &Wallet, to: &str, symbol: &str, amount_wei: &str) -> Result<(), String> {
     let to = to.trim();
-    if amount <= 0.0 || !amount.is_finite() {
-        return Err("Amount must be greater than zero".to_string());
-    }
 
     let asset = wallet
         .assets
         .iter()
         .find(|asset| asset.symbol == symbol)
         .ok_or_else(|| "Asset not found".to_string())?;
-    if asset.balance < amount {
+
+    let amount: u128 = amount_wei.parse().map_err(|_| "Invalid amount".to_string())?;
+    let balance: u128 = asset.balance.parse().map_err(|_| "Invalid stored balance".to_string())?;
+    if amount == 0 {
+        return Err("Amount must be greater than zero".to_string());
+    }
+    if balance < amount {
         return Err(format!("Insufficient {} balance", symbol));
     }
     validate_address_for_symbol(to, symbol)?;
@@ -830,40 +943,54 @@ async fn fetch_evm_native_balance(config: &EvmNetworkConfig, address: &str) -> R
         .map_err(|e| format!("Invalid balance hex: {e}"))
 }
 
-fn wei_to_native(wei: u128, decimals: u32) -> f64 {
-    let divisor = 10u128.pow(decimals);
-    (wei / divisor) as f64 + (wei % divisor) as f64 / divisor as f64
-}
+async fn fetch_evm_assets(config: &EvmNetworkConfig, address: &str) -> Vec<Asset> {
+    let native = match fetch_evm_native_balance(config, address).await {
+        Ok(wei) => Asset {
+            symbol: config.native_symbol.to_string(),
+            name: config.display_name.to_string(),
+            balance: wei.to_string(),
+            decimals: 18,
+            price_usd: 0.0,
+            change_24h: 0.0,
+            network: config.id.to_string(),
+        },
+        Err(_) => Asset {
+            symbol: config.native_symbol.to_string(),
+            name: config.display_name.to_string(),
+            balance: "0".to_string(),
+            decimals: 18,
+            price_usd: 0.0,
+            change_24h: 0.0,
+            network: config.id.to_string(),
+        },
+    };
 
-async fn fetch_native_assets(config: &EvmNetworkConfig, address: &str) -> Vec<Asset> {
-    match fetch_evm_native_balance(config, address).await {
-        Ok(wei) => vec![Asset {
-            symbol: config.native_symbol.to_string(),
-            name: config.display_name.to_string(),
-            balance: wei_to_native(wei, 18),
-            price_usd: 0.0,
-            change_24h: 0.0,
-            network: config.id.to_string(),
-        }],
-        Err(_) => vec![Asset {
-            symbol: config.native_symbol.to_string(),
-            name: config.display_name.to_string(),
-            balance: 0.0,
-            price_usd: 0.0,
-            change_24h: 0.0,
-            network: config.id.to_string(),
-        }],
+    let mut assets = vec![native];
+
+    for token in evm_tokens_for_network(config.id) {
+        match fetch_evm_token_balance(config, token, address).await {
+            Ok(balance) => {
+                assets.push(Asset {
+                    symbol: token.symbol.to_string(),
+                    name: token.name.to_string(),
+                    balance: balance.to_string(),
+                    decimals: token.decimals,
+                    price_usd: 0.0,
+                    change_24h: 0.0,
+                    network: config.id.to_string(),
+                });
+            }
+            Err(_) => {}
+        }
     }
+
+    assets
 }
 
 fn u128_to_be_bytes(value: u128) -> Vec<u8> {
     let be = value.to_be_bytes();
     let start = be.iter().position(|&b| b != 0).unwrap_or(be.len() - 1);
     be[start..].to_vec()
-}
-
-fn to_wei(amount: f64, decimals: u32) -> u128 {
-    (amount * 10u128.pow(decimals) as f64) as u128
 }
 
 async fn fetch_evm_nonce(config: &EvmNetworkConfig, address: &str) -> Result<u64, String> {
@@ -998,6 +1125,53 @@ async fn broadcast_evm_transaction(
                 .unwrap_or("Unknown broadcast error")
                 .to_string()
         })
+}
+
+async fn fetch_tx_status(config: &EvmNetworkConfig, tx_hash: &str) -> Result<Option<String>, String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_getTransactionReceipt",
+        "params": [tx_hash],
+        "id": 1,
+    });
+    let response = reqwest::Client::new()
+        .post(config.rpc_url)
+        .json(&body)
+        .header("user-agent", "VaultForge Wallet/0.1.0")
+        .send()
+        .await
+        .map_err(|e| format!("Tx status RPC failed: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("Tx status RPC returned HTTP {}", response.status()));
+    }
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Tx status response parse failed: {e}"))?;
+
+    if json["result"].is_null() {
+        return Ok(None);
+    }
+
+    let status_hex = json["result"]["status"]
+        .as_str()
+        .unwrap_or("0x0");
+    if status_hex == "0x1" {
+        Ok(Some("confirmed".to_string()))
+    } else {
+        Ok(Some("failed".to_string()))
+    }
+}
+
+#[tauri::command]
+async fn check_transaction_status(
+    _state: State<'_, Mutex<AppState>>,
+    tx_hash: String,
+    network: String,
+) -> Result<Option<String>, String> {
+    let config = EVM_NETWORKS.iter().find(|c| c.id == network)
+        .ok_or_else(|| format!("Unknown network: {}", network))?;
+    fetch_tx_status(config, &tx_hash).await
 }
 
 fn signing_key_from_mnemonic(mnemonic: &str) -> Result<k256::ecdsa::SigningKey, String> {
@@ -1380,7 +1554,8 @@ mod tests {
             Asset {
                 symbol: "ETH".to_string(),
                 name: "Ethereum".to_string(),
-                balance: 2.4821,
+                balance: "2482100000000000000000".to_string(),
+                decimals: 18,
                 price_usd: 3480.62,
                 change_24h: 2.84,
                 network: network.to_string(),
@@ -1388,7 +1563,8 @@ mod tests {
             Asset {
                 symbol: "BTC".to_string(),
                 name: "Bitcoin".to_string(),
-                balance: 0.1842,
+                balance: "184200000000".to_string(),
+                decimals: 8,
                 price_usd: 102_240.12,
                 change_24h: -0.62,
                 network: network.to_string(),
@@ -1396,7 +1572,8 @@ mod tests {
             Asset {
                 symbol: "SOL".to_string(),
                 name: "Solana".to_string(),
-                balance: 82.45,
+                balance: "82450000000".to_string(),
+                decimals: 9,
                 price_usd: 184.33,
                 change_24h: 5.18,
                 network: network.to_string(),
@@ -1404,7 +1581,8 @@ mod tests {
             Asset {
                 symbol: "USDC".to_string(),
                 name: "USD Coin".to_string(),
-                balance: 8_420.0,
+                balance: "8420000000".to_string(),
+                decimals: 6,
                 price_usd: 1.0,
                 change_24h: 0.01,
                 network: network.to_string(),
@@ -1445,14 +1623,6 @@ mod tests {
         assert_eq!(r.len(), 64);
         assert_eq!(s.len(), 64);
         assert!(!_raw.is_empty());
-    }
-
-    #[test]
-    fn converts_wei_to_native_correctly() {
-        let result = wei_to_native(1_000_000_000_000_000_000u128, 18);
-        assert!((result - 1.0).abs() < 0.0001);
-        let result = wei_to_native(1u128, 18);
-        assert!((result - 1e-18).abs() < 1e-20);
     }
 
     #[test]
@@ -1524,6 +1694,7 @@ fn main() {
             sign_transaction,
             send_transaction,
             swap_tokens,
+            check_transaction_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running VaultForge Wallet");
