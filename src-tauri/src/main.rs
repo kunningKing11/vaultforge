@@ -408,7 +408,7 @@ async fn create_wallet(
         .cloned()
         .unwrap_or_else(|| address_from_seed(&mnemonic));
 
-    let assets = fetch_evm_assets(DEFAULT_EVM_CONFIG, &primary_address).await;
+    let assets = fetch_evm_assets(DEFAULT_EVM_CONFIG, &primary_address, &[]).await;
 
     let wallet = Wallet {
         name: clean_name(name),
@@ -455,7 +455,7 @@ async fn import_wallet(
         .cloned()
         .unwrap_or_else(|| address_from_seed(&mnemonic));
 
-    let assets = fetch_evm_assets(DEFAULT_EVM_CONFIG, &primary_address).await;
+    let assets = fetch_evm_assets(DEFAULT_EVM_CONFIG, &primary_address, &[]).await;
 
     let wallet = Wallet {
         name: "Imported Wallet".to_string(),
@@ -490,19 +490,19 @@ async fn unlock_wallet(
 ) -> Result<WalletSession, String> {
     let passphrase_hash = hash_secret(&passphrase);
 
-    let address = {
+    let (address, cached_assets) = {
         let mut state = state.lock().map_err(|_| "State lock failed")?;
 
         let in_memory = state.wallet.as_ref().map(|w| {
-            (w.passphrase_hash.clone(), w.address.clone())
+            (w.passphrase_hash.clone(), w.address.clone(), w.assets.clone())
         });
 
-        if let Some((stored_hash, addr)) = in_memory {
+        if let Some((stored_hash, addr, assets)) = in_memory {
             if stored_hash != passphrase_hash {
                 return Err("Invalid passphrase".to_string());
             }
             state.locked = false;
-            addr
+            (addr, assets)
         } else {
             let stored = read_stored_wallet(&state.storage_path)?
                 .ok_or_else(|| "No wallet exists yet".to_string())?;
@@ -520,13 +520,14 @@ async fn unlock_wallet(
             state.encryption_key = Some(key);
             state.storage_salt = Some(salt);
             let address = wallet.address.clone();
+            let assets = wallet.assets.clone();
             state.wallet = Some(wallet);
             state.locked = false;
-            address
+            (address, assets)
         }
     };
 
-    let fresh_assets = fetch_evm_assets(DEFAULT_EVM_CONFIG, &address).await;
+    let fresh_assets = fetch_evm_assets(DEFAULT_EVM_CONFIG, &address, &cached_assets).await;
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
     if let Some(wallet) = state.wallet.as_mut() {
@@ -1119,7 +1120,14 @@ async fn fetch_evm_native_balance(config: &EvmNetworkConfig, address: &str) -> R
         .map_err(|e| format!("Invalid balance hex: {e}"))
 }
 
-async fn fetch_evm_assets(config: &EvmNetworkConfig, address: &str) -> Vec<Asset> {
+fn cached_asset(cached_assets: &[Asset], network_id: &str, symbol: &str) -> Option<Asset> {
+    cached_assets
+        .iter()
+        .find(|asset| asset.network == network_id && asset.symbol == symbol)
+        .cloned()
+}
+
+async fn fetch_evm_assets(config: &EvmNetworkConfig, address: &str, cached_assets: &[Asset]) -> Vec<Asset> {
     let native = match fetch_evm_native_balance(config, address).await {
         Ok(wei) => Asset {
             symbol: config.native_symbol.to_string(),
@@ -1130,7 +1138,7 @@ async fn fetch_evm_assets(config: &EvmNetworkConfig, address: &str) -> Vec<Asset
             change_24h: 0.0,
             network: config.id.to_string(),
         },
-        Err(_) => Asset {
+        Err(_) => cached_asset(cached_assets, config.id, config.native_symbol).unwrap_or_else(|| Asset {
             symbol: config.native_symbol.to_string(),
             name: config.display_name.to_string(),
             balance: "0".to_string(),
@@ -1138,7 +1146,7 @@ async fn fetch_evm_assets(config: &EvmNetworkConfig, address: &str) -> Vec<Asset
             price_usd: 0.0,
             change_24h: 0.0,
             network: config.id.to_string(),
-        },
+        }),
     };
 
     let mut assets = vec![native];
@@ -1156,7 +1164,11 @@ async fn fetch_evm_assets(config: &EvmNetworkConfig, address: &str) -> Vec<Asset
                     network: config.id.to_string(),
                 });
             }
-            Err(_) => {}
+            Err(_) => {
+                if let Some(cached) = cached_asset(cached_assets, config.id, token.symbol) {
+                    assets.push(cached);
+                }
+            }
         }
     }
 
@@ -1847,6 +1859,17 @@ mod tests {
             let provider = get_provider(symbol);
             assert!(provider.is_some(), "No provider for symbol {symbol}");
         }
+    }
+
+    #[test]
+    fn selects_cached_asset_by_network_and_symbol() {
+        let assets = starter_assets("ethereum");
+        let cached = cached_asset(&assets, "ethereum", "ETH").unwrap();
+        assert_eq!(cached.symbol, "ETH");
+        assert_eq!(cached.network, "ethereum");
+        assert_eq!(cached.balance, "2482100000000000000000");
+        assert!(cached_asset(&assets, "polygon", "ETH").is_none());
+        assert!(cached_asset(&assets, "ethereum", "MATIC").is_none());
     }
 
     #[test]
