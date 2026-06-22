@@ -47,7 +47,3 @@ Build the desktop bundle:
 ```bash
 npm run tauri build
 ```
-
-## Security note
-
-This is a fully functional local app foundation with simulated assets, signatures, encrypted storage, and transactions. It is not production mainnet wallet software. Before handling real funds, add audited key management, hardware wallet support, chain RPC integrations, production transaction signing, threat modeling, and external security review.
