@@ -476,10 +476,12 @@ async function signTransaction(form: HTMLFormElement) {
   busy = true;
   render();
   try {
+    const asset = session?.assets.find(a => a.symbol === sendDraft.symbol);
+    const decimals = asset?.decimals ?? 18;
     signedTransaction = await walletApi.signTransaction({
       to: sendDraft.to,
       symbol: sendDraft.symbol,
-      amount: toWei(sendDraft.amount || "0", 18),
+      amount: toWei(sendDraft.amount || "0", decimals),
       note: sendDraft.note,
     });
     pushToast(successMessage("sign_transaction"), "success");
@@ -551,10 +553,13 @@ async function pollPendingTransactions() {
 
 async function swapTokens(form: HTMLFormElement) {
   const formData = new FormData(form);
+  const fromSymbol = String(formData.get("fromSymbol") || "ETH");
+  const asset = session?.assets.find(a => a.symbol === fromSymbol);
+  const decimals = asset?.decimals ?? 18;
   await runCommand("swap_tokens", () => walletApi.swapTokens({
-    fromSymbol: String(formData.get("fromSymbol") || "ETH"),
+    fromSymbol,
     toSymbol: String(formData.get("toSymbol") || "USDC"),
-    amount: toWei(String(formData.get("amount") || "0"), 18),
+    amount: toWei(String(formData.get("amount") || "0"), decimals),
   }));
 }
 

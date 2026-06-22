@@ -584,42 +584,54 @@ async fn sign_transaction(
 ) -> Result<SignedTransaction, String> {
     validate_unlocked(&state)?;
 
-    let (mnemonic, address, assets, decimals) = {
+    let (mnemonic, address, assets) = {
         let state = state.lock().map_err(|_| "State lock failed")?;
         let wallet = state
             .wallet
             .as_ref()
             .ok_or_else(|| "No wallet exists yet".to_string())?;
         validate_transfer(wallet, &to, &symbol, &amount)?;
-        let decimals = wallet
-            .assets
-            .iter()
-            .find(|a| a.symbol == symbol)
-            .map(|a| a.decimals)
-            .unwrap_or(18);
         (
             wallet.mnemonic.clone(),
             wallet.address.clone(),
             wallet.assets.clone(),
-            decimals,
         )
     };
 
     let to = to.trim().to_string();
-
-    let config = evm_config_for_symbol(&symbol)
-        .copied()
-        .ok_or_else(|| format!("No EVM chain configured for {}", symbol))?;
-
     let value_wei: u128 = amount.parse().map_err(|_| "Invalid amount".to_string())?;
-    let nonce = fetch_evm_nonce(&config, &address).await?;
-    let gas_price = fetch_evm_gas_price(&config).await?;
-    let gas_limit = fetch_evm_estimate_gas(&config, &address, &to, value_wei).await?;
+
+    let asset = assets.iter()
+        .find(|a| a.symbol == symbol)
+        .ok_or_else(|| format!("Asset {symbol} not found in wallet"))?;
+    let network_id = &asset.network;
+    let decimals = asset.decimals;
+
+    let config = evm_config_by_id(network_id)
+        .ok_or_else(|| format!("No EVM chain configured for network {network_id}"))?;
+
+    let is_native = evm_config_for_symbol(&symbol).is_some();
+
+    let (tx_to, tx_data, display_to) = if is_native {
+        (to.clone(), Vec::new(), to.clone())
+    } else {
+        let token = evm_tokens_for_network(config.id).iter()
+            .find(|t| t.symbol == symbol)
+            .ok_or_else(|| format!("Token {symbol} not found on {network_id}"))?;
+        (token.contract.to_string(), encode_erc20_transfer(&to, value_wei)?, to.clone())
+    };
+
+    let nonce = fetch_evm_nonce(config, &address).await?;
+    let gas_price = fetch_evm_gas_price(config).await?;
+    let gas_limit = if tx_data.is_empty() {
+        fetch_evm_estimate_gas(config, &address, &tx_to, value_wei, &[]).await?
+    } else {
+        fetch_evm_estimate_gas(config, &address, &tx_to, 0, &tx_data).await?
+    };
 
     let max_priority_fee_per_gas = gas_price;
     let max_fee_per_gas = gas_price;
     let total_fee_wei = gas_limit as u128 * max_fee_per_gas;
-    let total_debit_wei = value_wei + total_fee_wei;
 
     let signing_key = signing_key_from_mnemonic(&mnemonic)?;
     let (_, tx_hash, raw_tx_hex, r_hex, s_hex) = sign_eip1559_transfer(
@@ -629,39 +641,30 @@ async fn sign_transaction(
         max_priority_fee_per_gas,
         max_fee_per_gas,
         gas_limit,
-        &to,
-        value_wei,
+        &tx_to,
+        if tx_data.is_empty() { value_wei } else { 0 },
+        &tx_data,
     )?;
 
     let amount_str = value_wei.to_string();
     let fee_str = total_fee_wei.to_string();
-    let total_debit_str = total_debit_wei.to_string();
+    let total_debit_str = if is_native {
+        (value_wei + total_fee_wei).to_string()
+    } else {
+        total_fee_wei.to_string()
+    };
     let signature_str = format!("0x{}{}", r_hex, s_hex);
 
-    let default_asset = Asset {
-        symbol: symbol.clone(),
-        name: String::new(),
-        balance: "0".to_string(),
-        decimals: 18,
-        price_usd: 0.0,
-        change_24h: 0.0,
-        network: config.id.to_string(),
-    };
-    let asset = assets
-        .iter()
-        .find(|a| a.symbol == symbol)
-        .unwrap_or(&default_asset);
-
     let post_balance_wei: u128 = asset.balance.parse().unwrap_or(0);
-    let post_balance = if post_balance_wei >= total_debit_wei {
-        (post_balance_wei - total_debit_wei).to_string()
+    let post_balance = if post_balance_wei >= value_wei {
+        (post_balance_wei - value_wei).to_string()
     } else {
         "0".to_string()
     };
 
     let signed = SignedTransaction {
         from: address,
-        to: to.clone(),
+        to: display_to,
         symbol: symbol.clone(),
         amount: amount_str,
         note: note.trim().to_string(),
@@ -707,6 +710,7 @@ async fn send_transaction(
         .ok_or_else(|| "No raw transaction data".to_string())?;
 
     let config = evm_config_for_symbol(&signed.symbol)
+        .or_else(|| evm_config_by_id(&signed.network))
         .ok_or_else(|| format!("No EVM chain configured for {}", signed.symbol))?;
 
     let tx_hash = broadcast_evm_transaction(config, raw_tx).await?;
@@ -1027,6 +1031,35 @@ fn evm_config_for_symbol(symbol: &str) -> Option<&'static EvmNetworkConfig> {
     EVM_NETWORKS.iter().find(|c| c.native_symbol == symbol)
 }
 
+fn evm_config_by_id(network_id: &str) -> Option<&'static EvmNetworkConfig> {
+    EVM_NETWORKS.iter().find(|c| c.id == network_id)
+}
+
+#[allow(dead_code)]
+fn evm_network_id_for_token(symbol: &str) -> Option<&'static str> {
+    EVM_TOKENS.iter()
+        .find(|(_, tokens)| tokens.iter().any(|t| t.symbol == symbol))
+        .map(|(id, _)| *id)
+}
+
+fn encode_erc20_transfer(recipient: &str, amount: u128) -> Result<Vec<u8>, String> {
+    let recip_hex = recipient.trim_start_matches("0x");
+    let recip_bytes = hex::decode(recip_hex).map_err(|_| "Invalid recipient address".to_string())?;
+    let mut padded_recip = vec![0u8; 32];
+    padded_recip[32 - recip_bytes.len()..].copy_from_slice(&recip_bytes);
+
+    let amount_bytes = amount.to_be_bytes();
+    let start = amount_bytes.iter().position(|&b| b != 0).unwrap_or(amount_bytes.len() - 1);
+    let amount_trimmed = &amount_bytes[start..];
+
+    let mut data = vec![0xa9, 0x05, 0x9c, 0xbb]; // keccak256("transfer(address,uint256)")[..4]
+    data.extend_from_slice(&padded_recip);
+    let mut padded_amount = vec![0u8; 32];
+    padded_amount[32 - amount_trimmed.len()..].copy_from_slice(amount_trimmed);
+    data.extend_from_slice(&padded_amount);
+    Ok(data)
+}
+
 fn price_id_for_symbol(symbol: &str) -> Option<&'static str> {
     match symbol {
         "ETH" => Some("ethereum"),
@@ -1162,15 +1195,20 @@ async fn fetch_evm_estimate_gas(
     from: &str,
     to: &str,
     value: u128,
+    data: &[u8],
 ) -> Result<u64, String> {
+    let mut params = serde_json::json!({
+        "from": from,
+        "to": to,
+        "value": format!("0x{:x}", value),
+    });
+    if !data.is_empty() {
+        params["data"] = serde_json::Value::String(format!("0x{}", hex::encode(data)));
+    }
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "eth_estimateGas",
-        "params": [{
-            "from": from,
-            "to": to,
-            "value": format!("0x{:x}", value),
-        }],
+        "params": [params],
         "id": 1,
     });
     let json = rpc_post(config.rpc_url, &body).await?;
@@ -1256,10 +1294,10 @@ fn sign_eip1559_transfer(
     gas_limit: u64,
     to: &str,
     value: u128,
+    data: &[u8],
 ) -> Result<(Vec<u8>, String, String, String, String), String> {
     let to_bytes = hex::decode(to.trim_start_matches("0x"))
         .map_err(|_| "Invalid to address".to_string())?;
-    let empty: Vec<u8> = vec![];
 
     let max_priority_bytes = u128_to_be_bytes(max_priority_fee_per_gas);
     let max_fee_bytes = u128_to_be_bytes(max_fee_per_gas);
@@ -1274,7 +1312,7 @@ fn sign_eip1559_transfer(
     stream.append(&gas_limit);
     stream.append(&to_bytes);
     stream.append(&value_bytes);
-    stream.append(&empty);
+    stream.append(&data.to_vec());
     stream.begin_list(0);
 
     let unsigned_data = stream.out().to_vec();
@@ -1316,7 +1354,7 @@ fn sign_eip1559_transfer(
     tx_stream.append(&gas_limit);
     tx_stream.append(&to_bytes);
     tx_stream.append(&value_bytes);
-    tx_stream.append(&empty);
+    tx_stream.append(&data.to_vec());
     tx_stream.begin_list(0);
     tx_stream.append(&y_parity);
     tx_stream.append(&r_vec);
@@ -1800,6 +1838,7 @@ mod tests {
             21000,
             "0xdAC17F958D2ee523a2206206994597C13D831ec7",
             1_000_000_000_000_000_000u128,
+            &[],
         );
         assert!(result.is_ok());
         let (_raw, tx_hash, _raw_hex, r, s) = result.unwrap();
@@ -1808,6 +1847,45 @@ mod tests {
         assert_eq!(r.len(), 64);
         assert_eq!(s.len(), 64);
         assert!(!_raw.is_empty());
+    }
+
+    #[test]
+    fn encodes_erc20_transfer_abi() {
+        let recipient = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+        let amount: u128 = 1_000_000_000_000_000_000;
+        let data = encode_erc20_transfer(recipient, amount).unwrap();
+        assert!(!data.is_empty());
+        assert_eq!(data.len(), 4 + 32 + 32); // selector + padded address + padded amount
+        assert_eq!(&data[..4], &[0xa9, 0x05, 0x9c, 0xbb]); // keccak256("transfer(address,uint256)")[..4]
+        let recip_bytes = hex::decode(recipient.trim_start_matches("0x")).unwrap();
+        assert_eq!(&data[16..36], &recip_bytes[..]);
+        // amount = 1 ETH = 0x0de0b6b3a7640000, padded to 32 bytes, so last byte is 0x00
+        assert_eq!(data[data.len() - 1], 0x00);
+    }
+
+    #[test]
+    fn signs_erc20_transfer() {
+        use k256::ecdsa::SigningKey;
+        let private_key = [0xabu8; 32];
+        let signing_key = SigningKey::from_bytes((&private_key).into()).unwrap();
+        let data = encode_erc20_transfer("0xdAC17F958D2ee523a2206206994597C13D831ec7", 1_000_000).unwrap();
+        let result = sign_eip1559_transfer(
+            &signing_key,
+            1,
+            0,
+            1_000_000_000,
+            1_000_000_000,
+            50000,
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            0,
+            &data,
+        );
+        assert!(result.is_ok());
+        let (_raw, tx_hash, _raw_hex, r, s) = result.unwrap();
+        assert!(tx_hash.starts_with("0x"));
+        assert_eq!(tx_hash.len(), 66);
+        assert_eq!(r.len(), 64);
+        assert_eq!(s.len(), 64);
     }
 
     #[test]
