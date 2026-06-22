@@ -3,16 +3,18 @@ use argon2::Argon2;
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use bech32::{self, ToBase32, Variant};
 use zeroize::Zeroize;
+use bip32::{DerivationPath, XPrv};
 use bip39::{Language, Mnemonic};
 use bs58;
 use chrono::Utc;
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
+use hmac::{Hmac, Mac};
 use k256::ecdsa::signature::hazmat::PrehashSigner;
 use k256::ecdsa::SigningKey;
 use rand::Rng;
 use ripemd::Ripemd160;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest as Sha2Digest, Sha256};
+use sha2::{Digest as Sha2Digest, Sha256, Sha512};
 use sha3::Keccak256;
 use std::{collections::HashMap, fs, path::PathBuf, sync::Mutex};
 use tauri::{Manager, State};
@@ -278,6 +280,13 @@ struct CoinGeckoPrice {
 }
 
 type CoinGeckoPriceResponse = HashMap<String, CoinGeckoPrice>;
+
+const EVM_DERIVATION_PATH: &str = "m/44'/60'/0'/0/0";
+const BITCOIN_DERIVATION_PATH: &str = "m/84'/0'/0'/0/0";
+const ZCASH_DERIVATION_PATH: &str = "m/44'/133'/0'/0/0";
+const SOLANA_DERIVATION_PATH: &[u32] = &[44, 501, 0, 0];
+const FILECOIN_DERIVATION_PATH: &str = "m/44'/461'/0'/0/0";
+const INJECTIVE_DERIVATION_PATH: &str = EVM_DERIVATION_PATH;
 
 struct AppState {
     wallet: Option<Wallet>,
@@ -1276,11 +1285,7 @@ async fn check_transaction_status(
 }
 
 fn signing_key_from_mnemonic(mnemonic: &str) -> Result<k256::ecdsa::SigningKey, String> {
-    let parsed = Mnemonic::parse_in_normalized(Language::English, mnemonic)
-        .map_err(|_| "Invalid mnemonic".to_string())?;
-    let seed = parsed.to_seed("");
-    let seed_bytes = seed.as_ref();
-    let private_key: [u8; 32] = Sha256::digest(seed_bytes).into();
+    let private_key = secp256k1_private_key_from_mnemonic(mnemonic, EVM_DERIVATION_PATH)?;
     k256::ecdsa::SigningKey::from_bytes((&private_key).into())
         .map_err(|_| "Failed to create signing key".to_string())
 }
@@ -1531,19 +1536,67 @@ fn address_from_seed(seed: &str) -> String {
     format!("0x{}", &hash_secret(seed)[..40])
 }
 
-fn derive_addresses_from_mnemonic(mnemonic: &str) -> Result<HashMap<String, String>, String> {
+fn mnemonic_seed(mnemonic: &str) -> Result<[u8; 64], String> {
     let mnemonic = Mnemonic::parse_in_normalized(Language::English, mnemonic)
         .map_err(|_| "Invalid recovery phrase".to_string())?;
-    let seed = mnemonic.to_seed("");
-    let seed_bytes = seed.as_ref();
-    let private_key: [u8; 32] = Sha256::digest(seed_bytes).into();
+    Ok(mnemonic.to_seed(""))
+}
 
-    let evm_address = ethereum_address_from_private_key(&private_key)?;
-    let bitcoin_address = bitcoin_bech32_address(&private_key, false)?;
-    let zcash_address = zcash_transparent_address(&private_key, false)?;
-    let solana_address = solana_address_from_seed(seed_bytes)?;
-    let filecoin_address = filecoin_address_from_private_key(&private_key)?;
-    let injective_address = bech32_account_address(&private_key, "inj")?;
+fn secp256k1_private_key_from_mnemonic(mnemonic: &str, path: &str) -> Result<[u8; 32], String> {
+    let seed = mnemonic_seed(mnemonic)?;
+    let path: DerivationPath = path.parse()
+        .map_err(|_| format!("Invalid derivation path: {path}"))?;
+    let child = XPrv::derive_from_path(&seed, &path)
+        .map_err(|_| format!("Failed to derive key at {path}"))?;
+    let bytes = child.private_key().to_bytes();
+    Ok(bytes.into())
+}
+
+fn solana_secret_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32], String> {
+    type HmacSha512 = Hmac<Sha512>;
+
+    let seed = mnemonic_seed(mnemonic)?;
+    let mut mac = <HmacSha512 as Mac>::new_from_slice(b"ed25519 seed")
+        .map_err(|_| "Failed to initialize Solana derivation".to_string())?;
+    mac.update(&seed);
+    let result = mac.finalize().into_bytes();
+    let mut key = [0u8; 32];
+    let mut chain_code = [0u8; 32];
+    key.copy_from_slice(&result[..32]);
+    chain_code.copy_from_slice(&result[32..]);
+
+    for index in SOLANA_DERIVATION_PATH {
+        let hardened = index | 0x8000_0000;
+        let mut data = Vec::with_capacity(37);
+        data.push(0);
+        data.extend_from_slice(&key);
+        data.extend_from_slice(&hardened.to_be_bytes());
+
+        let mut mac = <HmacSha512 as Mac>::new_from_slice(&chain_code)
+            .map_err(|_| "Failed to derive Solana child key".to_string())?;
+        mac.update(&data);
+        let result = mac.finalize().into_bytes();
+        key.copy_from_slice(&result[..32]);
+        chain_code.copy_from_slice(&result[32..]);
+    }
+
+    Ok(key)
+}
+
+fn derive_addresses_from_mnemonic(mnemonic: &str) -> Result<HashMap<String, String>, String> {
+    let evm_private_key = secp256k1_private_key_from_mnemonic(mnemonic, EVM_DERIVATION_PATH)?;
+    let bitcoin_private_key = secp256k1_private_key_from_mnemonic(mnemonic, BITCOIN_DERIVATION_PATH)?;
+    let zcash_private_key = secp256k1_private_key_from_mnemonic(mnemonic, ZCASH_DERIVATION_PATH)?;
+    let solana_secret_key = solana_secret_key_from_mnemonic(mnemonic)?;
+    let filecoin_private_key = secp256k1_private_key_from_mnemonic(mnemonic, FILECOIN_DERIVATION_PATH)?;
+    let injective_private_key = secp256k1_private_key_from_mnemonic(mnemonic, INJECTIVE_DERIVATION_PATH)?;
+
+    let evm_address = ethereum_address_from_private_key(&evm_private_key)?;
+    let bitcoin_address = bitcoin_bech32_address(&bitcoin_private_key, false)?;
+    let zcash_address = zcash_transparent_address(&zcash_private_key, false)?;
+    let solana_address = solana_address_from_secret_key(&solana_secret_key)?;
+    let filecoin_address = filecoin_address_from_private_key(&filecoin_private_key)?;
+    let injective_address = bech32_account_address(&injective_private_key, "inj")?;
 
     let mut addresses = HashMap::new();
     addresses.insert("evm".to_string(), evm_address);
@@ -1597,9 +1650,8 @@ fn zcash_transparent_address(private_key: &[u8; 32], is_testnet: bool) -> Result
     Ok(bs58::encode(bytes).with_check().into_string())
 }
 
-fn solana_address_from_seed(seed_bytes: &[u8]) -> Result<String, String> {
-    let secret_bytes = Sha256::digest(seed_bytes);
-    let secret = DalekSecretKey::from_bytes(&secret_bytes)
+fn solana_address_from_secret_key(secret_bytes: &[u8; 32]) -> Result<String, String> {
+    let secret = DalekSecretKey::from_bytes(secret_bytes)
         .map_err(|_| "Failed to derive Solana key".to_string())?;
     let public = DalekPublicKey::from(&secret);
     Ok(bs58::encode(public.as_bytes()).into_string())
@@ -1613,7 +1665,7 @@ fn filecoin_address_from_private_key(private_key: &[u8; 32]) -> Result<String, S
     let payload = Ripemd160::digest(&Sha256::digest(public_bytes));
     let mut bytes = vec![0x01];
     bytes.extend(payload);
-    Ok(format!("f{}", bs58::encode(bytes).into_string()))
+    Ok(format!("f1{}", bs58::encode(bytes).with_check().into_string()))
 }
 
 fn bech32_account_address(private_key: &[u8; 32], hrp: &str) -> Result<String, String> {
@@ -1795,6 +1847,19 @@ mod tests {
             let provider = get_provider(symbol);
             assert!(provider.is_some(), "No provider for symbol {symbol}");
         }
+    }
+
+    #[test]
+    fn derives_documented_wallet_paths_deterministically() {
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let addresses = derive_addresses_from_mnemonic(mnemonic).unwrap();
+        assert_eq!(addresses.len(), 6);
+        assert_eq!(addresses.get("evm").unwrap(), "0x9858effd232b4033e47d90003d41ec34ecaeda94");
+        assert_eq!(addresses.get("bitcoin").unwrap(), "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu");
+        assert_eq!(addresses.get("zcash").unwrap(), "t1XVXWCvpMgBvUaed4XDqWtgQgJSu1Ghz7F");
+        assert_eq!(addresses.get("solana").unwrap(), "HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk");
+        assert_eq!(addresses.get("filecoin").unwrap(), "f1fFXqnEMPFe1NoAajxRKukEBLwshG1LQQC");
+        assert_eq!(addresses.get("injective").unwrap(), "inj1gsvdpdxec8hsu57lhxg5xem7refr233zkczfgv");
     }
 
     #[test]
