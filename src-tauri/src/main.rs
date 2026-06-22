@@ -177,6 +177,15 @@ struct EvmTokenConfig {
     decimals: u32,
 }
 
+#[derive(Clone, Copy)]
+struct NativeAssetConfig {
+    network_id: &'static str,
+    address_key: &'static str,
+    symbol: &'static str,
+    name: &'static str,
+    decimals: u32,
+}
+
 const EVM_TOKENS: &[(&str, &[EvmTokenConfig])] = &[
     ("ethereum", &[
         EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 },
@@ -198,6 +207,14 @@ const EVM_TOKENS: &[(&str, &[EvmTokenConfig])] = &[
     ("avalanche_c", &[
         EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", decimals: 6 },
     ]),
+];
+
+const NON_EVM_NATIVE_ASSETS: &[NativeAssetConfig] = &[
+    NativeAssetConfig { network_id: "bitcoin", address_key: "bitcoin", symbol: "BTC", name: "Bitcoin", decimals: 8 },
+    NativeAssetConfig { network_id: "solana", address_key: "solana", symbol: "SOL", name: "Solana", decimals: 9 },
+    NativeAssetConfig { network_id: "zcash", address_key: "zcash", symbol: "ZEC", name: "Zcash", decimals: 8 },
+    NativeAssetConfig { network_id: "filecoin", address_key: "filecoin", symbol: "FIL", name: "Filecoin", decimals: 18 },
+    NativeAssetConfig { network_id: "injective", address_key: "injective", symbol: "INJ", name: "Injective", decimals: 18 },
 ];
 
 fn evm_tokens_for_network(network_id: &str) -> &[EvmTokenConfig] {
@@ -241,6 +258,44 @@ async fn rpc_post(url: &str, body: &serde_json::Value) -> Result<serde_json::Val
         }
 
         return response.json().await.map_err(|e| format!("RPC response parse failed: {e}"));
+    }
+    Err(last_err)
+}
+
+async fn http_get_json(url: &str) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+
+    let mut last_err = String::new();
+    for attempt in 1..=3 {
+        let response = match client
+            .get(url)
+            .header("accept", "application/json")
+            .header("user-agent", "VaultForge Wallet/0.1.0")
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                last_err = format!("HTTP request failed (attempt {attempt}/3): {e}");
+                if attempt < 3 {
+                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+                }
+                continue;
+            }
+        };
+
+        if !response.status().is_success() {
+            last_err = format!("HTTP returned {} (attempt {attempt}/3)", response.status());
+            if attempt < 3 {
+                tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+            }
+            continue;
+        }
+
+        return response.json().await.map_err(|e| format!("HTTP response parse failed: {e}"));
     }
     Err(last_err)
 }
@@ -408,7 +463,7 @@ async fn create_wallet(
         .cloned()
         .unwrap_or_else(|| address_from_seed(&mnemonic));
 
-    let assets = fetch_evm_assets(DEFAULT_EVM_CONFIG, &primary_address, &[]).await;
+    let assets = fetch_portfolio_assets(&addresses, &[]).await;
 
     let wallet = Wallet {
         name: clean_name(name),
@@ -455,7 +510,7 @@ async fn import_wallet(
         .cloned()
         .unwrap_or_else(|| address_from_seed(&mnemonic));
 
-    let assets = fetch_evm_assets(DEFAULT_EVM_CONFIG, &primary_address, &[]).await;
+    let assets = fetch_portfolio_assets(&addresses, &[]).await;
 
     let wallet = Wallet {
         name: "Imported Wallet".to_string(),
@@ -490,19 +545,19 @@ async fn unlock_wallet(
 ) -> Result<WalletSession, String> {
     let passphrase_hash = hash_secret(&passphrase);
 
-    let (address, cached_assets) = {
+    let (address, addresses, cached_assets) = {
         let mut state = state.lock().map_err(|_| "State lock failed")?;
 
         let in_memory = state.wallet.as_ref().map(|w| {
-            (w.passphrase_hash.clone(), w.address.clone(), w.assets.clone())
+            (w.passphrase_hash.clone(), w.address.clone(), w.addresses.clone(), w.assets.clone())
         });
 
-        if let Some((stored_hash, addr, assets)) = in_memory {
+        if let Some((stored_hash, addr, addresses, assets)) = in_memory {
             if stored_hash != passphrase_hash {
                 return Err("Invalid passphrase".to_string());
             }
             state.locked = false;
-            (addr, assets)
+            (addr, addresses, assets)
         } else {
             let stored = read_stored_wallet(&state.storage_path)?
                 .ok_or_else(|| "No wallet exists yet".to_string())?;
@@ -520,14 +575,17 @@ async fn unlock_wallet(
             state.encryption_key = Some(key);
             state.storage_salt = Some(salt);
             let address = wallet.address.clone();
+            let addresses = wallet.addresses.clone();
             let assets = wallet.assets.clone();
             state.wallet = Some(wallet);
             state.locked = false;
-            (address, assets)
+            (address, addresses, assets)
         }
     };
 
-    let fresh_assets = fetch_evm_assets(DEFAULT_EVM_CONFIG, &address, &cached_assets).await;
+    let mut refresh_addresses = addresses;
+    refresh_addresses.entry("evm".to_string()).or_insert(address);
+    let fresh_assets = fetch_portfolio_assets(&refresh_addresses, &cached_assets).await;
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
     if let Some(wallet) = state.wallet.as_mut() {
@@ -616,6 +674,13 @@ async fn sign_transaction(
         .ok_or_else(|| format!("Asset {symbol} not found in wallet"))?;
     let network_id = &asset.network;
     let decimals = asset.decimals;
+
+    if evm_config_by_id(network_id).is_none() {
+        return Err(format!(
+            "{} transfers on {} are not implemented yet",
+            symbol, network_id
+        ));
+    }
 
     let config = evm_config_by_id(network_id)
         .ok_or_else(|| format!("No EVM chain configured for network {network_id}"))?;
@@ -1125,6 +1190,84 @@ fn cached_asset(cached_assets: &[Asset], network_id: &str, symbol: &str) -> Opti
         .iter()
         .find(|asset| asset.network == network_id && asset.symbol == symbol)
         .cloned()
+}
+
+async fn fetch_portfolio_assets(addresses: &HashMap<String, String>, cached_assets: &[Asset]) -> Vec<Asset> {
+    let mut assets = vec![];
+
+    if let Some(evm_address) = addresses.get("evm") {
+        assets.extend(fetch_evm_assets(DEFAULT_EVM_CONFIG, evm_address, cached_assets).await);
+    }
+
+    for config in NON_EVM_NATIVE_ASSETS {
+        let Some(address) = addresses.get(config.address_key) else {
+            continue;
+        };
+
+        match fetch_non_evm_native_asset(config, address).await {
+            Ok(asset) => assets.push(asset),
+            Err(_) => {
+                if let Some(cached) = cached_asset(cached_assets, config.network_id, config.symbol) {
+                    assets.push(cached);
+                }
+            }
+        }
+    }
+
+    assets
+}
+
+async fn fetch_non_evm_native_asset(config: &NativeAssetConfig, address: &str) -> Result<Asset, String> {
+    let balance = match config.symbol {
+        "BTC" => fetch_bitcoin_balance(address).await?,
+        "SOL" => fetch_solana_balance(address).await?,
+        _ => return Err(format!("{} provider is not implemented yet", config.symbol)),
+    };
+
+    Ok(Asset {
+        symbol: config.symbol.to_string(),
+        name: config.name.to_string(),
+        balance,
+        decimals: config.decimals,
+        price_usd: 0.0,
+        change_24h: 0.0,
+        network: config.network_id.to_string(),
+    })
+}
+
+async fn fetch_bitcoin_balance(address: &str) -> Result<String, String> {
+    let url = format!("https://blockstream.info/api/address/{address}");
+    let json = http_get_json(&url).await?;
+    parse_bitcoin_balance(&json).map(|sats| sats.to_string())
+}
+
+fn parse_bitcoin_balance(json: &serde_json::Value) -> Result<u128, String> {
+    let funded = json["chain_stats"]["funded_txo_sum"].as_u64().unwrap_or(0) as u128;
+    let spent = json["chain_stats"]["spent_txo_sum"].as_u64().unwrap_or(0) as u128;
+    let mempool_funded = json["mempool_stats"]["funded_txo_sum"].as_u64().unwrap_or(0) as u128;
+    let mempool_spent = json["mempool_stats"]["spent_txo_sum"].as_u64().unwrap_or(0) as u128;
+
+    let confirmed = funded.saturating_sub(spent);
+    let mempool = mempool_funded.saturating_sub(mempool_spent);
+    Ok(confirmed + mempool)
+}
+
+async fn fetch_solana_balance(address: &str) -> Result<String, String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "getBalance",
+        "params": [address],
+        "id": 1,
+    });
+    let json = rpc_post("https://api.mainnet-beta.solana.com", &body).await?;
+    parse_solana_balance(&json).map(|lamports| lamports.to_string())
+}
+
+fn parse_solana_balance(json: &serde_json::Value) -> Result<u128, String> {
+    json["result"]["value"]
+        .as_u64()
+        .map(|value| value as u128)
+        .ok_or_else(|| "Solana balance RPC missing result.value".to_string())
 }
 
 async fn fetch_evm_assets(config: &EvmNetworkConfig, address: &str, cached_assets: &[Asset]) -> Vec<Asset> {
@@ -1870,6 +2013,34 @@ mod tests {
         assert_eq!(cached.balance, "2482100000000000000000");
         assert!(cached_asset(&assets, "polygon", "ETH").is_none());
         assert!(cached_asset(&assets, "ethereum", "MATIC").is_none());
+    }
+
+    #[test]
+    fn parses_bitcoin_balance_with_mempool_values() {
+        let json = serde_json::json!({
+            "chain_stats": {
+                "funded_txo_sum": 5000,
+                "spent_txo_sum": 1200
+            },
+            "mempool_stats": {
+                "funded_txo_sum": 700,
+                "spent_txo_sum": 200
+            }
+        });
+        assert_eq!(parse_bitcoin_balance(&json).unwrap(), 4300);
+    }
+
+    #[test]
+    fn parses_solana_balance_lamports() {
+        let json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "result": {
+                "context": { "slot": 1 },
+                "value": 123456789u64
+            },
+            "id": 1
+        });
+        assert_eq!(parse_solana_balance(&json).unwrap(), 123456789);
     }
 
     #[test]
