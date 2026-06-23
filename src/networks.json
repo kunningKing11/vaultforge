@@ -1,0 +1,14 @@
+[
+  { "kind": "evm", "id": "ethereum", "name": "Ethereum", "chainId": 1, "ticker": "ETH", "vm_type": "EVM", "isL2": false, "isTestNet": false },
+  { "kind": "evm", "id": "monad", "name": "Monad", "chainId": 167004, "ticker": "MON", "vm_type": "EVM", "isL2": false, "isTestNet": false },
+  { "kind": "evm", "id": "polygon", "name": "Polygon", "chainId": 137, "ticker": "MATIC", "vm_type": "EVM", "isL2": true, "isTestNet": false },
+  { "kind": "evm", "id": "arbitrum_one", "name": "Arbitrum One", "chainId": 42161, "ticker": "ETH", "vm_type": "EVM", "isL2": true, "isTestNet": false },
+  { "kind": "evm", "id": "base", "name": "Base", "chainId": 8453, "ticker": "ETH", "vm_type": "EVM", "isL2": true, "isTestNet": false },
+  { "kind": "evm", "id": "optimism", "name": "Optimism", "chainId": 10, "ticker": "ETH", "vm_type": "EVM", "isL2": true, "isTestNet": false },
+  { "kind": "evm", "id": "avalanche_c", "name": "Avalanche C-Chain", "chainId": 43114, "ticker": "AVAX", "vm_type": "EVM", "isL2": false, "isTestNet": false },
+  { "kind": "bitcoin", "id": "bitcoin", "name": "Bitcoin", "ticker": "BTC", "isL2": false, "isTestNet": false },
+  { "kind": "solana", "id": "solana", "name": "Solana", "ticker": "SOL", "vm_type": "SVM", "isL2": false, "isTestNet": false },
+  { "kind": "zcash", "id": "zcash", "name": "Zcash", "ticker": "ZEC", "isL2": false, "isTestNet": false },
+  { "kind": "filecoin", "id": "filecoin", "name": "Filecoin", "ticker": "FIL", "vm_type": "FVM", "isL2": false, "isTestNet": false },
+  { "kind": "injective", "id": "injective", "name": "Injective", "ticker": "INJ", "vm_type": "MultiVM", "isL2": false, "isTestNet": false }
+]

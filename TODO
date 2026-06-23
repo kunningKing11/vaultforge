@@ -4,7 +4,7 @@ TODO
 Remaining Real Wallet Blockers
 ===============================
 
-- Swaps are still simulated local accounting and must be removed or replaced with real routing before mainnet use.
+- Swaps are still simulated local accounting and must be removed or replaced with real routing (e.g. Near Intents) before mainnet use.
 - BTC now has real balance fetching, UTXO discovery, fee-rate estimation, native SegWit transaction construction/signing, broadcast, and status tracking through Blockstream/Esplora APIs. It still needs a cleaner provider boundary, PSBT support, better mempool/drop/replacement handling, and optional PublicNode-backed RPC where it supports required wallet-provider APIs reliably.
 - SOL has real native balance fetching, but still needs recent blockhash retrieval, SOL transfer construction, ed25519 signing, `sendTransaction`, status tracking, and later SPL token support. Prefer PublicNode/provider endpoints where they support these APIs reliably.
 - ZEC transparent support still needs real UTXO discovery, fee estimation, signing, broadcast, and status tracking. Unified addresses, private notes, and shielded pools require separate support for Orchard, Sapling, and legacy Sprout where applicable.
@@ -80,7 +80,7 @@ Recommended Path
 10. [x] Add cached-balance fallback for refresh failures.
 11. [x] Add BTC and SOL native balance refresh.
 12. [x] Implement Bitcoin native SegWit provider path (UTXO discovery, fee rates, transaction construction, signing, broadcast, status).
-13. [ ] Replace simulated swap with real DEX or remove swap until real.
+13. [ ] Replace simulated swap with real routing (e.g. Near Intents) or remove swap until real.
 14. [ ] Harden Bitcoin provider boundary: PSBT support, RPC/provider abstraction, mempool/drop/replacement handling, richer status tracking, and inscription-safe coin selection.
 15. [ ] Implement Solana provider (recent blockhash, SOL transfer signing, sendTransaction, status).
 16. [ ] Implement Zcash transparent provider (transparent UTXO discovery, fee estimation, signing, broadcast, status), using PublicNode RPC if it exposes the required Zcash APIs reliably.

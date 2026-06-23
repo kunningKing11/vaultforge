@@ -92,113 +92,73 @@ export type Toast = {
   exiting: boolean;
 };
 
-export type EvmNetworkInput = {
+export type EvmNetwork = {
   kind: "evm";
   id: NetworkId;
   name: string;
   chainId: number;
   ticker: string;
   vm_type?: "EVM";
-  isL2?: boolean;
-  isTestNet?: boolean;
-};
-
-export type EvmNetwork = Omit<Required<EvmNetworkInput>, "vm_type"> & {
-  vm_type?: "EVM";
   isL2: boolean;
   isTestNet: boolean;
 };
 
-export type BitcoinNetworkInput = {
+export type BitcoinNetwork = {
   kind: "bitcoin";
   id: NetworkId;
   name: string;
   ticker: "BTC";
-  isTestNet?: boolean;
-};
-
-export type BitcoinNetwork = Omit<Required<BitcoinNetworkInput>, "vm_type"> & {
-  vm_type?: "FVM",
   isL2: boolean,
   isTestNet: boolean,
 }
 
-export type LightningNetworkInput = {
+export type LightningNetwork = {
   kind: "lightning";
   id: NetworkId;
   name: string;
   ticker: "BTC";
-  isTestNet?: boolean;
-};
-
-export type LightningNetwork = Omit<Required<LightningNetworkInput>, "vm_type"> & {
   isL2: boolean,
   isTestNet: boolean,
 }
 
-export type SolanaNetworkInput = {
+export type SolanaNetwork = {
   kind: "solana";
   id: NetworkId;
   name: string;
   ticker: "SOL";
-  isTestNet?: boolean;
-};
-
-export type SolanaNetwork = Omit<Required<SolanaNetworkInput>, "vm_type"> & {
-  vm_type?: "SVM",
+  vm_type: "SVM",
   isL2: boolean,
   isTestNet: boolean,
 }
 
-export type ZcashNetworkInput = {
+export type ZcashNetwork = {
   kind: "zcash";
   id: NetworkId;
   name: string;
   ticker: "ZEC";
-  isTestNet?: boolean;
-}
-
-export type ZcashNetwork = Omit<Required<ZcashNetworkInput>, "vm_type"> & {
   isL2: boolean;
   isTestNet: boolean;
 }
 
-export type FilecoinNetworkInput = {
+export type FilecoinNetwork = {
   kind: "filecoin";
   id: NetworkId;
   name: string;
   ticker: "FIL";
-  isTestNet?: boolean;
-}
-
-export type FilecoinNetwork = Omit<Required<FilecoinNetworkInput>, "vm_type"> & {
-  vm_type?: "FVM",
+  vm_type: "FVM",
   isL2: boolean,
   isTestNet: boolean,
 }
 
-export type InjectiveNetworkInput = {
+export type InjectiveNetwork = {
   kind: "injective";
   id: NetworkId;
   name: string;
   ticker: "INJ";
-  isTestNet?: boolean;
-};
-
-export type InjectiveNetwork = Omit<Required<InjectiveNetworkInput>, "vm_type"> & {
-  vm_type?: "MultiVM",
+  vm_type: "MultiVM",
   isL2: boolean,
   isTestNet: boolean,
 }
-
-export type NetworkInput =
-  | EvmNetworkInput
-  | BitcoinNetworkInput
-  | LightningNetworkInput
-  | SolanaNetworkInput
-  | ZcashNetworkInput
-  | FilecoinNetworkInput
-  | InjectiveNetworkInput;
 
 export type Network =
   | EvmNetwork
