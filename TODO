@@ -1,4 +1,97 @@
 TODO
 ====
 
-- Per-blockchain RPC for real wallet balance
+Remaining Real Wallet Blockers
+===============================
+
+- Swaps are still simulated local accounting and must be removed or replaced with real routing before mainnet use.
+- BTC now has real balance fetching, UTXO discovery, fee-rate estimation, native SegWit transaction construction/signing, broadcast, and status tracking through Blockstream/Esplora APIs. It still needs a cleaner provider boundary, PSBT support, better mempool/drop/replacement handling, and optional PublicNode-backed RPC where it supports required wallet-provider APIs reliably.
+- SOL has real native balance fetching, but still needs recent blockhash retrieval, SOL transfer construction, ed25519 signing, `sendTransaction`, status tracking, and later SPL token support. Prefer PublicNode/provider endpoints where they support these APIs reliably.
+- ZEC transparent support still needs real UTXO discovery, fee estimation, signing, broadcast, and status tracking. Unified addresses, private notes, and shielded pools require separate support for Orchard, Sapling, and legacy Sprout where applicable.
+- FIL and INJ still need real balance fetching, fee estimation, chain-specific signing, broadcast, and status providers.
+- Tron is not supported yet: no network definition, `m/44'/195'/0'/0/0` derivation, address validation, TRX/TRC-20 balance fetching, bandwidth/energy/fee-limit handling, transaction signing, broadcast, or status provider.
+- NFTs are not supported yet on any chain: no ownership discovery, metadata fetching, media safety model, transfer construction, UTXO protection for inscriptions, compressed NFT handling, or spam/scam filtering.
+- Lightning is not supported yet: no node/LSP strategy, channel/liquidity management, invoice/payment flow, status tracking, or backup/recovery model.
+- Balance refresh has RPC retry and encrypted cached-balance fallback, but still needs explicit stale/fresh metadata, last-refreshed timestamps, and refresh-error display in the UI.
+- Wallet payloads now use HD derivation paths, but older persisted wallets may need migration metadata so address changes are not surprising.
+
+Production-Grade Security Gaps
+===============================
+
+- Key handling is improved with zeroization on lock/clear, but mnemonics and derived keys still exist in process memory while unlocked; move toward zeroization-capable secret containers and minimize clone/string lifetimes.
+- No hardware wallet support yet; add hardware-backed signing before recommending larger real-fund balances.
+- HD derivation paths exist, but there is not yet a full account/index management model, derivation metadata migration, or multi-account UX.
+- Add weak/public mnemonic import guards for known test vectors, repeated-word phrases, and other obviously compromised seeds.
+- Balance and activity caches are encrypted at rest, but stale/fresh metadata and refresh-error states need to be explicit to avoid users making decisions on stale balances.
+- RPC/provider trust is not hardened: add provider pinning/configuration, fallback policy, error classification, rate-limit handling, and privacy review for address lookups.
+- Transaction safety needs more coverage: mempool/drop/replacement handling, chain reorg handling, receipt/log validation for ERC-20 transfers, and clearer pending/failed state transitions.
+- NFT/media support must include strict content security, media proxy/cache rules, metadata sanitization, spam filtering, and protections against malicious SVG/HTML/media payloads before launch.
+- Zcash shielded support must not ship until viewing keys, private note storage, note scanning, witness/nullifier tracking, proving, and pool-specific security are audited.
+- No formal threat model, external audit, reproducible release process, or CI enforcement for `cargo check`, `cargo test`, and `npx tsc --noEmit` yet.
+- Tests are improved but still thin for full provider, fee estimation, signing, broadcast, status, migration, stale-cache, and adversarial error coverage.
+
+What Is Good
+============
+
+- Frontend TypeScript type-checks with npx tsc --noEmit.
+- cargo check, cargo test (17 tests) all pass clean.
+- Real BIP39 mnemonic generation.
+- Real EVM address derivation.
+- Real EVM native balance fetching via JSON-RPC.
+- **Real EIP-1559 transaction construction, ECDSA signing, RLP encoding, and RPC broadcast.**
+- Real nonce, gas price, and gas estimation from the chain.
+- Real ERC-20 token balance fetching via `eth_call` + `balanceOf`.
+- Real ERC-20 transfer construction/signing/broadcast via `transfer(address,uint256)` contract calls.
+- Real transaction status polling via `eth_getTransactionReceipt`.
+- Real BTC balance fetching via Blockstream address API.
+- Real BTC UTXO discovery, fee-rate estimation, native SegWit transaction construction/signing, broadcast, and status polling via Blockstream/Esplora APIs.
+- Real SOL balance fetching via Solana `getBalance` RPC.
+- Balance refresh falls back to encrypted cached balances on provider failure.
+- BIP32/BIP44-style account derivation for secp256k1 chains and hardened Solana derivation.
+- CSP enabled and lock/clear paths zeroize key material and mnemonic memory.
+- Encrypted local storage (AES-GCM · Argon2 key derivation).
+- Lock/unlock/clear lifecycle.
+- Active-network concept removed — each asset/tx carries its own network metadata.
+- Amounts stored as integer base units (wei strings) instead of f64.
+- UI foundation, Tauri command structure, on-boarding flow.
+
+Refactoring (Mechanical Split)
+===============================
+
+- [x] TypeScript: extracted state, commands, events, QR, and render modules from monolithic main.ts (1089→11 lines).
+- [x] Rust: moved Bitcoin serialization/signing helpers to providers/bitcoin.rs.
+- [x] Rust: moved NativeAssetConfig, portfolio helpers, ChainProvider trait to providers.rs.
+- [x] Rust: moved clear_secret_string and validate_unlocked to state.rs.
+- [x] Rust: cleaned up unused imports; main.rs reduced from 1376→934 lines.
+- [x] All 17 tests pass; cargo check clean; npx tsc --noEmit clean.
+
+Recommended Path
+================
+
+1. [x] Compile + struct contract + session DTO alignment.
+2. [x] Real BIP39 mnemonic generation/import.
+3. [x] Real EVM native balance fetching.
+4. [x] Real EIP-1559 signing, fee estimation, nonce, broadcast.
+5. [x] Add transaction status/receipt polling after broadcast.
+6. [x] Add ERC-20 token balance fetching.
+7. [x] Add ERC-20 token transfer signing/broadcast.
+8. [x] Harden address validation.
+9. [x] Add BIP32/BIP44-style derivation paths.
+10. [x] Add cached-balance fallback for refresh failures.
+11. [x] Add BTC and SOL native balance refresh.
+12. [x] Implement Bitcoin native SegWit provider path (UTXO discovery, fee rates, transaction construction, signing, broadcast, status).
+13. [ ] Replace simulated swap with real DEX or remove swap until real.
+14. [ ] Harden Bitcoin provider boundary: PSBT support, RPC/provider abstraction, mempool/drop/replacement handling, richer status tracking, and inscription-safe coin selection.
+15. [ ] Implement Solana provider (recent blockhash, SOL transfer signing, sendTransaction, status).
+16. [ ] Implement Zcash transparent provider (transparent UTXO discovery, fee estimation, signing, broadcast, status), using PublicNode RPC if it exposes the required Zcash APIs reliably.
+17. [ ] Add Zcash unified address support (parse/validate unified addresses and select supported receivers in a documented order: Orchard, Sapling, then transparent where available).
+18. [ ] Add Zcash shielded support only when all required pieces are implemented: viewing keys, private note discovery/storage, note scanning, witness tracking, nullifier tracking, proving, shielded tx construction, and shielded pool handling for Orchard, Sapling, and legacy Sprout where applicable.
+19. [ ] Implement Injective and Filecoin with chain-specific correctness.
+20. [ ] Prefer PublicNode RPC/provider endpoints for BTC, SOL, ZEC, FIL, and INJ where available, but fall back to chain-appropriate reliable public APIs only when PublicNode lacks required wallet-provider capabilities.
+21. [ ] Add Tron provider support: network definition, `m/44'/195'/0'/0/0` derivation, base58check `0x41` address validation, TRX balance fetching, TRC-20 balance fetching, bandwidth/energy/fee-limit model, transaction signing, broadcast, and status polling. Prefer PublicNode if it exposes the needed Tron APIs reliably; otherwise evaluate TronGrid/full-node providers.
+22. [ ] Add EVM NFT support: ERC-721 ownership discovery, ERC-1155 balance discovery, metadata fetching, media caching/security rules, NFT transfer signing/broadcast, and spam/scam NFT filtering.
+23. [ ] Add Solana NFT support: token account scanning, Metaplex metadata discovery, media fetching, NFT transfer signing/broadcast, and compressed NFT support as a later milestone.
+24. [ ] Add Bitcoin Ordinals/inscription support: inscription discovery, UTXO labeling, PSBT handling that avoids accidental inscription UTXO spends, transfer construction, and status tracking.
+25. [ ] Add NFT support for additional relevant chains only after standards/provider APIs are identified per chain (Injective, Filecoin, Tron, and any Zcash-relevant asset/NFT standard); do not claim NFT support without chain-specific discovery, metadata, transfer, and safety handling.
+26. [ ] Add real Lightning support only with a defined node/LSP strategy, invoice creation, payment sending, channel/liquidity management, payment status tracking, backup/recovery, and clear custodial/non-custodial boundaries.
+27. [ ] Harden remaining security: secret storage while unlocked, tests, CI, threat model, audit.
