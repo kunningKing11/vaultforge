@@ -1,3 +1,10 @@
+---
+title: VaultForge Wallet
+description: A local-first crypto wallet desktop app built with TypeScript, TailwindCSS, Rust, and Tauri.
+markdownlint:
+  MD033: false
+---
+
 <div align="center">
 <pre>
 '##::::'##::::'###::::'##::::'##:'##:::::::'########:'########::'#######::'########:::'######:::'########:
