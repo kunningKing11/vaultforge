@@ -1,7 +1,7 @@
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
 use argon2::Argon2;
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
-use bech32::{self, ToBase32, Variant};
+use bech32::{self, FromBase32, ToBase32, Variant};
 use zeroize::Zeroize;
 use bip32::{DerivationPath, XPrv};
 use bip39::{Language, Mnemonic};
@@ -186,6 +186,34 @@ struct NativeAssetConfig {
     decimals: u32,
 }
 
+#[derive(Clone, Debug)]
+struct BitcoinUtxo {
+    txid: String,
+    vout: u32,
+    value: u64,
+    confirmed: bool,
+}
+
+#[derive(Clone)]
+struct BitcoinTxInput {
+    utxo: BitcoinUtxo,
+    script_code: Vec<u8>,
+}
+
+#[derive(Clone)]
+struct BitcoinTxOutput {
+    value: u64,
+    script_pubkey: Vec<u8>,
+}
+
+struct BitcoinSignedTransfer {
+    txid: String,
+    raw_tx_hex: String,
+    first_signature_hex: String,
+    fee_sats: u64,
+    post_balance: u64,
+}
+
 const EVM_TOKENS: &[(&str, &[EvmTokenConfig])] = &[
     ("ethereum", &[
         EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 },
@@ -296,6 +324,47 @@ async fn http_get_json(url: &str) -> Result<serde_json::Value, String> {
         }
 
         return response.json().await.map_err(|e| format!("HTTP response parse failed: {e}"));
+    }
+    Err(last_err)
+}
+
+async fn http_post_text(url: &str, body: &str) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+
+    let mut last_err = String::new();
+    for attempt in 1..=3 {
+        let response = match client
+            .post(url)
+            .body(body.to_string())
+            .header("content-type", "text/plain")
+            .header("user-agent", "VaultForge Wallet/0.1.0")
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                last_err = format!("HTTP POST failed (attempt {attempt}/3): {e}");
+                if attempt < 3 {
+                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+                }
+                continue;
+            }
+        };
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            last_err = format!("HTTP POST returned {status} (attempt {attempt}/3): {text}");
+            if attempt < 3 {
+                tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+            }
+            continue;
+        }
+
+        return response.text().await.map_err(|e| format!("HTTP response parse failed: {e}"));
     }
     Err(last_err)
 }
@@ -652,7 +721,7 @@ async fn sign_transaction(
 ) -> Result<SignedTransaction, String> {
     validate_unlocked(&state)?;
 
-    let (mnemonic, address, assets) = {
+    let (mnemonic, address, addresses, assets) = {
         let state = state.lock().map_err(|_| "State lock failed")?;
         let wallet = state
             .wallet
@@ -662,6 +731,7 @@ async fn sign_transaction(
         (
             wallet.mnemonic.clone(),
             wallet.address.clone(),
+            wallet.addresses.clone(),
             wallet.assets.clone(),
         )
     };
@@ -674,6 +744,37 @@ async fn sign_transaction(
         .ok_or_else(|| format!("Asset {symbol} not found in wallet"))?;
     let network_id = &asset.network;
     let decimals = asset.decimals;
+
+    if network_id == "bitcoin" && symbol == "BTC" {
+        let from = addresses
+            .get("bitcoin")
+            .ok_or_else(|| "Wallet BTC address is not available".to_string())?
+            .clone();
+        let amount_sats: u64 = value_wei
+            .try_into()
+            .map_err(|_| "BTC amount is too large".to_string())?;
+        let signed_btc = sign_bitcoin_transfer(&mnemonic, &from, &to, amount_sats).await?;
+        return Ok(SignedTransaction {
+            from,
+            to,
+            symbol: symbol.clone(),
+            amount: value_wei.to_string(),
+            note: note.trim().to_string(),
+            network: "bitcoin".to_string(),
+            nonce: "utxo".to_string(),
+            signed_at: Utc::now().to_rfc3339(),
+            payload_hash: signed_btc.txid.clone(),
+            signature: signed_btc.first_signature_hex,
+            fee_amount: signed_btc.fee_sats.to_string(),
+            fee_symbol: "BTC".to_string(),
+            total_debit: (amount_sats + signed_btc.fee_sats).to_string(),
+            post_balance: signed_btc.post_balance.to_string(),
+            decimals,
+            fiat_value: 0.0,
+            raw_tx: Some(signed_btc.raw_tx_hex),
+            tx_hash: Some(signed_btc.txid),
+        });
+    }
 
     if evm_config_by_id(network_id).is_none() {
         return Err(format!(
@@ -774,7 +875,7 @@ async fn send_transaction(
             .wallet
             .as_ref()
             .ok_or_else(|| "No wallet exists yet".to_string())?;
-        if signed.from != wallet.address {
+        if signed.from != wallet.address && !wallet.addresses.values().any(|address| address == &signed.from) {
             return Err("Signed transaction does not match this wallet".to_string());
         }
     }
@@ -784,11 +885,14 @@ async fn send_transaction(
         .as_ref()
         .ok_or_else(|| "No raw transaction data".to_string())?;
 
-    let config = evm_config_for_symbol(&signed.symbol)
-        .or_else(|| evm_config_by_id(&signed.network))
-        .ok_or_else(|| format!("No EVM chain configured for {}", signed.symbol))?;
-
-    let tx_hash = broadcast_evm_transaction(config, raw_tx).await?;
+    let tx_hash = if signed.network == "bitcoin" && signed.symbol == "BTC" {
+        broadcast_bitcoin_transaction(raw_tx).await?
+    } else {
+        let config = evm_config_for_symbol(&signed.symbol)
+            .or_else(|| evm_config_by_id(&signed.network))
+            .ok_or_else(|| format!("No EVM chain configured for {}", signed.symbol))?;
+        broadcast_evm_transaction(config, raw_tx).await?
+    };
 
     let memo = if signed.note.is_empty() {
         format!("Sent to {}", short_address(&signed.to))
@@ -1270,6 +1374,334 @@ fn parse_solana_balance(json: &serde_json::Value) -> Result<u128, String> {
         .ok_or_else(|| "Solana balance RPC missing result.value".to_string())
 }
 
+async fn fetch_bitcoin_utxos(address: &str) -> Result<Vec<BitcoinUtxo>, String> {
+    let url = format!("https://blockstream.info/api/address/{address}/utxo");
+    let json = http_get_json(&url).await?;
+    parse_bitcoin_utxos(&json)
+}
+
+fn parse_bitcoin_utxos(json: &serde_json::Value) -> Result<Vec<BitcoinUtxo>, String> {
+    let arr = json.as_array().ok_or_else(|| "Bitcoin UTXO response is not an array".to_string())?;
+    let mut utxos = vec![];
+    for item in arr {
+        let txid = item["txid"]
+            .as_str()
+            .ok_or_else(|| "Bitcoin UTXO missing txid".to_string())?
+            .to_string();
+        if txid.len() != 64 || !txid.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err("Bitcoin UTXO txid is invalid".to_string());
+        }
+        let vout = item["vout"].as_u64().ok_or_else(|| "Bitcoin UTXO missing vout".to_string())?;
+        let value = item["value"].as_u64().ok_or_else(|| "Bitcoin UTXO missing value".to_string())?;
+        if value < 546 {
+            continue;
+        }
+        utxos.push(BitcoinUtxo {
+            txid,
+            vout: u32::try_from(vout).map_err(|_| "Bitcoin UTXO vout is too large".to_string())?,
+            value,
+            confirmed: item["status"]["confirmed"].as_bool().unwrap_or(false),
+        });
+    }
+    utxos.sort_by(|a, b| b.confirmed.cmp(&a.confirmed).then(a.value.cmp(&b.value)));
+    Ok(utxos)
+}
+
+async fn fetch_bitcoin_fee_rate() -> Result<u64, String> {
+    let json = http_get_json("https://blockstream.info/api/fee-estimates").await?;
+    parse_bitcoin_fee_rate(&json)
+}
+
+fn parse_bitcoin_fee_rate(json: &serde_json::Value) -> Result<u64, String> {
+    for target in ["3", "6", "12", "1"] {
+        if let Some(rate) = json[target].as_f64() {
+            if rate.is_finite() && rate > 0.0 {
+                return Ok(rate.ceil().max(1.0) as u64);
+            }
+        }
+    }
+    Err("Bitcoin fee estimate response missing usable fee rate".to_string())
+}
+
+fn bitcoin_varint(value: u64) -> Vec<u8> {
+    if value < 0xfd {
+        vec![value as u8]
+    } else if value <= 0xffff {
+        let mut out = vec![0xfd];
+        out.extend_from_slice(&(value as u16).to_le_bytes());
+        out
+    } else if value <= 0xffff_ffff {
+        let mut out = vec![0xfe];
+        out.extend_from_slice(&(value as u32).to_le_bytes());
+        out
+    } else {
+        let mut out = vec![0xff];
+        out.extend_from_slice(&value.to_le_bytes());
+        out
+    }
+}
+
+fn bitcoin_push_data(data: &[u8]) -> Vec<u8> {
+    let mut out = bitcoin_varint(data.len() as u64);
+    out.extend_from_slice(data);
+    out
+}
+
+fn bitcoin_p2wpkh_script_pubkey(pubkey_hash: &[u8]) -> Vec<u8> {
+    let mut script = vec![0x00, 0x14];
+    script.extend_from_slice(pubkey_hash);
+    script
+}
+
+fn bitcoin_p2pkh_script_code(pubkey_hash: &[u8]) -> Vec<u8> {
+    let mut script = vec![0x76, 0xa9, 0x14];
+    script.extend_from_slice(pubkey_hash);
+    script.extend_from_slice(&[0x88, 0xac]);
+    script
+}
+
+fn bitcoin_script_pubkey_from_address(address: &str) -> Result<Vec<u8>, String> {
+    if address.starts_with("bc1") {
+        let (hrp, data, variant) = bech32::decode(address)
+            .map_err(|_| "Invalid Bitcoin bech32 recipient".to_string())?;
+        if hrp != "bc" || variant != Variant::Bech32 || data.is_empty() {
+            return Err("Unsupported Bitcoin bech32 recipient".to_string());
+        }
+        let version = data[0].to_u8();
+        let program = Vec::<u8>::from_base32(&data[1..])
+            .map_err(|_| "Invalid Bitcoin witness program".to_string())?;
+        if version != 0 || program.len() != 20 {
+            return Err("Only mainnet P2WPKH bc1 recipients are supported".to_string());
+        }
+        return Ok(bitcoin_p2wpkh_script_pubkey(&program));
+    }
+
+    let decoded = bs58::decode(address).with_check(None).into_vec()
+        .map_err(|_| "Invalid Bitcoin base58 recipient".to_string())?;
+    if decoded.len() != 21 {
+        return Err("Unsupported Bitcoin base58 recipient length".to_string());
+    }
+    let version = decoded[0];
+    let hash = &decoded[1..];
+    match version {
+        0x00 => {
+            let mut script = vec![0x76, 0xa9, 0x14];
+            script.extend_from_slice(hash);
+            script.extend_from_slice(&[0x88, 0xac]);
+            Ok(script)
+        }
+        0x05 => {
+            let mut script = vec![0xa9, 0x14];
+            script.extend_from_slice(hash);
+            script.push(0x87);
+            Ok(script)
+        }
+        _ => Err("Only mainnet Bitcoin recipients are supported".to_string()),
+    }
+}
+
+fn bitcoin_txid_le(txid: &str) -> Result<Vec<u8>, String> {
+    let mut bytes = hex::decode(txid).map_err(|_| "Invalid Bitcoin txid hex".to_string())?;
+    if bytes.len() != 32 {
+        return Err("Bitcoin txid must be 32 bytes".to_string());
+    }
+    bytes.reverse();
+    Ok(bytes)
+}
+
+fn bitcoin_double_sha256(data: &[u8]) -> [u8; 32] {
+    let first = Sha256::digest(data);
+    Sha256::digest(first).into()
+}
+
+fn bitcoin_txid_from_stripped(stripped_tx: &[u8]) -> String {
+    let mut hash = bitcoin_double_sha256(stripped_tx);
+    hash.reverse();
+    hex::encode(hash)
+}
+
+fn bitcoin_serialize_outputs(outputs: &[BitcoinTxOutput]) -> Vec<u8> {
+    let mut out = bitcoin_varint(outputs.len() as u64);
+    for output in outputs {
+        out.extend_from_slice(&output.value.to_le_bytes());
+        out.extend(bitcoin_push_data(&output.script_pubkey));
+    }
+    out
+}
+
+fn bitcoin_serialize_stripped(inputs: &[BitcoinTxInput], outputs: &[BitcoinTxOutput]) -> Result<Vec<u8>, String> {
+    let mut tx = vec![];
+    tx.extend_from_slice(&2i32.to_le_bytes());
+    tx.extend(bitcoin_varint(inputs.len() as u64));
+    for input in inputs {
+        tx.extend(bitcoin_txid_le(&input.utxo.txid)?);
+        tx.extend_from_slice(&input.utxo.vout.to_le_bytes());
+        tx.push(0x00);
+        tx.extend_from_slice(&0xffff_ffffu32.to_le_bytes());
+    }
+    tx.extend(bitcoin_serialize_outputs(outputs));
+    tx.extend_from_slice(&0u32.to_le_bytes());
+    Ok(tx)
+}
+
+fn bitcoin_sighash(input_index: usize, inputs: &[BitcoinTxInput], outputs: &[BitcoinTxOutput]) -> Result<[u8; 32], String> {
+    let mut prevouts = vec![];
+    let mut sequences = vec![];
+    for input in inputs {
+        prevouts.extend(bitcoin_txid_le(&input.utxo.txid)?);
+        prevouts.extend_from_slice(&input.utxo.vout.to_le_bytes());
+        sequences.extend_from_slice(&0xffff_ffffu32.to_le_bytes());
+    }
+
+    let hash_prevouts = bitcoin_double_sha256(&prevouts);
+    let hash_sequence = bitcoin_double_sha256(&sequences);
+    let hash_outputs = bitcoin_double_sha256(&bitcoin_serialize_outputs(outputs));
+    let input = inputs.get(input_index).ok_or_else(|| "Bitcoin input index out of range".to_string())?;
+
+    let mut preimage = vec![];
+    preimage.extend_from_slice(&2i32.to_le_bytes());
+    preimage.extend_from_slice(&hash_prevouts);
+    preimage.extend_from_slice(&hash_sequence);
+    preimage.extend(bitcoin_txid_le(&input.utxo.txid)?);
+    preimage.extend_from_slice(&input.utxo.vout.to_le_bytes());
+    preimage.extend(bitcoin_push_data(&input.script_code));
+    preimage.extend_from_slice(&input.utxo.value.to_le_bytes());
+    preimage.extend_from_slice(&0xffff_ffffu32.to_le_bytes());
+    preimage.extend_from_slice(&hash_outputs);
+    preimage.extend_from_slice(&0u32.to_le_bytes());
+    preimage.extend_from_slice(&1u32.to_le_bytes());
+    Ok(bitcoin_double_sha256(&preimage))
+}
+
+fn bitcoin_estimated_vbytes(input_count: usize, output_count: usize) -> u64 {
+    10 + (input_count as u64 * 68) + (output_count as u64 * 34)
+}
+
+fn bitcoin_select_coins(utxos: &[BitcoinUtxo], amount: u64, fee_rate_sat_vb: u64) -> Result<(Vec<BitcoinUtxo>, u64, u64), String> {
+    let mut selected = vec![];
+    let mut total = 0u64;
+    for utxo in utxos.iter().filter(|u| u.confirmed).chain(utxos.iter().filter(|u| !u.confirmed)) {
+        selected.push(utxo.clone());
+        total = total.saturating_add(utxo.value);
+        let fee_with_change = bitcoin_estimated_vbytes(selected.len(), 2).saturating_mul(fee_rate_sat_vb);
+        if total >= amount.saturating_add(fee_with_change) {
+            let change = total - amount - fee_with_change;
+            if change < 546 {
+                let fee_no_change = bitcoin_estimated_vbytes(selected.len(), 1).saturating_mul(fee_rate_sat_vb);
+                if total >= amount.saturating_add(fee_no_change) {
+                    return Ok((selected, total - amount, 0));
+                }
+            }
+            return Ok((selected, fee_with_change, change));
+        }
+    }
+    Err("Insufficient BTC balance for amount plus fee".to_string())
+}
+
+fn bitcoin_signed_transfer(
+    private_key: &[u8; 32],
+    from_address: &str,
+    to_address: &str,
+    amount_sats: u64,
+    utxos: &[BitcoinUtxo],
+    fee_rate_sat_vb: u64,
+) -> Result<BitcoinSignedTransfer, String> {
+    if amount_sats == 0 {
+        return Err("Amount must be greater than zero".to_string());
+    }
+
+    let signing_key = signing_key_from_private_key(private_key)?;
+    let public_key = signing_key.verifying_key().to_encoded_point(true);
+    let public_key_bytes = public_key.as_bytes();
+    let pubkey_hash = Ripemd160::digest(&Sha256::digest(public_key_bytes));
+    let expected_from = bitcoin_bech32_address(private_key, false)?;
+    if from_address != expected_from {
+        return Err("Derived BTC key does not match wallet BTC address".to_string());
+    }
+
+    let (selected, fee_sats, change_sats) = bitcoin_select_coins(utxos, amount_sats, fee_rate_sat_vb)?;
+    let total_in: u64 = selected.iter().map(|u| u.value).sum();
+    let mut outputs = vec![BitcoinTxOutput {
+        value: amount_sats,
+        script_pubkey: bitcoin_script_pubkey_from_address(to_address)?,
+    }];
+    if change_sats > 0 {
+        outputs.push(BitcoinTxOutput {
+            value: change_sats,
+            script_pubkey: bitcoin_p2wpkh_script_pubkey(&pubkey_hash),
+        });
+    }
+
+    let script_code = bitcoin_p2pkh_script_code(&pubkey_hash);
+    let inputs: Vec<BitcoinTxInput> = selected
+        .into_iter()
+        .map(|utxo| BitcoinTxInput { utxo, script_code: script_code.clone() })
+        .collect();
+
+    let mut signatures = vec![];
+    for i in 0..inputs.len() {
+        let sighash = bitcoin_sighash(i, &inputs, &outputs)?;
+        let signature: k256::ecdsa::Signature = signing_key
+            .sign_prehash(&sighash)
+            .map_err(|_| "Bitcoin transaction signing failed".to_string())?;
+        let mut der = signature.to_der().as_bytes().to_vec();
+        der.push(0x01);
+        signatures.push(der);
+    }
+
+    let stripped = bitcoin_serialize_stripped(&inputs, &outputs)?;
+    let txid = bitcoin_txid_from_stripped(&stripped);
+
+    let mut raw = vec![];
+    raw.extend_from_slice(&2i32.to_le_bytes());
+    raw.extend_from_slice(&[0x00, 0x01]);
+    raw.extend(bitcoin_varint(inputs.len() as u64));
+    for input in &inputs {
+        raw.extend(bitcoin_txid_le(&input.utxo.txid)?);
+        raw.extend_from_slice(&input.utxo.vout.to_le_bytes());
+        raw.push(0x00);
+        raw.extend_from_slice(&0xffff_ffffu32.to_le_bytes());
+    }
+    raw.extend(bitcoin_serialize_outputs(&outputs));
+    for sig in &signatures {
+        raw.push(0x02);
+        raw.extend(bitcoin_push_data(sig));
+        raw.extend(bitcoin_push_data(public_key_bytes));
+    }
+    raw.extend_from_slice(&0u32.to_le_bytes());
+
+    Ok(BitcoinSignedTransfer {
+        txid,
+        raw_tx_hex: hex::encode(raw),
+        first_signature_hex: signatures.first().map(hex::encode).unwrap_or_default(),
+        fee_sats,
+        post_balance: total_in.saturating_sub(amount_sats).saturating_sub(fee_sats),
+    })
+}
+
+async fn sign_bitcoin_transfer(mnemonic: &str, from: &str, to: &str, amount_sats: u64) -> Result<BitcoinSignedTransfer, String> {
+    let private_key = secp256k1_private_key_from_mnemonic(mnemonic, BITCOIN_DERIVATION_PATH)?;
+    let utxos = fetch_bitcoin_utxos(from).await?;
+    let fee_rate = fetch_bitcoin_fee_rate().await?;
+    bitcoin_signed_transfer(&private_key, from, to, amount_sats, &utxos, fee_rate)
+}
+
+async fn broadcast_bitcoin_transaction(raw_tx_hex: &str) -> Result<String, String> {
+    http_post_text("https://blockstream.info/api/tx", raw_tx_hex)
+        .await
+        .map(|txid| txid.trim().to_string())
+}
+
+async fn fetch_bitcoin_tx_status(txid: &str) -> Result<Option<String>, String> {
+    let url = format!("https://blockstream.info/api/tx/{txid}/status");
+    let json = http_get_json(&url).await?;
+    if json["confirmed"].as_bool().unwrap_or(false) {
+        Ok(Some("confirmed".to_string()))
+    } else {
+        Ok(None)
+    }
+}
+
 async fn fetch_evm_assets(config: &EvmNetworkConfig, address: &str, cached_assets: &[Asset]) -> Vec<Asset> {
     let native = match fetch_evm_native_balance(config, address).await {
         Ok(wei) => Asset {
@@ -1434,6 +1866,10 @@ async fn check_transaction_status(
     tx_hash: String,
     network: String,
 ) -> Result<Option<String>, String> {
+    if network == "bitcoin" {
+        return fetch_bitcoin_tx_status(&tx_hash).await;
+    }
+
     let config = EVM_NETWORKS.iter().find(|c| c.id == network)
         .ok_or_else(|| format!("Unknown network: {}", network))?;
     fetch_tx_status(config, &tx_hash).await
@@ -2028,6 +2464,70 @@ mod tests {
             }
         });
         assert_eq!(parse_bitcoin_balance(&json).unwrap(), 4300);
+    }
+
+    #[test]
+    fn parses_bitcoin_utxos_and_fee_rate() {
+        let json = serde_json::json!([
+            {
+                "txid": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+                "vout": 1,
+                "value": 50_000,
+                "status": { "confirmed": true }
+            },
+            {
+                "txid": "101102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e2f",
+                "vout": 0,
+                "value": 100,
+                "status": { "confirmed": true }
+            }
+        ]);
+        let utxos = parse_bitcoin_utxos(&json).unwrap();
+        assert_eq!(utxos.len(), 1);
+        assert_eq!(utxos[0].value, 50_000);
+
+        let fees = serde_json::json!({ "3": 2.1, "6": 1.4 });
+        assert_eq!(parse_bitcoin_fee_rate(&fees).unwrap(), 3);
+    }
+
+    #[test]
+    fn selects_bitcoin_coins_with_change() {
+        let utxos = vec![BitcoinUtxo {
+            txid: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f".to_string(),
+            vout: 0,
+            value: 50_000,
+            confirmed: true,
+        }];
+        let (selected, fee, change) = bitcoin_select_coins(&utxos, 10_000, 2).unwrap();
+        assert_eq!(selected.len(), 1);
+        assert_eq!(fee, bitcoin_estimated_vbytes(1, 2) * 2);
+        assert_eq!(change, 50_000 - 10_000 - fee);
+    }
+
+    #[test]
+    fn signs_bitcoin_p2wpkh_transfer() {
+        let private_key = [0x01u8; 32];
+        let from = bitcoin_bech32_address(&private_key, false).unwrap();
+        let utxos = vec![BitcoinUtxo {
+            txid: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f".to_string(),
+            vout: 0,
+            value: 50_000,
+            confirmed: true,
+        }];
+        let signed = bitcoin_signed_transfer(
+            &private_key,
+            &from,
+            "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+            10_000,
+            &utxos,
+            2,
+        ).unwrap();
+
+        assert_eq!(signed.txid.len(), 64);
+        assert!(signed.raw_tx_hex.starts_with("020000000001"));
+        assert!(!signed.first_signature_hex.is_empty());
+        assert_eq!(signed.fee_sats, bitcoin_estimated_vbytes(1, 2) * 2);
+        assert_eq!(signed.post_balance, 50_000 - 10_000 - signed.fee_sats);
     }
 
     #[test]
