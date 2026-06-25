@@ -222,14 +222,14 @@ function dashboardView() {
       <div class="min-w-0 space-y-5">
         <section class="glass min-w-0 overflow-hidden rounded-[2rem] p-6">
           <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
+            <div class="min-w-0">
               <p class="text-sm uppercase tracking-[0.3em] text-acid">Portfolio</p>
-              <h2 class="mt-3 max-w-2xl text-4xl font-black tracking-tight">Multi-asset wallet with transaction controls.</h2>
+              <h2 class="mt-3 max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">Multi-asset wallet with transaction controls.</h2>
             </div>
-            <div class="grid gap-3 sm:grid-cols-1">
-              <div class="rounded-2xl border border-acid/30 bg-acid/10 p-4 text-right">
+            <div class="grid shrink-0 gap-3 sm:grid-cols-1">
+              <div class="min-w-0 rounded-2xl border border-acid/30 bg-acid/10 p-4 text-right">
                 <p class="text-sm text-slate-400">Weighted 24h</p>
-                <p class="text-3xl font-black ${change >= 0 ? "text-emerald-300" : "text-rose-300"}">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</p>
+                <p class="max-w-full break-words text-2xl font-black leading-none sm:text-3xl ${change >= 0 ? "text-emerald-300" : "text-rose-300"}">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</p>
               </div>
             </div>
           </div>
