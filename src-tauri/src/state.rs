@@ -1,10 +1,10 @@
 use crate::dto::{Wallet, WalletSession};
 use crate::storage::read_stored_wallet;
 use std::path::PathBuf;
-use tauri::State;
 use std::sync::Mutex;
+use tauri::State;
 
-pub(crate) fn clear_secret_string(s: &mut String) {
+pub(crate) fn clear_secret_string(s: &mut str) {
     let buf = unsafe { s.as_bytes_mut() };
     buf.fill(0);
 }

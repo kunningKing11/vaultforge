@@ -84,7 +84,10 @@ pub(crate) fn encrypt_wallet(
     })
 }
 
-pub(crate) fn decrypt_wallet(stored: &StoredWalletFile, passphrase: &str) -> Result<Wallet, String> {
+pub(crate) fn decrypt_wallet(
+    stored: &StoredWalletFile,
+    passphrase: &str,
+) -> Result<Wallet, String> {
     if stored.version != 2 {
         return Err("Unsupported wallet version".to_string());
     }

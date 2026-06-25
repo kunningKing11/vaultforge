@@ -1,4 +1,7 @@
-pub(crate) async fn rpc_post(url: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
+pub(crate) async fn rpc_post(
+    url: &str,
+    body: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
@@ -17,21 +20,28 @@ pub(crate) async fn rpc_post(url: &str, body: &serde_json::Value) -> Result<serd
             Err(e) => {
                 last_err = format!("RPC request failed (attempt {attempt}/3): {e}");
                 if attempt < 3 {
-                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64))
+                        .await;
                 }
                 continue;
             }
         };
 
         if !response.status().is_success() {
-            last_err = format!("RPC returned HTTP {} (attempt {attempt}/3)", response.status());
+            last_err = format!(
+                "RPC returned HTTP {} (attempt {attempt}/3)",
+                response.status()
+            );
             if attempt < 3 {
                 tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
             }
             continue;
         }
 
-        return response.json().await.map_err(|e| format!("RPC response parse failed: {e}"));
+        return response
+            .json()
+            .await
+            .map_err(|e| format!("RPC response parse failed: {e}"));
     }
     Err(last_err)
 }
@@ -55,7 +65,8 @@ pub(crate) async fn http_get_json(url: &str) -> Result<serde_json::Value, String
             Err(e) => {
                 last_err = format!("HTTP request failed (attempt {attempt}/3): {e}");
                 if attempt < 3 {
-                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64))
+                        .await;
                 }
                 continue;
             }
@@ -69,7 +80,10 @@ pub(crate) async fn http_get_json(url: &str) -> Result<serde_json::Value, String
             continue;
         }
 
-        return response.json().await.map_err(|e| format!("HTTP response parse failed: {e}"));
+        return response
+            .json()
+            .await
+            .map_err(|e| format!("HTTP response parse failed: {e}"));
     }
     Err(last_err)
 }
@@ -94,7 +108,8 @@ pub(crate) async fn http_post_text(url: &str, body: &str) -> Result<String, Stri
             Err(e) => {
                 last_err = format!("HTTP POST failed (attempt {attempt}/3): {e}");
                 if attempt < 3 {
-                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64))
+                        .await;
                 }
                 continue;
             }
@@ -110,7 +125,10 @@ pub(crate) async fn http_post_text(url: &str, body: &str) -> Result<String, Stri
             continue;
         }
 
-        return response.text().await.map_err(|e| format!("HTTP response parse failed: {e}"));
+        return response
+            .text()
+            .await
+            .map_err(|e| format!("HTTP response parse failed: {e}"));
     }
     Err(last_err)
 }

@@ -1,5 +1,5 @@
 use crate::dto::Wallet;
-use sha2::{Digest as Sha2Digest, Sha256};
+use sha2::{Digest, Sha256};
 use sha3::Keccak256;
 
 pub(crate) fn validate_passphrase(passphrase: &str) -> Result<(), String> {
@@ -18,7 +18,12 @@ pub(crate) fn clean_name(name: String) -> String {
     }
 }
 
-pub(crate) fn validate_transfer(wallet: &Wallet, to: &str, symbol: &str, amount_wei: &str) -> Result<(), String> {
+pub(crate) fn validate_transfer(
+    wallet: &Wallet,
+    to: &str,
+    symbol: &str,
+    amount_wei: &str,
+) -> Result<(), String> {
     let to = to.trim();
 
     let asset = wallet
@@ -27,8 +32,13 @@ pub(crate) fn validate_transfer(wallet: &Wallet, to: &str, symbol: &str, amount_
         .find(|asset| asset.symbol == symbol)
         .ok_or_else(|| "Asset not found".to_string())?;
 
-    let amount: u128 = amount_wei.parse().map_err(|_| "Invalid amount".to_string())?;
-    let balance: u128 = asset.balance.parse().map_err(|_| "Invalid stored balance".to_string())?;
+    let amount: u128 = amount_wei
+        .parse()
+        .map_err(|_| "Invalid amount".to_string())?;
+    let balance: u128 = asset
+        .balance
+        .parse()
+        .map_err(|_| "Invalid stored balance".to_string())?;
     if amount == 0 {
         return Err("Amount must be greater than zero".to_string());
     }
@@ -80,11 +90,19 @@ pub(crate) fn validate_evm_address(address: &str) -> Result<(), String> {
 
 pub(crate) fn validate_bitcoin_address(address: &str) -> Result<(), String> {
     if address.starts_with("bc1") || address.starts_with("tb1") {
-        bech32::decode(address).map_err(|_| "Recipient must be a valid Bitcoin bech32 address".to_string())?;
+        bech32::decode(address)
+            .map_err(|_| "Recipient must be a valid Bitcoin bech32 address".to_string())?;
         return Ok(());
     }
-    if address.starts_with('1') || address.starts_with('3') || address.starts_with('2') || address.starts_with('m') || address.starts_with('n') {
-        bs58::decode(address).with_check(None).into_vec()
+    if address.starts_with('1')
+        || address.starts_with('3')
+        || address.starts_with('2')
+        || address.starts_with('m')
+        || address.starts_with('n')
+    {
+        bs58::decode(address)
+            .with_check(None)
+            .into_vec()
             .map_err(|_| "Recipient must be a valid Bitcoin base58 address".to_string())?;
         return Ok(());
     }
@@ -92,7 +110,8 @@ pub(crate) fn validate_bitcoin_address(address: &str) -> Result<(), String> {
 }
 
 pub(crate) fn validate_solana_address(address: &str) -> Result<(), String> {
-    let bytes = bs58::decode(address).into_vec()
+    let bytes = bs58::decode(address)
+        .into_vec()
         .map_err(|_| "Recipient must be a valid base58 Solana address".to_string())?;
     if bytes.len() != 32 {
         return Err("Solana address must decode to 32 bytes".to_string());
@@ -105,14 +124,15 @@ pub(crate) fn validate_zcash_address(address: &str) -> Result<(), String> {
         return Err("Zcash shielded addresses are not yet supported".to_string());
     }
     if address.starts_with("t1") || address.starts_with("t3") || address.starts_with("tm") {
-        let bytes = bs58::decode(address).into_vec()
+        let bytes = bs58::decode(address)
+            .into_vec()
             .map_err(|_| "Recipient must be a valid Zcash transparent address".to_string())?;
         if bytes.len() != 26 {
             return Err("Zcash transparent address must decode to 26 bytes".to_string());
         }
         let payload = &bytes[..22];
         let checksum = &bytes[22..];
-        let hash = Sha256::digest(&Sha256::digest(payload));
+        let hash = Sha256::digest(Sha256::digest(payload));
         if &hash[..4] != checksum {
             return Err("Zcash transparent address checksum invalid".to_string());
         }
@@ -137,10 +157,15 @@ pub(crate) fn validate_filecoin_address(address: &str) -> Result<(), String> {
             Ok(())
         }
         '1' => {
-            let bytes = bs58::decode(&address[2..]).with_check(Some(0x01)).into_vec()
+            let bytes = bs58::decode(&address[2..])
+                .with_check(Some(0x01))
+                .into_vec()
                 .map_err(|_| "Invalid Filecoin f1 address".to_string())?;
             if bytes.len() != 21 {
-                return Err("Filecoin f1 address must decode to 21 bytes (1 prefix + 20 payload)".to_string());
+                return Err(
+                    "Filecoin f1 address must decode to 21 bytes (1 prefix + 20 payload)"
+                        .to_string(),
+                );
             }
             if bytes[0] != 1 {
                 return Err("Filecoin f1 address has wrong protocol byte".to_string());
@@ -148,7 +173,9 @@ pub(crate) fn validate_filecoin_address(address: &str) -> Result<(), String> {
             Ok(())
         }
         '3' => {
-            let bytes = bs58::decode(&address[2..]).with_check(Some(0x03)).into_vec()
+            let bytes = bs58::decode(&address[2..])
+                .with_check(Some(0x03))
+                .into_vec()
                 .map_err(|_| "Invalid Filecoin f3 address".to_string())?;
             if bytes.len() != 48 {
                 return Err("Filecoin f3 (BLS) address must decode to 48 bytes".to_string());
@@ -157,7 +184,8 @@ pub(crate) fn validate_filecoin_address(address: &str) -> Result<(), String> {
         }
         '4' => {
             if address.starts_with("f410") || address.starts_with("t410") {
-                bech32::decode(address).map_err(|_| "Invalid Filecoin f4 (delegated) address".to_string())?;
+                bech32::decode(address)
+                    .map_err(|_| "Invalid Filecoin f4 (delegated) address".to_string())?;
                 Ok(())
             } else {
                 Err("Filecoin f4 address must start with f410".to_string())
@@ -171,6 +199,7 @@ pub(crate) fn validate_injective_address(address: &str) -> Result<(), String> {
     if !address.starts_with("inj1") {
         return Err("Injective address must start with inj1".to_string());
     }
-    bech32::decode(address).map_err(|_| "Recipient must be a valid Injective bech32 address".to_string())?;
+    bech32::decode(address)
+        .map_err(|_| "Recipient must be a valid Injective bech32 address".to_string())?;
     Ok(())
 }

@@ -6,7 +6,7 @@ use hmac::{Hmac, Mac};
 use k256::ecdsa::SigningKey;
 use rand::Rng;
 use ripemd::Ripemd160;
-use sha2::{Digest as Sha2Digest, Sha256, Sha512};
+use sha2::{Digest, Sha256, Sha512};
 use sha3::Keccak256;
 use std::collections::HashMap;
 
@@ -42,11 +42,15 @@ fn mnemonic_seed(mnemonic: &str) -> Result<[u8; 64], String> {
     Ok(mnemonic.to_seed(""))
 }
 
-pub(crate) fn secp256k1_private_key_from_mnemonic(mnemonic: &str, path: &str) -> Result<[u8; 32], String> {
+pub(crate) fn secp256k1_private_key_from_mnemonic(
+    mnemonic: &str,
+    path: &str,
+) -> Result<[u8; 32], String> {
     let seed = mnemonic_seed(mnemonic)?;
-    let path: DerivationPath = path.parse()
+    let path: DerivationPath = path
+        .parse()
         .map_err(|_| format!("Invalid derivation path: {path}"))?;
-    let child = XPrv::derive_from_path(&seed, &path)
+    let child = XPrv::derive_from_path(seed, &path)
         .map_err(|_| format!("Failed to derive key at {path}"))?;
     let bytes = child.private_key().to_bytes();
     Ok(bytes.into())
@@ -83,13 +87,18 @@ fn solana_secret_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32], String> {
     Ok(key)
 }
 
-pub(crate) fn derive_addresses_from_mnemonic(mnemonic: &str) -> Result<HashMap<String, String>, String> {
+pub(crate) fn derive_addresses_from_mnemonic(
+    mnemonic: &str,
+) -> Result<HashMap<String, String>, String> {
     let evm_private_key = secp256k1_private_key_from_mnemonic(mnemonic, EVM_DERIVATION_PATH)?;
-    let bitcoin_private_key = secp256k1_private_key_from_mnemonic(mnemonic, BITCOIN_DERIVATION_PATH)?;
+    let bitcoin_private_key =
+        secp256k1_private_key_from_mnemonic(mnemonic, BITCOIN_DERIVATION_PATH)?;
     let zcash_private_key = secp256k1_private_key_from_mnemonic(mnemonic, ZCASH_DERIVATION_PATH)?;
     let solana_secret_key = solana_secret_key_from_mnemonic(mnemonic)?;
-    let filecoin_private_key = secp256k1_private_key_from_mnemonic(mnemonic, FILECOIN_DERIVATION_PATH)?;
-    let injective_private_key = secp256k1_private_key_from_mnemonic(mnemonic, INJECTIVE_DERIVATION_PATH)?;
+    let filecoin_private_key =
+        secp256k1_private_key_from_mnemonic(mnemonic, FILECOIN_DERIVATION_PATH)?;
+    let injective_private_key =
+        secp256k1_private_key_from_mnemonic(mnemonic, INJECTIVE_DERIVATION_PATH)?;
 
     let evm_address = ethereum_address_from_private_key(&evm_private_key)?;
     let bitcoin_address = bitcoin_bech32_address(&bitcoin_private_key, false)?;
@@ -121,12 +130,15 @@ pub(crate) fn ethereum_address_from_private_key(private_key: &[u8; 32]) -> Resul
     Ok(format!("0x{}", hex::encode(&hash[12..])))
 }
 
-pub(crate) fn bitcoin_bech32_address(private_key: &[u8; 32], is_testnet: bool) -> Result<String, String> {
+pub(crate) fn bitcoin_bech32_address(
+    private_key: &[u8; 32],
+    is_testnet: bool,
+) -> Result<String, String> {
     let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
     let encoded = verifying_key.to_encoded_point(true);
     let public_bytes = encoded.as_bytes();
-    let hashed = Ripemd160::digest(&Sha256::digest(public_bytes));
+    let hashed = Ripemd160::digest(Sha256::digest(public_bytes));
     let hrp = if is_testnet { "tb" } else { "bc" };
     let mut bech32_data = vec![bech32::u5::try_from_u8(0).map_err(|_| "Failed to encode address")?];
     bech32_data.extend(hashed.to_base32());
@@ -134,12 +146,15 @@ pub(crate) fn bitcoin_bech32_address(private_key: &[u8; 32], is_testnet: bool) -
         .map_err(|_| "Failed to encode address".to_string())
 }
 
-pub(crate) fn zcash_transparent_address(private_key: &[u8; 32], is_testnet: bool) -> Result<String, String> {
+pub(crate) fn zcash_transparent_address(
+    private_key: &[u8; 32],
+    is_testnet: bool,
+) -> Result<String, String> {
     let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
     let encoded = verifying_key.to_encoded_point(true);
     let public_bytes = encoded.as_bytes();
-    let payload = Ripemd160::digest(&Sha256::digest(public_bytes));
+    let payload = Ripemd160::digest(Sha256::digest(public_bytes));
     let prefix = if is_testnet {
         vec![0x1d, 0x25]
     } else {
@@ -162,10 +177,13 @@ pub(crate) fn filecoin_address_from_private_key(private_key: &[u8; 32]) -> Resul
     let verifying_key = signing_key.verifying_key();
     let encoded = verifying_key.to_encoded_point(true);
     let public_bytes = encoded.as_bytes();
-    let payload = Ripemd160::digest(&Sha256::digest(public_bytes));
+    let payload = Ripemd160::digest(Sha256::digest(public_bytes));
     let mut bytes = vec![0x01];
     bytes.extend(payload);
-    Ok(format!("f1{}", bs58::encode(bytes).with_check().into_string()))
+    Ok(format!(
+        "f1{}",
+        bs58::encode(bytes).with_check().into_string()
+    ))
 }
 
 pub(crate) fn bech32_account_address(private_key: &[u8; 32], hrp: &str) -> Result<String, String> {
@@ -173,7 +191,7 @@ pub(crate) fn bech32_account_address(private_key: &[u8; 32], hrp: &str) -> Resul
     let verifying_key = signing_key.verifying_key();
     let encoded = verifying_key.to_encoded_point(true);
     let public_bytes = encoded.as_bytes();
-    let payload = Ripemd160::digest(&Sha256::digest(public_bytes));
+    let payload = Ripemd160::digest(Sha256::digest(public_bytes));
     let bech32_data = payload.to_base32();
     bech32::encode(hrp, bech32_data, Variant::Bech32)
         .map_err(|_| "Failed to encode address".to_string())

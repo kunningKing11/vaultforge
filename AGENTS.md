@@ -44,6 +44,18 @@ Keep these concerns separate:
 
 Do not let local UI state or simulator state become the source of truth for real funds.
 
+## Backend Module Layout
+
+Keep `src-tauri/src/main.rs` limited to Tauri application setup, managed state registration, module declarations, and `generate_handler!` wiring.
+
+Place Tauri command handlers under `src-tauri/src/commands/` by responsibility:
+
+- `commands/wallet.rs` for wallet lifecycle commands such as create, import, unlock, lock, clear, and session reads.
+- `commands/tx.rs` for signing, broadcasting, swap compatibility flows, and transaction status commands.
+- `commands/market.rs` for market-data and price refresh commands.
+
+Command modules may orchestrate domain modules, but core wallet, storage, derivation, provider, validation, and transaction-format logic should stay in their dedicated modules. Do not grow `main.rs` or a single command file into a catch-all.
+
 ## Backend Data Model Contract
 
 The backend should have distinct data shapes for persistent encrypted wallet data, unlocked runtime wallet data, derived chain accounts, chain-backed balances, transaction drafts, signed transactions, and frontend sessions.
@@ -119,7 +131,6 @@ type WalletSession = {
   wallet_name: string | null;
   address: string | null;
   addresses?: Record<string, string> | null;
-  network: string;
   assets: Asset[];
   activity: Activity[];
 };

@@ -73,30 +73,81 @@ pub(crate) struct EvmTokenConfig {
 }
 
 const EVM_TOKENS: &[(&str, &[EvmTokenConfig])] = &[
-    ("ethereum", &[
-        EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 },
-        EvmTokenConfig { symbol: "USDT", name: "Tether USD", contract: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 },
-    ]),
-    ("polygon", &[
-        EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6 },
-        EvmTokenConfig { symbol: "USDT", name: "Tether USD", contract: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6 },
-    ]),
-    ("arbitrum_one", &[
-        EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 },
-    ]),
-    ("base", &[
-        EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
-    ]),
-    ("optimism", &[
-        EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", decimals: 6 },
-    ]),
-    ("avalanche_c", &[
-        EvmTokenConfig { symbol: "USDC", name: "USD Coin", contract: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", decimals: 6 },
-    ]),
+    (
+        "ethereum",
+        &[
+            EvmTokenConfig {
+                symbol: "USDC",
+                name: "USD Coin",
+                contract: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                decimals: 6,
+            },
+            EvmTokenConfig {
+                symbol: "USDT",
+                name: "Tether USD",
+                contract: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                decimals: 6,
+            },
+        ],
+    ),
+    (
+        "polygon",
+        &[
+            EvmTokenConfig {
+                symbol: "USDC",
+                name: "USD Coin",
+                contract: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+                decimals: 6,
+            },
+            EvmTokenConfig {
+                symbol: "USDT",
+                name: "Tether USD",
+                contract: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+                decimals: 6,
+            },
+        ],
+    ),
+    (
+        "arbitrum_one",
+        &[EvmTokenConfig {
+            symbol: "USDC",
+            name: "USD Coin",
+            contract: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+            decimals: 6,
+        }],
+    ),
+    (
+        "base",
+        &[EvmTokenConfig {
+            symbol: "USDC",
+            name: "USD Coin",
+            contract: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+            decimals: 6,
+        }],
+    ),
+    (
+        "optimism",
+        &[EvmTokenConfig {
+            symbol: "USDC",
+            name: "USD Coin",
+            contract: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+            decimals: 6,
+        }],
+    ),
+    (
+        "avalanche_c",
+        &[EvmTokenConfig {
+            symbol: "USDC",
+            name: "USD Coin",
+            contract: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+            decimals: 6,
+        }],
+    ),
 ];
 
 pub(crate) fn evm_tokens_for_network(network_id: &str) -> &[EvmTokenConfig] {
-    EVM_TOKENS.iter()
+    EVM_TOKENS
+        .iter()
         .find(|(id, _)| *id == network_id)
         .map(|(_, tokens)| *tokens)
         .unwrap_or(&[])
@@ -112,12 +163,17 @@ pub(crate) fn evm_config_by_id(network_id: &str) -> Option<&'static EvmNetworkCo
 
 #[allow(dead_code)]
 pub(crate) fn evm_network_id_for_token(symbol: &str) -> Option<&'static str> {
-    EVM_TOKENS.iter()
+    EVM_TOKENS
+        .iter()
         .find(|(_, tokens)| tokens.iter().any(|t| t.symbol == symbol))
         .map(|(id, _)| *id)
 }
 
-pub(crate) async fn fetch_evm_token_balance(config: &EvmNetworkConfig, token: &EvmTokenConfig, address: &str) -> Result<u128, String> {
+pub(crate) async fn fetch_evm_token_balance(
+    config: &EvmNetworkConfig,
+    token: &EvmTokenConfig,
+    address: &str,
+) -> Result<u128, String> {
     let addr_hex = address.trim_start_matches("0x");
     let addr_bytes = hex::decode(addr_hex).map_err(|_| "Invalid address".to_string())?;
     let mut padded = vec![0u8; 32];
@@ -145,7 +201,10 @@ pub(crate) async fn fetch_evm_token_balance(config: &EvmNetworkConfig, token: &E
         .map_err(|e| format!("Invalid token balance hex: {e}"))
 }
 
-pub(crate) async fn fetch_evm_native_balance(config: &EvmNetworkConfig, address: &str) -> Result<u128, String> {
+pub(crate) async fn fetch_evm_native_balance(
+    config: &EvmNetworkConfig,
+    address: &str,
+) -> Result<u128, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "eth_getBalance",
@@ -162,7 +221,11 @@ pub(crate) async fn fetch_evm_native_balance(config: &EvmNetworkConfig, address:
         .map_err(|e| format!("Invalid balance hex: {e}"))
 }
 
-pub(crate) async fn fetch_evm_assets(config: &EvmNetworkConfig, address: &str, cached_assets: &[Asset]) -> Vec<Asset> {
+pub(crate) async fn fetch_evm_assets(
+    config: &EvmNetworkConfig,
+    address: &str,
+    cached_assets: &[Asset],
+) -> Vec<Asset> {
     let native = match fetch_evm_native_balance(config, address).await {
         Ok(wei) => Asset {
             symbol: config.native_symbol.to_string(),
@@ -173,15 +236,17 @@ pub(crate) async fn fetch_evm_assets(config: &EvmNetworkConfig, address: &str, c
             change_24h: 0.0,
             network: config.id.to_string(),
         },
-        Err(_) => cached_asset(cached_assets, config.id, config.native_symbol).unwrap_or_else(|| Asset {
-            symbol: config.native_symbol.to_string(),
-            name: config.display_name.to_string(),
-            balance: "0".to_string(),
-            decimals: 18,
-            price_usd: 0.0,
-            change_24h: 0.0,
-            network: config.id.to_string(),
-        }),
+        Err(_) => {
+            cached_asset(cached_assets, config.id, config.native_symbol).unwrap_or_else(|| Asset {
+                symbol: config.native_symbol.to_string(),
+                name: config.display_name.to_string(),
+                balance: "0".to_string(),
+                decimals: 18,
+                price_usd: 0.0,
+                change_24h: 0.0,
+                network: config.id.to_string(),
+            })
+        }
     };
 
     let mut assets = vec![native];
@@ -210,7 +275,10 @@ pub(crate) async fn fetch_evm_assets(config: &EvmNetworkConfig, address: &str, c
     assets
 }
 
-pub(crate) async fn fetch_evm_nonce(config: &EvmNetworkConfig, address: &str) -> Result<u64, String> {
+pub(crate) async fn fetch_evm_nonce(
+    config: &EvmNetworkConfig,
+    address: &str,
+) -> Result<u64, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "eth_getTransactionCount",
@@ -291,7 +359,10 @@ pub(crate) async fn broadcast_evm_transaction(
         })
 }
 
-pub(crate) async fn fetch_tx_status(config: &EvmNetworkConfig, tx_hash: &str) -> Result<Option<String>, String> {
+pub(crate) async fn fetch_tx_status(
+    config: &EvmNetworkConfig,
+    tx_hash: &str,
+) -> Result<Option<String>, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "eth_getTransactionReceipt",
@@ -304,9 +375,7 @@ pub(crate) async fn fetch_tx_status(config: &EvmNetworkConfig, tx_hash: &str) ->
         return Ok(None);
     }
 
-    let status_hex = json["result"]["status"]
-        .as_str()
-        .unwrap_or("0x0");
+    let status_hex = json["result"]["status"].as_str().unwrap_or("0x0");
     if status_hex == "0x1" {
         Ok(Some("confirmed".to_string()))
     } else {

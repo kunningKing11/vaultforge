@@ -1,9 +1,15 @@
-use crate::derivation::*;
+use crate::derivation::{
+    bech32_account_address, bitcoin_bech32_address, ethereum_address_from_private_key,
+    filecoin_address_from_private_key, zcash_transparent_address,
+};
 use crate::dto::Asset;
-use crate::providers::bitcoin::*;
-use crate::providers::evm::*;
-use crate::providers::solana::*;
-use crate::validation::*;
+use crate::providers::bitcoin::fetch_bitcoin_balance;
+use crate::providers::evm::{DEFAULT_EVM_CONFIG, fetch_evm_assets};
+use crate::providers::solana::fetch_solana_balance;
+use crate::validation::{
+    validate_bitcoin_address, validate_evm_address, validate_filecoin_address,
+    validate_injective_address, validate_solana_address, validate_zcash_address,
+};
 use std::collections::HashMap;
 
 pub(crate) mod bitcoin;
@@ -22,21 +28,58 @@ pub(crate) struct NativeAssetConfig {
 }
 
 pub(crate) const NON_EVM_NATIVE_ASSETS: &[NativeAssetConfig] = &[
-    NativeAssetConfig { network_id: "bitcoin", address_key: "bitcoin", symbol: "BTC", name: "Bitcoin", decimals: 8 },
-    NativeAssetConfig { network_id: "solana", address_key: "solana", symbol: "SOL", name: "Solana", decimals: 9 },
-    NativeAssetConfig { network_id: "zcash", address_key: "zcash", symbol: "ZEC", name: "Zcash", decimals: 8 },
-    NativeAssetConfig { network_id: "filecoin", address_key: "filecoin", symbol: "FIL", name: "Filecoin", decimals: 18 },
-    NativeAssetConfig { network_id: "injective", address_key: "injective", symbol: "INJ", name: "Injective", decimals: 18 },
+    NativeAssetConfig {
+        network_id: "bitcoin",
+        address_key: "bitcoin",
+        symbol: "BTC",
+        name: "Bitcoin",
+        decimals: 8,
+    },
+    NativeAssetConfig {
+        network_id: "solana",
+        address_key: "solana",
+        symbol: "SOL",
+        name: "Solana",
+        decimals: 9,
+    },
+    NativeAssetConfig {
+        network_id: "zcash",
+        address_key: "zcash",
+        symbol: "ZEC",
+        name: "Zcash",
+        decimals: 8,
+    },
+    NativeAssetConfig {
+        network_id: "filecoin",
+        address_key: "filecoin",
+        symbol: "FIL",
+        name: "Filecoin",
+        decimals: 18,
+    },
+    NativeAssetConfig {
+        network_id: "injective",
+        address_key: "injective",
+        symbol: "INJ",
+        name: "Injective",
+        decimals: 18,
+    },
 ];
 
-pub(crate) fn cached_asset(cached_assets: &[Asset], network_id: &str, symbol: &str) -> Option<Asset> {
+pub(crate) fn cached_asset(
+    cached_assets: &[Asset],
+    network_id: &str,
+    symbol: &str,
+) -> Option<Asset> {
     cached_assets
         .iter()
         .find(|asset| asset.network == network_id && asset.symbol == symbol)
         .cloned()
 }
 
-pub(crate) async fn fetch_portfolio_assets(addresses: &HashMap<String, String>, cached_assets: &[Asset]) -> Vec<Asset> {
+pub(crate) async fn fetch_portfolio_assets(
+    addresses: &HashMap<String, String>,
+    cached_assets: &[Asset],
+) -> Vec<Asset> {
     let mut assets = vec![];
 
     if let Some(evm_address) = addresses.get("evm") {
@@ -51,7 +94,8 @@ pub(crate) async fn fetch_portfolio_assets(addresses: &HashMap<String, String>, 
         match fetch_non_evm_native_asset(config, address).await {
             Ok(asset) => assets.push(asset),
             Err(_) => {
-                if let Some(cached) = cached_asset(cached_assets, config.network_id, config.symbol) {
+                if let Some(cached) = cached_asset(cached_assets, config.network_id, config.symbol)
+                {
                     assets.push(cached);
                 }
             }
@@ -61,7 +105,10 @@ pub(crate) async fn fetch_portfolio_assets(addresses: &HashMap<String, String>, 
     assets
 }
 
-async fn fetch_non_evm_native_asset(config: &NativeAssetConfig, address: &str) -> Result<Asset, String> {
+async fn fetch_non_evm_native_asset(
+    config: &NativeAssetConfig,
+    address: &str,
+) -> Result<Asset, String> {
     let balance = match config.symbol {
         "BTC" => fetch_bitcoin_balance(address).await?,
         "SOL" => fetch_solana_balance(address).await?,
@@ -95,47 +142,93 @@ struct FilecoinProvider;
 struct InjectiveProvider;
 
 impl ChainProvider for EvmProvider {
-    fn chain_name(&self) -> &'static str { "EVM" }
-    fn symbol(&self) -> &'static str { "ETH" }
-    fn validate_address(&self, address: &str) -> Result<(), String> { validate_evm_address(address) }
-    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> { ethereum_address_from_private_key(private_key) }
+    fn chain_name(&self) -> &'static str {
+        "EVM"
+    }
+    fn symbol(&self) -> &'static str {
+        "ETH"
+    }
+    fn validate_address(&self, address: &str) -> Result<(), String> {
+        validate_evm_address(address)
+    }
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> {
+        ethereum_address_from_private_key(private_key)
+    }
 }
 
 impl ChainProvider for BitcoinProvider {
-    fn chain_name(&self) -> &'static str { "Bitcoin" }
-    fn symbol(&self) -> &'static str { "BTC" }
-    fn validate_address(&self, address: &str) -> Result<(), String> { validate_bitcoin_address(address) }
-    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> { bitcoin_bech32_address(private_key, false) }
+    fn chain_name(&self) -> &'static str {
+        "Bitcoin"
+    }
+    fn symbol(&self) -> &'static str {
+        "BTC"
+    }
+    fn validate_address(&self, address: &str) -> Result<(), String> {
+        validate_bitcoin_address(address)
+    }
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> {
+        bitcoin_bech32_address(private_key, false)
+    }
 }
 
 impl ChainProvider for SolanaProvider {
-    fn chain_name(&self) -> &'static str { "Solana" }
-    fn symbol(&self) -> &'static str { "SOL" }
-    fn validate_address(&self, address: &str) -> Result<(), String> { validate_solana_address(address) }
+    fn chain_name(&self) -> &'static str {
+        "Solana"
+    }
+    fn symbol(&self) -> &'static str {
+        "SOL"
+    }
+    fn validate_address(&self, address: &str) -> Result<(), String> {
+        validate_solana_address(address)
+    }
     fn derive_address(&self, _private_key: &[u8; 32]) -> Result<String, String> {
         Err("Solana derivation requires seed bytes, not secp256k1 key".to_string())
     }
 }
 
 impl ChainProvider for ZcashProvider {
-    fn chain_name(&self) -> &'static str { "Zcash" }
-    fn symbol(&self) -> &'static str { "ZEC" }
-    fn validate_address(&self, address: &str) -> Result<(), String> { validate_zcash_address(address) }
-    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> { zcash_transparent_address(private_key, false) }
+    fn chain_name(&self) -> &'static str {
+        "Zcash"
+    }
+    fn symbol(&self) -> &'static str {
+        "ZEC"
+    }
+    fn validate_address(&self, address: &str) -> Result<(), String> {
+        validate_zcash_address(address)
+    }
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> {
+        zcash_transparent_address(private_key, false)
+    }
 }
 
 impl ChainProvider for FilecoinProvider {
-    fn chain_name(&self) -> &'static str { "Filecoin" }
-    fn symbol(&self) -> &'static str { "FIL" }
-    fn validate_address(&self, address: &str) -> Result<(), String> { validate_filecoin_address(address) }
-    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> { filecoin_address_from_private_key(private_key) }
+    fn chain_name(&self) -> &'static str {
+        "Filecoin"
+    }
+    fn symbol(&self) -> &'static str {
+        "FIL"
+    }
+    fn validate_address(&self, address: &str) -> Result<(), String> {
+        validate_filecoin_address(address)
+    }
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> {
+        filecoin_address_from_private_key(private_key)
+    }
 }
 
 impl ChainProvider for InjectiveProvider {
-    fn chain_name(&self) -> &'static str { "Injective" }
-    fn symbol(&self) -> &'static str { "INJ" }
-    fn validate_address(&self, address: &str) -> Result<(), String> { validate_injective_address(address) }
-    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> { bech32_account_address(private_key, "inj") }
+    fn chain_name(&self) -> &'static str {
+        "Injective"
+    }
+    fn symbol(&self) -> &'static str {
+        "INJ"
+    }
+    fn validate_address(&self, address: &str) -> Result<(), String> {
+        validate_injective_address(address)
+    }
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> {
+        bech32_account_address(private_key, "inj")
+    }
 }
 
 #[allow(dead_code)]

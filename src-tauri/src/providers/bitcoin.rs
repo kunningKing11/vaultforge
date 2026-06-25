@@ -1,9 +1,12 @@
-use crate::derivation::*;
+use crate::derivation::{
+    BITCOIN_DERIVATION_PATH, bitcoin_bech32_address, secp256k1_private_key_from_mnemonic,
+    signing_key_from_private_key,
+};
 use crate::providers::http::{http_get_json, http_post_text};
 use bech32::{self, FromBase32, Variant};
 use k256::ecdsa::signature::hazmat::PrehashSigner;
 use ripemd::Ripemd160;
-use sha2::{Digest as Sha2Digest, Sha256};
+use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug)]
 pub(crate) struct BitcoinUtxo {
@@ -42,7 +45,9 @@ pub(crate) async fn fetch_bitcoin_balance(address: &str) -> Result<String, Strin
 pub(crate) fn parse_bitcoin_balance(json: &serde_json::Value) -> Result<u128, String> {
     let funded = json["chain_stats"]["funded_txo_sum"].as_u64().unwrap_or(0) as u128;
     let spent = json["chain_stats"]["spent_txo_sum"].as_u64().unwrap_or(0) as u128;
-    let mempool_funded = json["mempool_stats"]["funded_txo_sum"].as_u64().unwrap_or(0) as u128;
+    let mempool_funded = json["mempool_stats"]["funded_txo_sum"]
+        .as_u64()
+        .unwrap_or(0) as u128;
     let mempool_spent = json["mempool_stats"]["spent_txo_sum"].as_u64().unwrap_or(0) as u128;
 
     let confirmed = funded.saturating_sub(spent);
@@ -57,7 +62,9 @@ pub(crate) async fn fetch_bitcoin_utxos(address: &str) -> Result<Vec<BitcoinUtxo
 }
 
 pub(crate) fn parse_bitcoin_utxos(json: &serde_json::Value) -> Result<Vec<BitcoinUtxo>, String> {
-    let items = json.as_array().ok_or_else(|| "Bitcoin UTXO response is not an array".to_string())?;
+    let items = json
+        .as_array()
+        .ok_or_else(|| "Bitcoin UTXO response is not an array".to_string())?;
     let mut utxos = vec![];
     for item in items {
         let txid = item["txid"]
@@ -95,10 +102,11 @@ pub(crate) async fn fetch_bitcoin_fee_rate() -> Result<u64, String> {
 
 pub(crate) fn parse_bitcoin_fee_rate(json: &serde_json::Value) -> Result<u64, String> {
     for target in ["3", "6", "12", "1"] {
-        if let Some(rate) = json[target].as_f64() {
-            if rate.is_finite() && rate > 0.0 {
-                return Ok(rate.ceil().max(1.0) as u64);
-            }
+        if let Some(rate) = json[target].as_f64()
+            && rate.is_finite()
+            && rate > 0.0
+        {
+            return Ok(rate.ceil().max(1.0) as u64);
         }
     }
     Err("Bitcoin fee estimate response missing usable fee rate".to_string())
@@ -159,8 +167,8 @@ fn bitcoin_p2pkh_script_code(pubkey_hash: &[u8]) -> Vec<u8> {
 
 fn bitcoin_script_pubkey_from_address(address: &str) -> Result<Vec<u8>, String> {
     if address.starts_with("bc1") {
-        let (hrp, data, variant) = bech32::decode(address)
-            .map_err(|_| "Invalid Bitcoin bech32 recipient".to_string())?;
+        let (hrp, data, variant) =
+            bech32::decode(address).map_err(|_| "Invalid Bitcoin bech32 recipient".to_string())?;
         if hrp != "bc" || variant != Variant::Bech32 || data.is_empty() {
             return Err("Unsupported Bitcoin bech32 recipient".to_string());
         }
@@ -173,7 +181,9 @@ fn bitcoin_script_pubkey_from_address(address: &str) -> Result<Vec<u8>, String> 
         return Ok(bitcoin_p2wpkh_script_pubkey(&program));
     }
 
-    let decoded = bs58::decode(address).with_check(None).into_vec()
+    let decoded = bs58::decode(address)
+        .with_check(None)
+        .into_vec()
         .map_err(|_| "Invalid Bitcoin base58 recipient".to_string())?;
     if decoded.len() != 21 {
         return Err("Unsupported Bitcoin base58 recipient length".to_string());
@@ -226,7 +236,10 @@ fn bitcoin_serialize_outputs(outputs: &[BitcoinTxOutput]) -> Vec<u8> {
     out
 }
 
-fn bitcoin_serialize_stripped(inputs: &[BitcoinTxInput], outputs: &[BitcoinTxOutput]) -> Result<Vec<u8>, String> {
+fn bitcoin_serialize_stripped(
+    inputs: &[BitcoinTxInput],
+    outputs: &[BitcoinTxOutput],
+) -> Result<Vec<u8>, String> {
     let mut tx = vec![];
     tx.extend_from_slice(&2i32.to_le_bytes());
     tx.extend(bitcoin_varint(inputs.len() as u64));
@@ -241,7 +254,11 @@ fn bitcoin_serialize_stripped(inputs: &[BitcoinTxInput], outputs: &[BitcoinTxOut
     Ok(tx)
 }
 
-fn bitcoin_sighash(input_index: usize, inputs: &[BitcoinTxInput], outputs: &[BitcoinTxOutput]) -> Result<[u8; 32], String> {
+fn bitcoin_sighash(
+    input_index: usize,
+    inputs: &[BitcoinTxInput],
+    outputs: &[BitcoinTxOutput],
+) -> Result<[u8; 32], String> {
     let mut prevouts = vec![];
     let mut sequences = vec![];
     for input in inputs {
@@ -253,7 +270,9 @@ fn bitcoin_sighash(input_index: usize, inputs: &[BitcoinTxInput], outputs: &[Bit
     let hash_prevouts = bitcoin_double_sha256(&prevouts);
     let hash_sequence = bitcoin_double_sha256(&sequences);
     let hash_outputs = bitcoin_double_sha256(&bitcoin_serialize_outputs(outputs));
-    let input = inputs.get(input_index).ok_or_else(|| "Bitcoin input index out of range".to_string())?;
+    let input = inputs
+        .get(input_index)
+        .ok_or_else(|| "Bitcoin input index out of range".to_string())?;
 
     let mut preimage = vec![];
     preimage.extend_from_slice(&2i32.to_le_bytes());
@@ -274,17 +293,27 @@ pub(crate) fn bitcoin_estimated_vbytes(input_count: usize, output_count: usize) 
     10 + (input_count as u64 * 68) + (output_count as u64 * 34)
 }
 
-pub(crate) fn bitcoin_select_coins(utxos: &[BitcoinUtxo], amount: u64, fee_rate_sat_vb: u64) -> Result<(Vec<BitcoinUtxo>, u64, u64), String> {
+pub(crate) fn bitcoin_select_coins(
+    utxos: &[BitcoinUtxo],
+    amount: u64,
+    fee_rate_sat_vb: u64,
+) -> Result<(Vec<BitcoinUtxo>, u64, u64), String> {
     let mut selected = vec![];
     let mut total = 0u64;
-    for utxo in utxos.iter().filter(|u| u.confirmed).chain(utxos.iter().filter(|u| !u.confirmed)) {
+    for utxo in utxos
+        .iter()
+        .filter(|u| u.confirmed)
+        .chain(utxos.iter().filter(|u| !u.confirmed))
+    {
         selected.push(utxo.clone());
         total = total.saturating_add(utxo.value);
-        let fee_with_change = bitcoin_estimated_vbytes(selected.len(), 2).saturating_mul(fee_rate_sat_vb);
+        let fee_with_change =
+            bitcoin_estimated_vbytes(selected.len(), 2).saturating_mul(fee_rate_sat_vb);
         if total >= amount.saturating_add(fee_with_change) {
             let change = total - amount - fee_with_change;
             if change < 546 {
-                let fee_no_change = bitcoin_estimated_vbytes(selected.len(), 1).saturating_mul(fee_rate_sat_vb);
+                let fee_no_change =
+                    bitcoin_estimated_vbytes(selected.len(), 1).saturating_mul(fee_rate_sat_vb);
                 if total >= amount.saturating_add(fee_no_change) {
                     return Ok((selected, total - amount, 0));
                 }
@@ -310,13 +339,14 @@ pub(crate) fn bitcoin_signed_transfer(
     let signing_key = signing_key_from_private_key(private_key)?;
     let public_key = signing_key.verifying_key().to_encoded_point(true);
     let public_key_bytes = public_key.as_bytes();
-    let pubkey_hash = Ripemd160::digest(&Sha256::digest(public_key_bytes));
+    let pubkey_hash = Ripemd160::digest(Sha256::digest(public_key_bytes));
     let expected_from = bitcoin_bech32_address(private_key, false)?;
     if from_address != expected_from {
         return Err("Derived BTC key does not match wallet BTC address".to_string());
     }
 
-    let (selected, fee_sats, change_sats) = bitcoin_select_coins(utxos, amount_sats, fee_rate_sat_vb)?;
+    let (selected, fee_sats, change_sats) =
+        bitcoin_select_coins(utxos, amount_sats, fee_rate_sat_vb)?;
     let total_in: u64 = selected.iter().map(|u| u.value).sum();
     let mut outputs = vec![BitcoinTxOutput {
         value: amount_sats,
@@ -332,7 +362,10 @@ pub(crate) fn bitcoin_signed_transfer(
     let script_code = bitcoin_p2pkh_script_code(&pubkey_hash);
     let inputs: Vec<BitcoinTxInput> = selected
         .into_iter()
-        .map(|utxo| BitcoinTxInput { utxo, script_code: script_code.clone() })
+        .map(|utxo| BitcoinTxInput {
+            utxo,
+            script_code: script_code.clone(),
+        })
         .collect();
 
     let mut signatures = vec![];
@@ -372,11 +405,18 @@ pub(crate) fn bitcoin_signed_transfer(
         raw_tx_hex: hex::encode(raw),
         first_signature_hex: signatures.first().map(hex::encode).unwrap_or_default(),
         fee_sats,
-        post_balance: total_in.saturating_sub(amount_sats).saturating_sub(fee_sats),
+        post_balance: total_in
+            .saturating_sub(amount_sats)
+            .saturating_sub(fee_sats),
     })
 }
 
-pub(crate) async fn sign_bitcoin_transfer(mnemonic: &str, from: &str, to: &str, amount_sats: u64) -> Result<BitcoinSignedTransfer, String> {
+pub(crate) async fn sign_bitcoin_transfer(
+    mnemonic: &str,
+    from: &str,
+    to: &str,
+    amount_sats: u64,
+) -> Result<BitcoinSignedTransfer, String> {
     let private_key = secp256k1_private_key_from_mnemonic(mnemonic, BITCOIN_DERIVATION_PATH)?;
     let utxos = fetch_bitcoin_utxos(from).await?;
     let fee_rate = fetch_bitcoin_fee_rate().await?;
