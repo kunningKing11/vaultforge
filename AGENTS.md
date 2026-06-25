@@ -44,6 +44,12 @@ Keep these concerns separate:
 
 Do not let local UI state or simulator state become the source of truth for real funds.
 
+## Code Organization Discipline
+
+Keep code DRY. Repeated business logic, command orchestration, provider parsing, validation, derivation, signing setup, and frontend formatting should be extracted into the narrowest shared helper or module that preserves clarity.
+
+Avoid copy-pasting wallet, transaction, provider, or DTO logic across chains or UI flows. If two implementations look similar but have chain-specific rules, share only the common plumbing and keep the chain-specific behavior explicit.
+
 ## Backend Module Layout
 
 Keep `src-tauri/src/main.rs` limited to Tauri application setup, managed state registration, module declarations, and `generate_handler!` wiring.
