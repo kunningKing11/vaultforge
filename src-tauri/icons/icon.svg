@@ -1,10 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="VaultForge Wallet icon">
   <rect width="512" height="512" fill="#071013"/>
-  <rect width="512" height="512" rx="112" fill="#b7ff4a"/>
-  <g fill="none" stroke="#071013" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M117 157L221 355V157"/>
-    <path d="M288 157V355"/>
-    <path d="M288 157H395"/>
-    <path d="M288 253H379"/>
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="#b7ff4a"/>
+  <rect x="48" y="48" width="416" height="416" rx="88" fill="none" stroke="#071013" stroke-width="14" opacity="0.22"/>
+  <g fill="#071013" font-family="Noto Sans Math, Noto Serif, serif" font-weight="700" text-anchor="middle">
+    <text x="256" y="229" font-size="74">𝕍𝕒𝕦𝕝𝕥</text>
+    <text x="256" y="314" font-size="74">𝔽𝕠𝕣𝕘𝕖</text>
   </g>
 </svg>

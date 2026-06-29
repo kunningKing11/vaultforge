@@ -101,7 +101,7 @@ function lockedWallet() {
       <div class="glass w-full rounded-[2rem] p-8 text-center">
         <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-acid/15 text-3xl">#</div>
         <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Wallet locked</p>
-        <h1 class="mt-2 text-3xl font-black">Unlock VaultForge</h1>
+        <h1 class="mt-2 text-3xl font-black">Unlock 𝕍𝕒𝕦𝕝𝕥𝔽𝕠𝕣𝕘𝕖</h1>
         <p class="mt-3 text-slate-400">Your wallet session is locked locally. Enter your passphrase to restore dashboard access.</p>
         <form data-action="unlock-wallet" class="mt-7 space-y-4 text-left">
           <label class="block space-y-2"><span class="text-sm font-bold text-slate-300">Passphrase</span><input class="field" name="passphrase" type="password" required /></label>
@@ -188,7 +188,7 @@ function topBar() {
     <header class="glass flex flex-col gap-4 rounded-[2rem] p-5 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Overview</p>
-        <h1 class="mt-1 text-4xl font-black">${escapeHtml(appState.session.wallet_name ?? "VaultForge")}</h1>
+        <h1 class="mt-1 text-4xl font-black">${escapeHtml(appState.session.wallet_name ?? "𝕍𝕒𝕦𝕝𝕥𝔽𝕠𝕣𝕘𝕖")}</h1>
       </div>
       <div class="flex flex-wrap gap-3">
         <button class="btn-secondary" data-action="refresh" type="button">Refresh</button>
