@@ -1,3 +1,4 @@
+use crate::assets::cached_asset;
 use crate::dto::Asset;
 use crate::providers::http::rpc_post;
 
@@ -169,6 +170,26 @@ pub(crate) fn evm_network_id_for_token(symbol: &str) -> Option<&'static str> {
         .map(|(id, _)| *id)
 }
 
+pub(crate) async fn fetch_evm_native_balance(
+    config: &EvmNetworkConfig,
+    address: &str,
+) -> Result<u128, String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_getBalance",
+        "params": [address, "latest"],
+        "id": 1,
+    });
+
+    let json = rpc_post(config.rpc_url, &body).await?;
+    let balance_hex = json["result"]
+        .as_str()
+        .ok_or_else(|| "RPC response missing result field".to_string())?;
+
+    u128::from_str_radix(balance_hex.trim_start_matches("0x"), 16)
+        .map_err(|e| format!("Invalid balance hex: {e}"))
+}
+
 pub(crate) async fn fetch_evm_token_balance(
     config: &EvmNetworkConfig,
     token: &EvmTokenConfig,
@@ -199,26 +220,6 @@ pub(crate) async fn fetch_evm_token_balance(
 
     u128::from_str_radix(hex_str.trim_start_matches("0x"), 16)
         .map_err(|e| format!("Invalid token balance hex: {e}"))
-}
-
-pub(crate) async fn fetch_evm_native_balance(
-    config: &EvmNetworkConfig,
-    address: &str,
-) -> Result<u128, String> {
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "method": "eth_getBalance",
-        "params": [address, "latest"],
-        "id": 1,
-    });
-
-    let json = rpc_post(config.rpc_url, &body).await?;
-    let balance_hex = json["result"]
-        .as_str()
-        .ok_or_else(|| "RPC response missing result field".to_string())?;
-
-    u128::from_str_radix(balance_hex.trim_start_matches("0x"), 16)
-        .map_err(|e| format!("Invalid balance hex: {e}"))
 }
 
 pub(crate) async fn fetch_evm_assets(
@@ -308,7 +309,7 @@ pub(crate) async fn fetch_evm_gas_price(config: &EvmNetworkConfig) -> Result<u12
         .map_err(|e| format!("Invalid gas price hex: {e}"))
 }
 
-pub(crate) async fn fetch_evm_estimate_gas(
+pub(crate) async fn fetch_evm_estimated_gas(
     config: &EvmNetworkConfig,
     from: &str,
     to: &str,
@@ -337,7 +338,7 @@ pub(crate) async fn fetch_evm_estimate_gas(
         .map_err(|e| format!("Invalid gas estimate hex: {e}"))
 }
 
-pub(crate) async fn broadcast_evm_transaction(
+pub(crate) async fn broadcast_evm_tx(
     config: &EvmNetworkConfig,
     raw_tx_hex: &str,
 ) -> Result<String, String> {
@@ -359,7 +360,7 @@ pub(crate) async fn broadcast_evm_transaction(
         })
 }
 
-pub(crate) async fn fetch_tx_status(
+pub(crate) async fn fetch_evm_tx_status(
     config: &EvmNetworkConfig,
     tx_hash: &str,
 ) -> Result<Option<String>, String> {
@@ -381,11 +382,4 @@ pub(crate) async fn fetch_tx_status(
     } else {
         Ok(Some("failed".to_string()))
     }
-}
-
-fn cached_asset(cached_assets: &[Asset], network_id: &str, symbol: &str) -> Option<Asset> {
-    cached_assets
-        .iter()
-        .find(|asset| asset.network == network_id && asset.symbol == symbol)
-        .cloned()
 }

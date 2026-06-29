@@ -2,6 +2,7 @@ use std::sync::Mutex;
 use tauri::Manager;
 
 mod activity;
+mod assets;
 mod commands;
 mod derivation;
 mod dto;

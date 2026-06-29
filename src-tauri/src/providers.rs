@@ -1,3 +1,4 @@
+use crate::assets::cached_asset;
 use crate::derivation::{
     bech32_account_address, bitcoin_bech32_address, ethereum_address_from_private_key,
     filecoin_address_from_private_key, zcash_transparent_address,
@@ -5,7 +6,7 @@ use crate::derivation::{
 use crate::dto::Asset;
 use crate::providers::bitcoin::fetch_bitcoin_balance;
 use crate::providers::evm::{DEFAULT_EVM_CONFIG, fetch_evm_assets};
-use crate::providers::solana::fetch_solana_balance;
+use crate::providers::solana::fetch_solana_assets;
 use crate::validation::{
     validate_bitcoin_address, validate_evm_address, validate_filecoin_address,
     validate_injective_address, validate_solana_address, validate_zcash_address,
@@ -65,17 +66,6 @@ pub(crate) const NON_EVM_NATIVE_ASSETS: &[NativeAssetConfig] = &[
     },
 ];
 
-pub(crate) fn cached_asset(
-    cached_assets: &[Asset],
-    network_id: &str,
-    symbol: &str,
-) -> Option<Asset> {
-    cached_assets
-        .iter()
-        .find(|asset| asset.network == network_id && asset.symbol == symbol)
-        .cloned()
-}
-
 pub(crate) async fn fetch_portfolio_assets(
     addresses: &HashMap<String, String>,
     cached_assets: &[Asset],
@@ -86,7 +76,14 @@ pub(crate) async fn fetch_portfolio_assets(
         assets.extend(fetch_evm_assets(DEFAULT_EVM_CONFIG, evm_address, cached_assets).await);
     }
 
+    if let Some(solana_address) = addresses.get("solana") {
+        assets.extend(fetch_solana_assets(solana_address, cached_assets).await);
+    }
+
     for config in NON_EVM_NATIVE_ASSETS {
+        if config.network_id == "solana" {
+            continue;
+        }
         let Some(address) = addresses.get(config.address_key) else {
             continue;
         };
@@ -111,7 +108,6 @@ async fn fetch_non_evm_native_asset(
 ) -> Result<Asset, String> {
     let balance = match config.symbol {
         "BTC" => fetch_bitcoin_balance(address).await?,
-        "SOL" => fetch_solana_balance(address).await?,
         _ => return Err(format!("{} provider is not implemented yet", config.symbol)),
     };
 

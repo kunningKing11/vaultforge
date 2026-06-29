@@ -9,13 +9,15 @@ use crate::providers::bitcoin::{
     broadcast_bitcoin_transaction, fetch_bitcoin_tx_status, sign_bitcoin_transfer,
 };
 use crate::providers::evm::{
-    EVM_NETWORKS, broadcast_evm_transaction, evm_config_by_id, evm_config_for_symbol,
-    evm_tokens_for_network, fetch_evm_estimate_gas, fetch_evm_gas_price, fetch_evm_nonce,
-    fetch_tx_status,
+    EVM_NETWORKS, broadcast_evm_tx, evm_config_by_id, evm_config_for_symbol,
+    evm_tokens_for_network, fetch_evm_estimated_gas, fetch_evm_gas_price, fetch_evm_nonce,
+    fetch_evm_tx_status,
 };
+use crate::providers::solana::{broadcast_solana_transaction, fetch_solana_tx_status};
 use crate::state::{AppState, session_from_state, validate_unlocked};
 use crate::storage::persist_state_wallet;
 use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
+use crate::tx::solana::sign_solana_transfer;
 use crate::validation::validate_transfer;
 
 #[tauri::command]
@@ -44,133 +46,166 @@ pub(crate) async fn sign_transaction(
     };
 
     let to = to.trim().to_string();
-    let value_wei: u128 = amount.parse().map_err(|_| "Invalid amount".to_string())?;
+    let value: u128 = amount.parse().map_err(|_| "Invalid amount".to_string())?;
 
     let asset = assets
         .iter()
         .find(|a| a.symbol == symbol)
         .ok_or_else(|| format!("Asset {symbol} not found in wallet"))?;
-    let network_id = &asset.network;
+    let network_id = asset.network.as_str();
     let decimals = asset.decimals;
 
-    if network_id == "bitcoin" && symbol == "BTC" {
-        let from = addresses
-            .get("bitcoin")
-            .ok_or_else(|| "Wallet BTC address is not available".to_string())?
-            .clone();
-        let amount_sats: u64 = value_wei
-            .try_into()
-            .map_err(|_| "BTC amount is too large".to_string())?;
-        let signed_btc = sign_bitcoin_transfer(&mnemonic, &from, &to, amount_sats).await?;
-        return Ok(SignedTransaction {
-            from,
-            to,
-            symbol: symbol.clone(),
-            amount: value_wei.to_string(),
-            note: note.trim().to_string(),
-            network: "bitcoin".to_string(),
-            nonce: "utxo".to_string(),
-            signed_at: Utc::now().to_rfc3339(),
-            payload_hash: signed_btc.txid.clone(),
-            signature: signed_btc.first_signature_hex,
-            fee_amount: signed_btc.fee_sats.to_string(),
-            fee_symbol: "BTC".to_string(),
-            total_debit: (amount_sats + signed_btc.fee_sats).to_string(),
-            post_balance: signed_btc.post_balance.to_string(),
-            decimals,
-            fiat_value: 0.0,
-            raw_tx: Some(signed_btc.raw_tx_hex),
-            tx_hash: Some(signed_btc.txid),
-        });
-    }
+    match network_id {
+        "bitcoin" if symbol == "BTC" => {
+            // Bitcoin signing path
+            let from = addresses
+                .get("bitcoin")
+                .ok_or_else(|| "Wallet BTC address is not available".to_string())?
+                .clone();
+            let amount_sats: u64 = value
+                .try_into()
+                .map_err(|_| "BTC amount is too large".to_string())?;
+            let signed_btc = sign_bitcoin_transfer(&mnemonic, &from, &to, amount_sats).await?;
 
-    if evm_config_by_id(network_id).is_none() {
-        return Err(format!(
+            Ok(SignedTransaction {
+                from,
+                to,
+                symbol: symbol.clone(),
+                amount: value.to_string(),
+                note: note.trim().to_string(),
+                network: "bitcoin".to_string(),
+                nonce: "utxo".to_string(),
+                signed_at: Utc::now().to_rfc3339(),
+                payload_hash: signed_btc.txid.clone(),
+                signature: signed_btc.first_signature_hex,
+                fee_amount: signed_btc.fee_sats.to_string(),
+                fee_symbol: "BTC".to_string(),
+                total_debit: (amount_sats + signed_btc.fee_sats).to_string(),
+                post_balance: signed_btc.post_balance.to_string(),
+                decimals,
+                fiat_value: (value as f64) * asset.price_usd,
+                raw_tx: Some(signed_btc.raw_tx_hex),
+                tx_hash: Some(signed_btc.txid),
+            })
+        }
+        "solana" if symbol == "SOL" => {
+            // Solana signing path
+            let from = addresses
+                .get("solana")
+                .ok_or_else(|| "Wallet SOL address is not available".to_string())?
+                .clone();
+            let lamports: u64 = value
+                .try_into()
+                .map_err(|_| "SOL amount is too large".to_string())?;
+            let signed_sol = sign_solana_transfer(&mnemonic, &from, &to, lamports).await?;
+
+            Ok(SignedTransaction {
+                from,
+                to,
+                symbol: symbol.clone(),
+                amount: value.to_string(),
+                note: note.trim().to_string(),
+                network: "solana".to_string(),
+                nonce: "solana".to_string(),
+                signed_at: Utc::now().to_rfc3339(),
+                payload_hash: signed_sol.clone(),
+                signature: signed_sol.clone(),
+                fee_amount: "0".to_string(),
+                fee_symbol: "SOL".to_string(),
+                total_debit: value.to_string(),
+                post_balance: "0".to_string(),
+                decimals,
+                fiat_value: (value as f64) * asset.price_usd,
+                raw_tx: Some(signed_sol.clone()),
+                tx_hash: Some(signed_sol),
+            })
+        }
+        network_id if evm_config_by_id(network_id).is_some() => {
+            let config = evm_config_by_id(network_id)
+                .ok_or_else(|| format!("No EVM chain configured for network {network_id}"))?;
+
+            let is_native = evm_config_for_symbol(&symbol).is_some();
+
+            let (tx_to, tx_data, display_to) = if is_native {
+                (to.clone(), Vec::new(), to.clone())
+            } else {
+                let token = evm_tokens_for_network(config.id)
+                    .iter()
+                    .find(|t| t.symbol == symbol)
+                    .ok_or_else(|| format!("Token {symbol} not found on {network_id}"))?;
+                (
+                    token.contract.to_string(),
+                    encode_erc20_transfer(&to, value)?,
+                    to.clone(),
+                )
+            };
+
+            let nonce = fetch_evm_nonce(config, &address).await?;
+            let gas_price = fetch_evm_gas_price(config).await?;
+            let gas_limit = if tx_data.is_empty() {
+                fetch_evm_estimated_gas(config, &address, &tx_to, value, &[]).await?
+            } else {
+                fetch_evm_estimated_gas(config, &address, &tx_to, 0, &tx_data).await?
+            };
+
+            let max_priority_fee_per_gas = gas_price;
+            let max_fee_per_gas = gas_price;
+            let total_fee_wei: u128 = gas_limit as u128 * max_fee_per_gas as u128;
+
+            let signing_key = signing_key_from_mnemonic(&mnemonic)?;
+            let (_, tx_hash, raw_tx_hex, r_hex, s_hex) = sign_eip1559_transfer(&Eip1559TxDraft {
+                signing_key: &signing_key,
+                chain_id: config.chain_id,
+                nonce,
+                max_priority_fee_per_gas,
+                max_fee_per_gas,
+                gas_limit,
+                to: &tx_to,
+                value: if tx_data.is_empty() { value } else { 0 },
+                data: &tx_data,
+            })?;
+
+            let fee_str = total_fee_wei.to_string();
+            let total_debit_str = if is_native {
+                (value + total_fee_wei).to_string()
+            } else {
+                total_fee_wei.to_string()
+            };
+            let signature_str = format!("0x{}{}", r_hex, s_hex);
+
+            let post_balance_wei: u128 = asset.balance.parse().unwrap_or(0);
+            let post_balance = if post_balance_wei >= value {
+                (post_balance_wei - value).to_string()
+            } else {
+                "0".to_string()
+            };
+
+            Ok(SignedTransaction {
+                from: address,
+                to: display_to,
+                symbol: symbol.clone(),
+                amount: value.to_string(),
+                note: note.trim().to_string(),
+                network: config.id.to_string(),
+                nonce: nonce.to_string(),
+                signed_at: Utc::now().to_rfc3339(),
+                payload_hash: tx_hash.clone(),
+                signature: signature_str,
+                fee_amount: fee_str,
+                fee_symbol: symbol.clone(),
+                total_debit: total_debit_str,
+                post_balance,
+                decimals,
+                fiat_value: (value as f64) * asset.price_usd,
+                raw_tx: Some(raw_tx_hex),
+                tx_hash: Some(tx_hash),
+            })
+        }
+        unsupported_network_id => Err(format!(
             "{} transfers on {} are not implemented yet",
-            symbol, network_id
-        ));
+            symbol, unsupported_network_id
+        )),
     }
-
-    let config = evm_config_by_id(network_id)
-        .ok_or_else(|| format!("No EVM chain configured for network {network_id}"))?;
-
-    let is_native = evm_config_for_symbol(&symbol).is_some();
-
-    let (tx_to, tx_data, display_to) = if is_native {
-        (to.clone(), Vec::new(), to.clone())
-    } else {
-        let token = evm_tokens_for_network(config.id)
-            .iter()
-            .find(|t| t.symbol == symbol)
-            .ok_or_else(|| format!("Token {symbol} not found on {network_id}"))?;
-        (
-            token.contract.to_string(),
-            encode_erc20_transfer(&to, value_wei)?,
-            to.clone(),
-        )
-    };
-
-    let nonce = fetch_evm_nonce(config, &address).await?;
-    let gas_price = fetch_evm_gas_price(config).await?;
-    let gas_limit = if tx_data.is_empty() {
-        fetch_evm_estimate_gas(config, &address, &tx_to, value_wei, &[]).await?
-    } else {
-        fetch_evm_estimate_gas(config, &address, &tx_to, 0, &tx_data).await?
-    };
-
-    let max_priority_fee_per_gas = gas_price;
-    let max_fee_per_gas = gas_price;
-    let total_fee_wei = gas_limit as u128 * max_fee_per_gas;
-
-    let signing_key = signing_key_from_mnemonic(&mnemonic)?;
-    let (_, tx_hash, raw_tx_hex, r_hex, s_hex) = sign_eip1559_transfer(&Eip1559TxDraft {
-        signing_key: &signing_key,
-        chain_id: config.chain_id,
-        nonce,
-        max_priority_fee_per_gas,
-        max_fee_per_gas,
-        gas_limit,
-        to: &tx_to,
-        value: if tx_data.is_empty() { value_wei } else { 0 },
-        data: &tx_data,
-    })?;
-
-    let amount_str = value_wei.to_string();
-    let fee_str = total_fee_wei.to_string();
-    let total_debit_str = if is_native {
-        (value_wei + total_fee_wei).to_string()
-    } else {
-        total_fee_wei.to_string()
-    };
-    let signature_str = format!("0x{}{}", r_hex, s_hex);
-
-    let post_balance_wei: u128 = asset.balance.parse().unwrap_or(0);
-    let post_balance = if post_balance_wei >= value_wei {
-        (post_balance_wei - value_wei).to_string()
-    } else {
-        "0".to_string()
-    };
-
-    Ok(SignedTransaction {
-        from: address,
-        to: display_to,
-        symbol: symbol.clone(),
-        amount: amount_str,
-        note: note.trim().to_string(),
-        network: config.id.to_string(),
-        nonce: nonce.to_string(),
-        signed_at: Utc::now().to_rfc3339(),
-        payload_hash: tx_hash.clone(),
-        signature: signature_str,
-        fee_amount: fee_str,
-        fee_symbol: symbol.clone(),
-        total_debit: total_debit_str,
-        post_balance,
-        decimals,
-        fiat_value: 0.0,
-        raw_tx: Some(raw_tx_hex),
-        tx_hash: Some(tx_hash),
-    })
 }
 
 #[tauri::command]
@@ -201,13 +236,15 @@ pub(crate) async fn send_transaction(
         .as_ref()
         .ok_or_else(|| "No raw transaction data".to_string())?;
 
-    let tx_hash = if signed.network == "bitcoin" && signed.symbol == "BTC" {
-        broadcast_bitcoin_transaction(raw_tx).await?
-    } else {
-        let config = evm_config_for_symbol(&signed.symbol)
-            .or_else(|| evm_config_by_id(&signed.network))
-            .ok_or_else(|| format!("No EVM chain configured for {}", signed.symbol))?;
-        broadcast_evm_transaction(config, raw_tx).await?
+    let tx_hash = match signed.network.as_str() {
+        "bitcoin" if signed.symbol == "BTC" => broadcast_bitcoin_transaction(raw_tx).await?,
+        "solana" if signed.symbol == "SOL" => broadcast_solana_transaction(raw_tx).await?,
+        network_id if evm_config_by_id(network_id).is_some() => {
+            let config = evm_config_by_id(network_id)
+                .ok_or_else(|| format!("No EVM chain configured for {network_id}"))?;
+            broadcast_evm_tx(config, raw_tx).await?
+        }
+        network_id => return Err(format!("Unsupported network: {network_id}")),
     };
 
     let memo = if signed.note.is_empty() {
@@ -311,13 +348,16 @@ pub(crate) async fn check_transaction_status(
     tx_hash: String,
     network: String,
 ) -> Result<Option<String>, String> {
-    if network == "bitcoin" {
-        return fetch_bitcoin_tx_status(&tx_hash).await;
+    match network.as_str() {
+        "bitcoin" => fetch_bitcoin_tx_status(&tx_hash).await,
+        "solana" => fetch_solana_tx_status(&tx_hash).await,
+        network_id if evm_config_by_id(network_id).is_some() => {
+            let config = EVM_NETWORKS
+                .iter()
+                .find(|c| c.id == network_id)
+                .ok_or_else(|| format!("Unknown network: {}", network))?;
+            fetch_evm_tx_status(config, &tx_hash).await
+        }
+        _ => Err(format!("Unsupported network: {}", network)),
     }
-
-    let config = EVM_NETWORKS
-        .iter()
-        .find(|c| c.id == network)
-        .ok_or_else(|| format!("Unknown network: {}", network))?;
-    fetch_tx_status(config, &tx_hash).await
 }

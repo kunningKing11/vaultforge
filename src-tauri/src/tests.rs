@@ -3,19 +3,23 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::activity::{activity, hash_secret};
+use crate::assets::cached_asset;
 use crate::derivation::{
     address_from_seed, bitcoin_bech32_address, derive_addresses_from_mnemonic,
 };
 use crate::dto::{Asset, Wallet};
 use crate::providers::bitcoin::{
-    BitcoinUtxo, bitcoin_estimated_vbytes, bitcoin_select_coins, bitcoin_signed_transfer,
-    parse_bitcoin_balance, parse_bitcoin_fee_rate, parse_bitcoin_utxos,
+    BitcoinUtxo, parse_bitcoin_balance, parse_bitcoin_fee_rate, parse_bitcoin_utxos,
 };
 use crate::providers::evm::EVM_NETWORKS;
-use crate::providers::solana::parse_solana_balance;
-use crate::providers::{cached_asset, get_provider};
+use crate::providers::get_provider;
+use crate::providers::solana::{
+    parse_solana_balance, parse_solana_fee_for_message, parse_solana_token_accounts,
+    parse_solana_tx_status,
+};
 use crate::state::{AppState, StoredWalletMetadata, session_from_state};
 use crate::storage::{decrypt_wallet, derive_storage_key, encrypt_wallet};
+use crate::tx::bitcoin::{bitcoin_estimated_vbytes, bitcoin_select_coins, bitcoin_signed_transfer};
 use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
 use crate::validation::{validate_address_for_symbol, validate_evm_address};
 
@@ -212,6 +216,76 @@ fn parses_solana_balance_lamports() {
 }
 
 #[test]
+fn parses_solana_token_accounts() {
+    let json = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": {
+            "value": [{
+                "account": {
+                    "data": {
+                        "parsed": {
+                            "info": {
+                                "mint": "So11111111111111111111111111111111111111112",
+                                "tokenAmount": {
+                                    "amount": "1234500",
+                                    "decimals": 6
+                                }
+                            }
+                        }
+                    }
+                }
+            }]
+        },
+        "id": 1
+    });
+    let accounts = parse_solana_token_accounts(&json).unwrap();
+    assert_eq!(accounts.len(), 1);
+    assert_eq!(
+        accounts[0].mint,
+        "So11111111111111111111111111111111111111112"
+    );
+    assert_eq!(accounts[0].amount, "1234500");
+    assert_eq!(accounts[0].decimals, 6);
+}
+
+#[test]
+fn parses_solana_status_and_fee() {
+    let pending = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": { "value": [null] },
+        "id": 1
+    });
+    assert_eq!(parse_solana_tx_status(&pending).unwrap(), None);
+
+    let confirmed = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": { "value": [{ "err": null, "confirmationStatus": "finalized" }] },
+        "id": 1
+    });
+    assert_eq!(
+        parse_solana_tx_status(&confirmed).unwrap(),
+        Some("confirmed".to_string())
+    );
+
+    let failed = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": { "value": [{ "err": { "InstructionError": [0, "Custom"] } }] },
+        "id": 1
+    });
+    assert_eq!(
+        parse_solana_tx_status(&failed).unwrap(),
+        Some("failed".to_string())
+    );
+
+    let fee = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": { "value": 5000 },
+        "id": 1
+    });
+    assert_eq!(parse_solana_fee_for_message(&fee).unwrap(), 5000);
+}
+
+#[test]
 fn derives_documented_wallet_paths_deterministically() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     let addresses = derive_addresses_from_mnemonic(mnemonic).unwrap();
@@ -297,7 +371,7 @@ fn constructs_valid_eip1559_signature() {
 #[test]
 fn encodes_erc20_transfer_abi() {
     let recipient = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
-    let amount: u128 = 1_000_000_000_000_000_000;
+    let amount = 1_000_000_000_000_000_000;
     let data = encode_erc20_transfer(recipient, amount).unwrap();
     assert!(!data.is_empty());
     assert_eq!(data.len(), 4 + 32 + 32);
