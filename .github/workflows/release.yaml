@@ -1,0 +1,151 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: blacksmith-4vcpu-ubuntu-2404
+
+          - target: aarch64-unknown-linux-gnu
+            runner: blacksmith-4vcpu-ubuntu-2404-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri bundles
+        run: npm run tauri build -- --target ${{ matrix.target }}
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: vaultforge-wallet-${{ matrix.target }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/**/*
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Read package version
+        id: version
+        run: |
+          version="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          print(json.loads(Path("src-tauri/tauri.conf.json").read_text())["version"])
+          PY
+          )"
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Download bundles
+        uses: actions/download-artifact@v8.0.1
+        with:
+          path: artifacts
+
+      - name: Package release assets
+        run: |
+          python3 - <<'PY'
+          import shutil
+          from pathlib import Path
+
+          dist = Path("dist")
+          dist.mkdir(exist_ok=True)
+
+          for source in Path("artifacts").rglob("*"):
+              if source.is_file():
+                  target = dist / source.name
+                  if target.exists():
+                      target = dist / f"{source.parent.name}-{source.name}"
+                  shutil.copy2(source, target)
+          PY
+
+      - name: Generate release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          previous_tag="$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)"
+
+          {
+            printf 'Release %s\n\n' "${RELEASE_TAG}"
+
+            if [ -n "${previous_tag}" ]; then
+              printf 'Changes since %s:\n\n' "${previous_tag}"
+              range="${previous_tag}..HEAD"
+            else
+              printf 'Changes in this release:\n\n'
+              range="HEAD"
+            fi
+
+            commits_found=false
+
+            while IFS=$'\t' read -r full_hash short_hash subject; do
+              commits_found=true
+              username="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${full_hash}" --jq '.author.login // empty' 2>/dev/null || true)"
+
+              if [ -n "${username}" ]; then
+                printf '`[%s %s]` by @%s\n' "${short_hash}" "${subject}" "${username}"
+              else
+                author="$(git show -s --format='%aN' "${full_hash}")"
+                printf '`[%s %s]` by %s\n' "${short_hash}" "${subject}" "${author}"
+              fi
+            done < <(git log --format='%H%x09%h%x09%s' "${range}")
+
+            if [ "${commits_found}" = false ]; then
+              printf '%s\n' '- No commits found.'
+            fi
+          } > release-notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" dist/* \
+            --title "${{ steps.version.outputs.tag }}" \
+            --notes-file release-notes.md
