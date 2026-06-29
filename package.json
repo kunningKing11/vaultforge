@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
-    "generate-icon": "node scripts/generate-icon.mjs",
+    "generate-icon": "tauri icon src-tauri/icons/icon.svg -o src-tauri/icons",
     "build": "npm run generate-icon && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
