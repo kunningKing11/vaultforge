@@ -37,20 +37,23 @@ export async function unlockWallet(form: HTMLFormElement) {
 
 export async function signTransaction(form: HTMLFormElement) {
   const formData = new FormData(form);
+  const [network, symbol] = String(formData.get("asset") || "ethereum:ETH").split(":");
   appState.sendDraft = {
     to: String(formData.get("to") || ""),
-    symbol: String(formData.get("symbol") || "ETH"),
+    symbol: symbol || "ETH",
+    network: network || "ethereum",
     amount: String(formData.get("amount") || ""),
     note: String(formData.get("note") || ""),
   };
   appState.busy = true;
   render();
   try {
-    const asset = appState.session?.assets.find(a => a.symbol === appState.sendDraft.symbol);
+    const asset = appState.session?.assets.find(a => a.symbol === appState.sendDraft.symbol && a.network === appState.sendDraft.network);
     const decimals = asset?.decimals ?? 18;
     appState.signedTransaction = await walletApi.signTransaction({
       to: appState.sendDraft.to,
       symbol: appState.sendDraft.symbol,
+      network: appState.sendDraft.network,
       amount: toWei(appState.sendDraft.amount || "0", decimals),
       note: appState.sendDraft.note,
     });
@@ -70,7 +73,7 @@ export async function broadcastSignedTransaction() {
   const ok = await runCommand("send_transaction", () => walletApi.sendTransaction({ signed: appState.signedTransaction! }));
   if (ok) {
     appState.signedTransaction = null;
-    appState.sendDraft = { to: "", symbol: "ETH", amount: "", note: "" };
+    appState.sendDraft = { to: "", symbol: "ETH", network: "ethereum", amount: "", note: "" };
     startPendingTxPolling();
   }
 }
@@ -161,7 +164,7 @@ async function deleteStoredWallet() {
     stopPendingTxPolling();
     appState.currentView = "dashboard";
     appState.signedTransaction = null;
-    appState.sendDraft = { to: "", symbol: "ETH", amount: "", note: "" };
+    appState.sendDraft = { to: "", symbol: "ETH", network: "ethereum", amount: "", note: "" };
   }
 }
 

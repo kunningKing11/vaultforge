@@ -250,6 +250,7 @@ function dashboardView() {
 function sendView() {
   if (appState.signedTransaction) return signedTransactionView(appState.signedTransaction);
   const selectedSymbol = appState.sendDraft.symbol || "ETH";
+  const selectedAssetId = `${appState.sendDraft.network || "ethereum"}:${selectedSymbol}`;
 
   return `
     <section class="glass max-w-3xl rounded-[2rem] p-6">
@@ -259,7 +260,7 @@ function sendView() {
       <form data-action="sign-transaction" class="mt-6 grid gap-4">
         <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Recipient address</span><input class="field" name="to" data-recipient-address placeholder="${addressPlaceholder(selectedSymbol)}" value="${escapeHtml(appState.sendDraft.to)}" required /></label>
         <div class="grid gap-4 sm:grid-cols-2">
-          <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Asset</span>${assetSelect("symbol", selectedSymbol, "data-send-symbol")}</label>
+          <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Asset</span>${sendAssetSelect(selectedAssetId)}</label>
           <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" value="${escapeHtml(appState.sendDraft.amount)}" required /></label>
         </div>
         <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Note</span><input class="field" name="note" placeholder="Optional transaction memo" value="${escapeHtml(appState.sendDraft.note)}" /></label>
@@ -270,13 +271,15 @@ function sendView() {
 }
 
 function signedTransactionView(signed: SignedTransaction) {
+  const feeDecimals = decimalsForAsset(signed.feeSymbol, signed.network, signed.decimals);
+  const chainReferenceLabel = signed.network === "bitcoin" ? "Input model" : signed.network === "solana" ? "Blockhash" : "Nonce";
   return `
     <section class="glass max-w-4xl rounded-[2rem] p-6">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p class="text-sm uppercase tracking-[0.3em] text-acid">Signed transfer</p>
           <h2 class="mt-2 text-3xl font-black">Review signature</h2>
-          <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-400">The backend signed this EIP-1559 transaction with the derived private key. Broadcast only if the details match your intent.</p>
+          <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-400">The backend signed this chain-specific transaction with the derived key material. Broadcast only if the details match your intent.</p>
         </div>
         <span class="rounded-full bg-acid/15 px-3 py-1 text-xs font-black uppercase tracking-[0.2em] text-acid">Ready</span>
       </div>
@@ -284,12 +287,12 @@ function signedTransactionView(signed: SignedTransaction) {
         ${signedDetail("From", shortAddress(signed.from))}
         ${signedDetail("To", shortAddress(signed.to))}
         ${signedDetail("Amount", `${formatWei(signed.amount, signed.decimals)} ${signed.symbol}`)}
-        ${signedDetail("Network fee", `${formatWei(signed.feeAmount, signed.decimals)} ${signed.feeSymbol}`)}
+        ${signedDetail("Network fee", `${formatWei(signed.feeAmount, feeDecimals)} ${signed.feeSymbol}`)}
         ${signedDetail("Total debit", `${formatWei(signed.totalDebit, signed.decimals)} ${signed.symbol}`)}
         ${signedDetail("Post-send balance", `${formatWei(signed.postBalance, signed.decimals)} ${signed.symbol}`)}
         ${signedDetail("Estimated value", money(signed.fiatValue))}
         ${signedDetail("Network", networkDisplayName(signed.network))}
-        ${signedDetail("Nonce", signed.nonce)}
+        ${signedDetail(chainReferenceLabel, signed.nonce)}
         ${signedDetail("Signed", new Date(signed.signedAt).toLocaleString())}
       </div>
       <div class="mt-4 space-y-4">
@@ -539,6 +542,19 @@ function copyableDetailRow(label: string, value: string) {
 
 function assetSelect(name: string, selected = "ETH", attributes = "") {
   return `<select class="field" name="${name}" ${attributes}>${appState.session?.assets.map((asset) => `<option value="${asset.symbol}" ${asset.symbol === selected ? "selected" : ""}>${asset.symbol} - ${asset.name}</option>`).join("") ?? ""}</select>`;
+}
+
+function sendAssetSelect(selectedAssetId: string) {
+  return `<select class="field" name="asset" data-send-asset>${appState.session?.assets.map((asset) => {
+    const assetId = `${asset.network}:${asset.symbol}`;
+    return `<option value="${escapeHtml(assetId)}" ${assetId === selectedAssetId ? "selected" : ""}>${asset.symbol} - ${asset.name} (${networkDisplayName(asset.network)})</option>`;
+  }).join("") ?? ""}</select>`;
+}
+
+function decimalsForAsset(symbol: string, network: string, fallback: number) {
+  return appState.session?.assets.find((asset) => asset.symbol === symbol && asset.network === network)?.decimals
+    ?? appState.session?.assets.find((asset) => asset.symbol === symbol)?.decimals
+    ?? fallback;
 }
 
 export function updateRecipientPlaceholder(symbol: string) {

@@ -59,6 +59,7 @@ export type SignedTransaction = {
 export type SendDraft = {
   to: string;
   symbol: string;
+  network: string;
   amount: string;
   note: string;
 };

@@ -10,7 +10,7 @@ export const appState = {
   qrKey: "",
   qrGeneratingKey: "",
   signedTransaction: null as SignedTransaction | null,
-  sendDraft: { to: "", symbol: "ETH", amount: "", note: "" } as SendDraft,
+  sendDraft: { to: "", symbol: "ETH", network: "ethereum", amount: "", note: "" } as SendDraft,
   selectedActivityId: "",
   busy: false,
   lockedDeleteStep: "idle" as "idle" | "confirm" | "countdown",

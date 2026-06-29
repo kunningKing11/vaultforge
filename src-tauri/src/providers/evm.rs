@@ -154,10 +154,6 @@ pub(crate) fn evm_tokens_for_network(network_id: &str) -> &[EvmTokenConfig] {
         .unwrap_or(&[])
 }
 
-pub(crate) fn evm_config_for_symbol(symbol: &str) -> Option<&'static EvmNetworkConfig> {
-    EVM_NETWORKS.iter().find(|c| c.native_symbol == symbol)
-}
-
 pub(crate) fn evm_config_by_id(network_id: &str) -> Option<&'static EvmNetworkConfig> {
     EVM_NETWORKS.iter().find(|c| c.id == network_id)
 }

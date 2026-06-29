@@ -9,9 +9,8 @@ use crate::providers::bitcoin::{
     broadcast_bitcoin_transaction, fetch_bitcoin_tx_status, sign_bitcoin_transfer,
 };
 use crate::providers::evm::{
-    EVM_NETWORKS, broadcast_evm_tx, evm_config_by_id, evm_config_for_symbol,
-    evm_tokens_for_network, fetch_evm_estimated_gas, fetch_evm_gas_price, fetch_evm_nonce,
-    fetch_evm_tx_status,
+    EVM_NETWORKS, broadcast_evm_tx, evm_config_by_id, evm_tokens_for_network,
+    fetch_evm_estimated_gas, fetch_evm_gas_price, fetch_evm_nonce, fetch_evm_tx_status,
 };
 use crate::providers::solana::{broadcast_solana_transaction, fetch_solana_tx_status};
 use crate::state::{AppState, session_from_state, validate_unlocked};
@@ -25,6 +24,7 @@ pub(crate) async fn sign_transaction(
     state: State<'_, Mutex<AppState>>,
     to: String,
     symbol: String,
+    network: String,
     amount: String,
     note: String,
 ) -> Result<SignedTransaction, String> {
@@ -36,7 +36,7 @@ pub(crate) async fn sign_transaction(
             .wallet
             .as_ref()
             .ok_or_else(|| "No wallet exists yet".to_string())?;
-        validate_transfer(wallet, &to, &symbol, &amount)?;
+        validate_transfer(wallet, &to, &symbol, &network, &amount)?;
         (
             wallet.mnemonic.clone(),
             wallet.address.clone(),
@@ -50,8 +50,8 @@ pub(crate) async fn sign_transaction(
 
     let asset = assets
         .iter()
-        .find(|a| a.symbol == symbol)
-        .ok_or_else(|| format!("Asset {symbol} not found in wallet"))?;
+        .find(|a| a.symbol == symbol && a.network == network)
+        .ok_or_else(|| format!("Asset {symbol} on {network} not found in wallet"))?;
     let network_id = asset.network.as_str();
     let decimals = asset.decimals;
 
@@ -124,7 +124,7 @@ pub(crate) async fn sign_transaction(
             let config = evm_config_by_id(network_id)
                 .ok_or_else(|| format!("No EVM chain configured for network {network_id}"))?;
 
-            let is_native = evm_config_for_symbol(&symbol).is_some();
+            let is_native = symbol == config.native_symbol;
 
             let (tx_to, tx_data, display_to) = if is_native {
                 (to.clone(), Vec::new(), to.clone())
@@ -192,7 +192,7 @@ pub(crate) async fn sign_transaction(
                 payload_hash: tx_hash.clone(),
                 signature: signature_str,
                 fee_amount: fee_str,
-                fee_symbol: symbol.clone(),
+                fee_symbol: config.native_symbol.to_string(),
                 total_debit: total_debit_str,
                 post_balance,
                 decimals,

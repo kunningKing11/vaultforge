@@ -94,8 +94,8 @@ export function bindEvents() {
       render();
     }
 
-    if (target.matches("[data-send-symbol]")) {
-      updateRecipientPlaceholder(target.value);
+    if (target.matches("[data-send-asset]")) {
+      updateRecipientPlaceholder(target.value.split(":")[1] ?? target.value);
     }
   });
 
