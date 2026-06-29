@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
-    "generate-icon": "magick src-tauri/icons/icon.svg -background none -resize 512x512 src-tauri/icons/icon.png",
+    "generate-icon": "magick src-tauri/icons/icon.svg -background none -resize 512x512 src-tauri/icons/icon.png && magick src-tauri/icons/icon.svg -background none -resize 256x256 src-tauri/icons/icon.ico && magick src-tauri/icons/icon.svg -background none -resize 512x512 src-tauri/icons/icon.icns",
     "build": "npm run generate-icon && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
