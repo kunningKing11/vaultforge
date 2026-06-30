@@ -9,7 +9,7 @@ edition = "2024"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 argon2 = "0.5"
 base64 = "0.22"
 bincode = "1"
