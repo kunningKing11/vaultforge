@@ -12,12 +12,16 @@ tauri-build = { version = "2", features = [] }
 aes-gcm = "0.10"
 argon2 = "0.5"
 base64 = "0.22"
+bincode = "1"
 chrono = { version = "0.4", features = ["serde"] }
 hex = "0.4"
 rand = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+solana-sdk = "2"
+spl-associated-token-account = "4"
+spl-token = "6"
 sha2 = "0.10"
 bip39 = "1.1"
 bip32 = "0.5"

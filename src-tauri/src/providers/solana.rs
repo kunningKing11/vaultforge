@@ -72,11 +72,11 @@ pub(crate) async fn fetch_solana_assets(address: &str, cached_assets: &[Asset]) 
         if account.amount == "0" {
             continue;
         }
-        let (symbol, name) = solana_token_display(cached_assets, &account.mint);
+        let symbol = solana_token_symbol(cached_assets, &account.mint);
 
         assets.push(Asset {
             symbol,
-            name,
+            name: account.mint,
             balance: account.amount,
             decimals: account.decimals,
             price_usd: 0.0,
@@ -94,8 +94,8 @@ fn cached_solana_token_assets(cached_assets: &[Asset]) -> impl Iterator<Item = A
         .cloned()
 }
 
-fn solana_token_display(cached_assets: &[Asset], mint: &str) -> (String, String) {
-    let fallback_symbol = solana_token_symbol(mint);
+fn solana_token_symbol(cached_assets: &[Asset], mint: &str) -> String {
+    let fallback_symbol = fallback_solana_token_symbol(mint);
     let fallback_name = format!("SPL Token {}", short_mint(mint));
     let cached = cached_assets.iter().find(|asset| {
         asset.network == "solana"
@@ -106,11 +106,11 @@ fn solana_token_display(cached_assets: &[Asset], mint: &str) -> (String, String)
     });
 
     cached
-        .map(|asset| (asset.symbol.clone(), asset.name.clone()))
-        .unwrap_or((fallback_symbol, fallback_name))
+        .map(|asset| asset.symbol.clone())
+        .unwrap_or(fallback_symbol)
 }
 
-fn solana_token_symbol(mint: &str) -> String {
+fn fallback_solana_token_symbol(mint: &str) -> String {
     format!("SPL-{}", short_mint(mint))
 }
 
@@ -181,6 +181,27 @@ pub(crate) async fn fetch_solana_tx_status(signature: &str) -> Result<Option<Str
     });
     let json = rpc_post(SOLANA_RPC_URL, &body).await?;
     parse_solana_tx_status(&json)
+}
+
+pub(crate) async fn fetch_latest_solana_blockhash() -> Result<String, String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "getLatestBlockhash",
+        "params": [{"commitment": "finalized"}],
+        "id": 1,
+    });
+    let json = rpc_post(SOLANA_RPC_URL, &body).await?;
+    parse_latest_solana_blockhash(&json)
+}
+
+pub(crate) fn parse_latest_solana_blockhash(json: &serde_json::Value) -> Result<String, String> {
+    if let Some(error) = json.get("error") {
+        return Err(format!("Solana blockhash RPC error: {error}"));
+    }
+    json["result"]["value"]["blockhash"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Solana blockhash RPC missing result.value.blockhash".to_string())
 }
 
 pub(crate) fn parse_solana_tx_status(json: &serde_json::Value) -> Result<Option<String>, String> {
