@@ -28,7 +28,7 @@ bip32 = "0.5"
 hmac = "0.12"
 k256 = { version = "0.13", features = ["ecdsa"] }
 rlp = "0.5"
-sha3 = "0.10"
+sha3 = "0.12"
 ripemd = "0.1"
 bs58 = { version = "0.5", features = ["check"] }
 bech32 = "0.8"
