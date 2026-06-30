@@ -14,14 +14,17 @@ use crate::providers::bitcoin::{
 use crate::providers::evm::EVM_NETWORKS;
 use crate::providers::get_provider;
 use crate::providers::solana::{
-    parse_solana_balance, parse_solana_fee_for_message, parse_solana_token_accounts,
-    parse_solana_tx_status,
+    parse_latest_solana_blockhash, parse_solana_balance, parse_solana_fee_for_message,
+    parse_solana_token_accounts, parse_solana_tx_status,
 };
 use crate::state::{AppState, StoredWalletMetadata, session_from_state};
 use crate::storage::{decrypt_wallet, derive_storage_key, encrypt_wallet};
 use crate::tx::bitcoin::{bitcoin_estimated_vbytes, bitcoin_select_coins, bitcoin_signed_transfer};
 use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
-use crate::validation::{validate_address_for_symbol, validate_evm_address};
+use crate::tx::solana::{
+    sign_solana_token_transfer_with_blockhash, sign_solana_transfer_with_blockhash,
+};
+use crate::validation::{validate_address_for_symbol, validate_evm_address, validate_transfer};
 
 fn starter_assets(network: &str) -> Vec<Asset> {
     vec![
@@ -91,6 +94,39 @@ fn validates_asset_address_formats() {
     assert!(validate_address_for_symbol("0xinvalid", "ETH").is_err());
     assert!(validate_address_for_symbol("bc1q", "BTC").is_err());
     assert!(validate_address_for_symbol("invalid", "SOL").is_err());
+}
+
+#[test]
+fn validates_solana_token_transfer_recipient_as_solana_address() {
+    let wallet = Wallet {
+        name: "Test Wallet".to_string(),
+        mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about".to_string(),
+        created_at: "2025-01-01T00:00:00Z".to_string(),
+        address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
+        addresses: HashMap::new(),
+        passphrase_hash: "deadbeef".to_string(),
+        assets: vec![Asset {
+            symbol: "SPL-So1111".to_string(),
+            name: "So11111111111111111111111111111111111111112".to_string(),
+            balance: "1000000".to_string(),
+            decimals: 9,
+            price_usd: 0.0,
+            change_24h: 0.0,
+            network: "solana".to_string(),
+        }],
+        activity: vec![],
+    };
+
+    assert!(
+        validate_transfer(
+            &wallet,
+            "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
+            "SPL-So1111",
+            "solana",
+            "1",
+        )
+        .is_ok()
+    );
 }
 
 #[test]
@@ -283,6 +319,68 @@ fn parses_solana_status_and_fee() {
         "id": 1
     });
     assert_eq!(parse_solana_fee_for_message(&fee).unwrap(), 5000);
+}
+
+#[test]
+fn parses_latest_solana_blockhash() {
+    let json = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": {
+            "context": { "slot": 1 },
+            "value": {
+                "blockhash": "11111111111111111111111111111111",
+                "lastValidBlockHeight": 123
+            }
+        },
+        "id": 1
+    });
+    assert_eq!(
+        parse_latest_solana_blockhash(&json).unwrap(),
+        "11111111111111111111111111111111"
+    );
+}
+
+#[test]
+fn signs_solana_native_transfer() {
+    let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    let addresses = derive_addresses_from_mnemonic(mnemonic).unwrap();
+    let from = addresses.get("solana").unwrap();
+    let signed = sign_solana_transfer_with_blockhash(
+        mnemonic,
+        from,
+        "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
+        1_000_000,
+        "11111111111111111111111111111111",
+        5000,
+    )
+    .unwrap();
+
+    assert!(!signed.signature.is_empty());
+    assert!(!signed.raw_tx_base64.is_empty());
+    assert_eq!(signed.recent_blockhash, "11111111111111111111111111111111");
+    assert_eq!(signed.fee_lamports, 5000);
+}
+
+#[test]
+fn signs_solana_spl_token_transfer() {
+    let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    let addresses = derive_addresses_from_mnemonic(mnemonic).unwrap();
+    let from = addresses.get("solana").unwrap();
+    let signed = sign_solana_token_transfer_with_blockhash(
+        mnemonic,
+        from,
+        "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
+        "So11111111111111111111111111111111111111112",
+        1_000_000,
+        9,
+        "11111111111111111111111111111111",
+        5000,
+    )
+    .unwrap();
+
+    assert!(!signed.signature.is_empty());
+    assert!(!signed.raw_tx_base64.is_empty());
+    assert_eq!(signed.fee_lamports, 5000);
 }
 
 #[test]

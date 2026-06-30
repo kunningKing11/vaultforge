@@ -46,9 +46,16 @@ pub(crate) fn validate_transfer(
     if balance < amount {
         return Err(format!("Insufficient {} balance", symbol));
     }
-    validate_address_for_symbol(to, symbol)?;
+    validate_address_for_transfer(to, symbol, network)?;
 
     Ok(())
+}
+
+fn validate_address_for_transfer(address: &str, symbol: &str, network: &str) -> Result<(), String> {
+    match network {
+        "solana" => validate_solana_address(address),
+        _ => validate_address_for_symbol(address, symbol),
+    }
 }
 
 pub(crate) fn validate_address_for_symbol(address: &str, symbol: &str) -> Result<(), String> {
