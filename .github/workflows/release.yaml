@@ -173,6 +173,25 @@ jobs:
               raise SystemExit("no release assets collected")
           PY
 
+      - name: Generate release banner
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y fontconfig librsvg2-bin
+
+          font_url="https://github.com/google/fonts/raw/main/ofl/notosansmath/NotoSansMath-Regular.ttf"
+          font_dir="${HOME}/.local/share/fonts"
+          mkdir -p "${font_dir}"
+          curl -fL "${font_url}" -o "${font_dir}/NotoSansMath-Regular.ttf"
+          fc-cache -f "${font_dir}"
+
+          rsvg-convert \
+            --width 3072 \
+            --height 1024 \
+            --output src-tauri/icons/banner.png \
+            src-tauri/icons/banner.svg
+          cp src-tauri/icons/banner.png release-assets/vaultforge-banner.png
+
       - name: Generate release notes
         env:
           GH_TOKEN: ${{ github.token }}

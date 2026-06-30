@@ -13,9 +13,18 @@ use std::collections::HashMap;
 const EVM_DERIVATION_PATH: &str = "m/44'/60'/0'/0/0";
 pub(crate) const BITCOIN_DERIVATION_PATH: &str = "m/84'/0'/0'/0/0";
 const ZCASH_DERIVATION_PATH: &str = "m/44'/133'/0'/0/0";
-const SOLANA_DERIVATION_PATH: &[u32] = &[44, 501, 0, 0];
+pub(crate) const SOLANA_DERIVATION_PATH: &[u32] = &[44, 501, 0, 0];
 const FILECOIN_DERIVATION_PATH: &str = "m/44'/461'/0'/0/0";
 const INJECTIVE_DERIVATION_PATH: &str = EVM_DERIVATION_PATH;
+
+struct DerivedWalletKeys {
+    evm: [u8; 32],
+    bitcoin: [u8; 32],
+    zcash: [u8; 32],
+    solana: [u8; 32],
+    filecoin: [u8; 32],
+    injective: [u8; 32],
+}
 
 pub(crate) fn signing_key_from_mnemonic(mnemonic: &str) -> Result<k256::ecdsa::SigningKey, String> {
     let private_key = secp256k1_private_key_from_mnemonic(mnemonic, EVM_DERIVATION_PATH)?;
@@ -56,7 +65,7 @@ pub(crate) fn secp256k1_private_key_from_mnemonic(
     Ok(bytes.into())
 }
 
-fn solana_secret_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32], String> {
+pub(crate) fn solana_secret_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32], String> {
     type HmacSha512 = Hmac<Sha512>;
 
     let seed = mnemonic_seed(mnemonic)?;
@@ -87,25 +96,28 @@ fn solana_secret_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32], String> {
     Ok(key)
 }
 
+fn derive_wallet_keys(mnemonic: &str) -> Result<DerivedWalletKeys, String> {
+    Ok(DerivedWalletKeys {
+        evm: secp256k1_private_key_from_mnemonic(mnemonic, EVM_DERIVATION_PATH)?,
+        bitcoin: secp256k1_private_key_from_mnemonic(mnemonic, BITCOIN_DERIVATION_PATH)?,
+        zcash: secp256k1_private_key_from_mnemonic(mnemonic, ZCASH_DERIVATION_PATH)?,
+        solana: solana_secret_key_from_mnemonic(mnemonic)?,
+        filecoin: secp256k1_private_key_from_mnemonic(mnemonic, FILECOIN_DERIVATION_PATH)?,
+        injective: secp256k1_private_key_from_mnemonic(mnemonic, INJECTIVE_DERIVATION_PATH)?,
+    })
+}
+
 pub(crate) fn derive_addresses_from_mnemonic(
     mnemonic: &str,
 ) -> Result<HashMap<String, String>, String> {
-    let evm_private_key = secp256k1_private_key_from_mnemonic(mnemonic, EVM_DERIVATION_PATH)?;
-    let bitcoin_private_key =
-        secp256k1_private_key_from_mnemonic(mnemonic, BITCOIN_DERIVATION_PATH)?;
-    let zcash_private_key = secp256k1_private_key_from_mnemonic(mnemonic, ZCASH_DERIVATION_PATH)?;
-    let solana_secret_key = solana_secret_key_from_mnemonic(mnemonic)?;
-    let filecoin_private_key =
-        secp256k1_private_key_from_mnemonic(mnemonic, FILECOIN_DERIVATION_PATH)?;
-    let injective_private_key =
-        secp256k1_private_key_from_mnemonic(mnemonic, INJECTIVE_DERIVATION_PATH)?;
+    let keys = derive_wallet_keys(mnemonic)?;
 
-    let evm_address = ethereum_address_from_private_key(&evm_private_key)?;
-    let bitcoin_address = bitcoin_bech32_address(&bitcoin_private_key, false)?;
-    let zcash_address = zcash_transparent_address(&zcash_private_key, false)?;
-    let solana_address = solana_address_from_secret_key(&solana_secret_key)?;
-    let filecoin_address = filecoin_address_from_private_key(&filecoin_private_key)?;
-    let injective_address = bech32_account_address(&injective_private_key, "inj")?;
+    let evm_address = ethereum_address_from_private_key(&keys.evm)?;
+    let bitcoin_address = bitcoin_bech32_address(&keys.bitcoin, false)?;
+    let zcash_address = zcash_transparent_address(&keys.zcash, false)?;
+    let solana_address = solana_address_from_secret_key(&keys.solana)?;
+    let filecoin_address = filecoin_address_from_private_key(&keys.filecoin)?;
+    let injective_address = bech32_account_address(&keys.injective, "inj")?;
 
     let mut addresses = HashMap::new();
     addresses.insert("evm".to_string(), evm_address);
@@ -165,7 +177,7 @@ pub(crate) fn zcash_transparent_address(
     Ok(bs58::encode(bytes).with_check().into_string())
 }
 
-fn solana_address_from_secret_key(secret_bytes: &[u8; 32]) -> Result<String, String> {
+pub(crate) fn solana_address_from_secret_key(secret_bytes: &[u8; 32]) -> Result<String, String> {
     let secret = DalekSecretKey::from_bytes(secret_bytes)
         .map_err(|_| "Failed to derive Solana key".to_string())?;
     let public = DalekPublicKey::from(&secret);

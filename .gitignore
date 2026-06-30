@@ -5,6 +5,8 @@ src-tauri/target
 src-tauri/gen
 src-tauri/icons/*
 !src-tauri/icons/icon.svg
+!src-tauri/icons/banner.svg
+src-tauri/icons/banner.png
 *.log
 .DS_Store
 .env

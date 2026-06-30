@@ -16,7 +16,7 @@ use crate::providers::solana::{broadcast_solana_transaction, fetch_solana_tx_sta
 use crate::state::{AppState, session_from_state, validate_unlocked};
 use crate::storage::persist_state_wallet;
 use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
-use crate::tx::solana::sign_solana_transfer;
+use crate::tx::solana::{sign_solana_token_transfer, sign_solana_transfer};
 use crate::validation::validate_transfer;
 
 #[tauri::command]
@@ -88,16 +88,56 @@ pub(crate) async fn sign_transaction(
                 tx_hash: Some(signed_btc.txid),
             })
         }
-        "solana" if symbol == "SOL" => {
-            // Solana signing path
+        "solana" => {
             let from = addresses
                 .get("solana")
-                .ok_or_else(|| "Wallet SOL address is not available".to_string())?
+                .ok_or_else(|| "Wallet Solana address is not available".to_string())?
                 .clone();
-            let lamports: u64 = value
+            let amount_u64: u64 = value
                 .try_into()
-                .map_err(|_| "SOL amount is too large".to_string())?;
-            let signed_sol = sign_solana_transfer(&mnemonic, &from, &to, lamports).await?;
+                .map_err(|_| format!("{symbol} amount is too large"))?;
+            let sol_balance: u128 = assets
+                .iter()
+                .find(|a| a.network == "solana" && a.symbol == "SOL")
+                .and_then(|a| a.balance.parse().ok())
+                .unwrap_or(0);
+
+            let signed_sol = if symbol == "SOL" {
+                sign_solana_transfer(&mnemonic, &from, &to, amount_u64).await?
+            } else {
+                let decimals_u8: u8 = decimals
+                    .try_into()
+                    .map_err(|_| "SPL token decimals are too large".to_string())?;
+                sign_solana_token_transfer(
+                    &mnemonic,
+                    &from,
+                    &to,
+                    &asset.name,
+                    amount_u64,
+                    decimals_u8,
+                )
+                .await?
+            };
+            if sol_balance < signed_sol.fee_lamports as u128 {
+                return Err("Insufficient SOL balance for Solana transaction fee".to_string());
+            }
+            let total_debit = if symbol == "SOL" {
+                amount_u64
+                    .checked_add(signed_sol.fee_lamports)
+                    .ok_or_else(|| "SOL total debit is too large".to_string())?
+                    .to_string()
+            } else {
+                value.to_string()
+            };
+            let post_balance = if symbol == "SOL" {
+                let balance: u128 = asset.balance.parse().unwrap_or(0);
+                balance
+                    .saturating_sub(total_debit.parse().unwrap_or(0))
+                    .to_string()
+            } else {
+                let balance: u128 = asset.balance.parse().unwrap_or(0);
+                balance.saturating_sub(value).to_string()
+            };
 
             Ok(SignedTransaction {
                 from,
@@ -106,18 +146,18 @@ pub(crate) async fn sign_transaction(
                 amount: value.to_string(),
                 note: note.trim().to_string(),
                 network: "solana".to_string(),
-                nonce: "solana".to_string(),
+                nonce: signed_sol.recent_blockhash,
                 signed_at: Utc::now().to_rfc3339(),
-                payload_hash: signed_sol.clone(),
-                signature: signed_sol.clone(),
-                fee_amount: "0".to_string(),
+                payload_hash: signed_sol.signature.clone(),
+                signature: signed_sol.signature.clone(),
+                fee_amount: signed_sol.fee_lamports.to_string(),
                 fee_symbol: "SOL".to_string(),
-                total_debit: value.to_string(),
-                post_balance: "0".to_string(),
+                total_debit,
+                post_balance,
                 decimals,
                 fiat_value: (value as f64) * asset.price_usd,
-                raw_tx: Some(signed_sol.clone()),
-                tx_hash: Some(signed_sol),
+                raw_tx: Some(signed_sol.raw_tx_base64),
+                tx_hash: Some(signed_sol.signature),
             })
         }
         network_id if evm_config_by_id(network_id).is_some() => {
@@ -238,7 +278,7 @@ pub(crate) async fn send_transaction(
 
     let tx_hash = match signed.network.as_str() {
         "bitcoin" if signed.symbol == "BTC" => broadcast_bitcoin_transaction(raw_tx).await?,
-        "solana" if signed.symbol == "SOL" => broadcast_solana_transaction(raw_tx).await?,
+        "solana" => broadcast_solana_transaction(raw_tx).await?,
         network_id if evm_config_by_id(network_id).is_some() => {
             let config = evm_config_by_id(network_id)
                 .ok_or_else(|| format!("No EVM chain configured for {network_id}"))?;
