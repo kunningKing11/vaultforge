@@ -29,7 +29,7 @@ hmac = "0.12"
 k256 = { version = "0.13", features = ["ecdsa"] }
 rlp = "0.5"
 sha3 = "0.12"
-ripemd = "0.1"
+ripemd = "0.2"
 bs58 = { version = "0.5", features = ["check"] }
 bech32 = "0.8"
 ed25519-dalek = "1.0"

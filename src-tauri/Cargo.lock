@@ -381,7 +381,7 @@ dependencies = [
  "once_cell",
  "pbkdf2 0.12.2",
  "rand_core 0.6.4",
- "ripemd",
+ "ripemd 0.1.3",
  "secp256k1",
  "sha2 0.10.9",
  "subtle",
@@ -3942,6 +3942,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ripemd"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4dd4211456b4172d7e44261920c25acf07367c4f04bb5f5d54fc21b090d9b159"
+dependencies = [
+ "digest 0.11.3",
+]
+
+[[package]]
 name = "rlp"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7143,7 +7152,7 @@ dependencies = [
  "k256",
  "rand 0.8.6",
  "reqwest 0.12.28",
- "ripemd",
+ "ripemd 0.2.0",
  "rlp",
  "serde",
  "serde_json",
