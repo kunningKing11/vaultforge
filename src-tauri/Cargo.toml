@@ -23,7 +23,7 @@ solana-sdk = "2"
 spl-associated-token-account = "4"
 spl-token = "6"
 sha2 = "0.10"
-bip39 = "1.1"
+bip39 = "2.2"
 bip32 = "0.5"
 hmac = "0.12"
 k256 = { version = "0.13", features = ["ecdsa"] }
