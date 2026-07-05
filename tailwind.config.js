@@ -4,16 +4,19 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        display: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       colors: {
-        ink: "#071013",
-        cobalt: "#3b82f6",
-        acid: "#b8ff5c",
-        violet: "#8b5cf6",
+        ink: "rgb(var(--color-ink-rgb) / <alpha-value>)",
+        cobalt: "rgb(var(--color-cobalt-rgb) / <alpha-value>)",
+        acid: "rgb(var(--color-accent-rgb) / <alpha-value>)",
+        violet: "rgb(var(--color-violet-rgb) / <alpha-value>)",
+        error: "rgb(var(--color-error-rgb) / <alpha-value>)",
+        warning: "rgb(var(--color-warning-rgb) / <alpha-value>)",
+        ok: "rgb(var(--color-ok-rgb) / <alpha-value>)",
       },
       boxShadow: {
-        glow: "0 0 60px rgba(184, 255, 92, 0.16)",
+        glow: "var(--shadow-glow)",
       },
     },
   },

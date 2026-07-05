@@ -2,6 +2,7 @@ import QRCode from "qrcode";
 import { pushToast } from "./toasts";
 import { formatError, shortAddress } from "./format";
 import { appState, receivePayload, selectedNetwork } from "./state";
+import { theme } from "./theme";
 
 export async function ensureReceiveQr(): Promise<boolean> {
   if (appState.currentView !== "receive" || !appState.session?.address || appState.session?.locked) return false;
@@ -24,7 +25,7 @@ export async function ensureReceiveQr(): Promise<boolean> {
       type: "svg",
       margin: 2,
       errorCorrectionLevel: appState.qrResilience,
-      color: { dark: "#071013", light: "#ffffff" },
+      color: { dark: theme.colors.qrDark, light: theme.colors.qrLight },
     });
 
     if (appState.qrGeneratingKey === nextQrKey) {

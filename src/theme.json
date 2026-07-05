@@ -1,0 +1,62 @@
+{
+  "fonts": {
+    "body": "Inter, ui-sans-serif, system-ui, sans-serif",
+    "display": "Inter, ui-sans-serif, system-ui, sans-serif",
+    "mono": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace"
+  },
+  "colors": {
+    "background": "#030712",
+    "backgroundMuted": "#020617",
+    "surface": "#0f172a",
+    "surfaceRaised": "#1e293b",
+    "surfaceGlassFrom": "#0f172a",
+    "surfaceGlassTo": "#020617",
+    "text": "#f8fafc",
+    "textStrong": "#ffffff",
+    "textMuted": "#94a3b8",
+    "textSubtle": "#64748b",
+    "textSoft": "#e2e8f0",
+    "ink": "#071013",
+    "accent": "#b8ff5c",
+    "accentAlt": "#62e2ff",
+    "cobalt": "#3b82f6",
+    "violet": "#8b5cf6",
+    "error": "#fb7185",
+    "errorDark": "#7f1d1d",
+    "errorText": "#fecdd3",
+    "danger": "#fb7185",
+    "dangerDark": "#7f1d1d",
+    "warning": "#fbbf24",
+    "warningSoft": "#facc15",
+    "warningText": "#fef3c7",
+    "orange": "#f97316",
+    "ok": "#84cc16",
+    "okText": "#d9f99d",
+    "success": "#84cc16",
+    "successDark": "#064e3b",
+    "successText": "#d1fae5",
+    "qrDark": "#071013",
+    "qrLight": "#ffffff",
+    "overlay": "#020617"
+  },
+  "opacity": {
+    "glassFrom": 0.92,
+    "glassTo": 0.72,
+    "field": 0.72,
+    "fieldFocus": 0.9,
+    "panel": 0.04,
+    "panelSubtle": 0.035,
+    "panelFaint": 0.025,
+    "overlay": 0.75,
+    "accentWash": 0.1,
+    "statusWash": 0.1,
+    "border": 0.11
+  },
+  "shadows": {
+    "glass": "0 24px 80px rgba(2, 6, 23, 0.45)",
+    "glow": "0 0 60px rgba(184, 255, 92, 0.16)",
+    "toast": "0 22px 60px rgba(2, 6, 23, 0.42)",
+    "modal": "0 30px 120px rgba(2, 6, 23, 0.72)",
+    "dangerModal": "0 30px 120px rgba(127, 29, 29, 0.55)"
+  }
+}
