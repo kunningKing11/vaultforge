@@ -36,7 +36,7 @@ pub(crate) fn signing_key_from_mnemonic(mnemonic: &str) -> Result<k256::ecdsa::S
 
 pub(crate) fn generate_mnemonic() -> Result<String, String> {
     let mut entropy = [0u8; 16];
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     rng.fill(&mut entropy);
     Mnemonic::from_entropy_in(Language::English, &entropy)
         .map(|mnemonic| mnemonic.to_string())

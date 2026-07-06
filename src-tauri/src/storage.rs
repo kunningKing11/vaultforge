@@ -57,7 +57,8 @@ pub(crate) fn encrypt_wallet(
     key: &[u8; 32],
     salt: &[u8],
 ) -> Result<StoredWalletFile, String> {
-    let nonce_bytes: Vec<u8> = (0..12).map(|_| rand::thread_rng().r#gen()).collect();
+    let mut nonce_bytes = [0u8; 12];
+    rand::rng().fill(&mut nonce_bytes);
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| "Failed to initialize encryption")?;
     let payload = WalletPayload {
         wallet_name: wallet.name.clone(),
@@ -70,8 +71,9 @@ pub(crate) fn encrypt_wallet(
         activity: wallet.activity.clone(),
     };
     let plaintext = serde_json::to_vec(&payload).map_err(|_| "Failed to encode wallet")?;
+    let nonce = Nonce::try_from(nonce_bytes.as_slice()).map_err(|_| "Failed to create nonce")?;
     let ciphertext = cipher
-        .encrypt(Nonce::from_slice(&nonce_bytes), plaintext.as_ref())
+        .encrypt(&nonce, plaintext.as_ref())
         .map_err(|_| "Failed to encrypt wallet")?;
 
     Ok(StoredWalletFile {
@@ -102,8 +104,9 @@ pub(crate) fn decrypt_wallet(
         .map_err(|_| "Stored wallet payload is invalid")?;
     let (key, _) = derive_storage_key(passphrase, Some(&salt))?;
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|_| "Failed to initialize encryption")?;
+    let nonce = Nonce::try_from(nonce.as_slice()).map_err(|_| "Stored wallet nonce is invalid")?;
     let plaintext = cipher
-        .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
+        .decrypt(&nonce, ciphertext.as_ref())
         .map_err(|_| "Invalid passphrase")?;
     let payload: WalletPayload = serde_json::from_slice(&plaintext)
         .map_err(|_| "Stored wallet contents are invalid".to_string())?;
@@ -125,7 +128,11 @@ pub(crate) fn derive_storage_key(
 ) -> Result<([u8; 32], Vec<u8>), String> {
     let salt = salt
         .map(|value| value.to_vec())
-        .unwrap_or_else(|| (0..16).map(|_| rand::thread_rng().r#gen()).collect());
+        .unwrap_or_else(|| {
+            let mut salt = vec![0u8; 16];
+            rand::rng().fill(salt.as_mut_slice());
+            salt
+        });
     let mut key = [0u8; 32];
     Argon2::default()
         .hash_password_into(passphrase.as_bytes(), &salt, &mut key)

@@ -29,8 +29,8 @@ pub(crate) fn hash_secret(value: &str) -> String {
 }
 
 pub(crate) fn random_hex(bytes: usize) -> String {
-    let mut rng = rand::thread_rng();
-    let data: Vec<u8> = (0..bytes).map(|_| rng.r#gen()).collect();
+    let mut rng = rand::rng();
+    let data: Vec<u8> = (0..bytes).map(|_| rng.random()).collect();
     hex::encode(data)
 }
 
