@@ -44,7 +44,7 @@ function splash() {
   return `
     <section class="mx-auto flex min-h-[80vh] max-w-5xl items-center justify-center">
       <div class="glass rounded-[2rem] p-10 text-center">
-        <p class="text-sm uppercase tracking-[0.4em] text-acid">VaultForge</p>
+        <p class="theme-text-accent text-sm uppercase tracking-[0.4em]">VaultForge</p>
         <h1 class="mt-4 text-4xl font-black">Loading wallet core</h1>
       </div>
     </section>
@@ -55,7 +55,7 @@ function onboarding() {
   return `
     <section class="mx-auto grid min-h-[88vh] max-w-7xl items-center gap-8 lg:grid-cols-[1fr_0.95fr]">
       <div class="space-y-8">
-        <div class="inline-flex rounded-full border border-acid/30 bg-acid/10 px-4 py-2 text-sm font-bold text-acid">Desktop self-custody wallet</div>
+        <div class="theme-pill-accent inline-flex rounded-full border px-4 py-2 text-sm font-bold">Desktop self-custody wallet</div>
         <div>
           <h1 class="max-w-3xl text-5xl font-black tracking-tight text-white sm:text-7xl">Control crypto from a local-first command center.</h1>
           <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-300">VaultForge combines a TypeScript interface, TailwindCSS system, and Rust-powered Tauri backend for portfolio management, transfers, swaps, activity tracking, and wallet locking.</p>
@@ -72,7 +72,7 @@ function onboarding() {
             <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Start</p>
             <h2 class="text-2xl font-black">Create wallet</h2>
           </div>
-          <span class="rounded-full bg-acid px-3 py-1 text-xs font-black text-ink">NEW</span>
+          <span class="theme-badge-accent rounded-full px-3 py-1 text-xs font-black">NEW</span>
         </div>
         <form data-action="create-wallet" class="space-y-4">
           <label class="block space-y-2"><span class="text-sm font-bold text-slate-300">Wallet name</span><input class="field" name="name" placeholder="Primary Vault" required /></label>
@@ -99,7 +99,7 @@ function lockedWallet() {
   return `
     <section class="mx-auto flex min-h-[88vh] max-w-xl items-center justify-center">
       <div class="glass w-full rounded-[2rem] p-8 text-center">
-        <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-acid/15 text-3xl">#</div>
+        <div class="theme-icon-accent mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl text-3xl">#</div>
         <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Wallet locked</p>
         <h1 class="mt-2 text-3xl font-black">Unlock 𝕍𝕒𝕦𝕝𝕥𝔽𝕠𝕣𝕘𝕖</h1>
         <p class="mt-3 text-slate-400">Your wallet session is locked locally. Enter your passphrase to restore dashboard access.</p>
@@ -155,7 +155,7 @@ function walletShell() {
     <div class="mx-auto grid max-w-[1500px] gap-5 pb-24 lg:grid-cols-[280px_1fr] lg:pb-0">
       <aside class="glass hidden rounded-[2rem] p-5 lg:sticky lg:top-5 lg:block lg:h-[calc(100vh-2.5rem)]">
         <div class="mb-8 flex items-center gap-3">
-          <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-acid text-xl font-black text-ink">VF</div>
+          <div class="theme-badge-accent flex h-12 w-12 items-center justify-center rounded-2xl text-xl font-black">VF</div>
           <div><p class="font-black">${escapeHtml(appState.session.wallet_name ?? "VaultForge")}</p></div>
         </div>
         <nav class="space-y-2">
@@ -223,11 +223,11 @@ function dashboardView() {
         <section class="glass min-w-0 overflow-hidden rounded-[2rem] p-6">
           <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div class="min-w-0">
-              <p class="text-sm uppercase tracking-[0.3em] text-acid">Portfolio</p>
+              <p class="theme-text-accent text-sm uppercase tracking-[0.3em]">Portfolio</p>
               <h2 class="mt-3 max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">Multi-asset wallet with transaction controls.</h2>
             </div>
             <div class="grid shrink-0 gap-3 sm:grid-cols-1">
-              <div class="min-w-0 rounded-2xl border border-acid/30 bg-acid/10 p-4 text-right">
+              <div class="theme-panel-accent min-w-0 rounded-2xl border p-4 text-right">
                 <p class="text-sm text-slate-400">Weighted 24h</p>
                 <p class="max-w-full break-words text-2xl font-black leading-none sm:text-3xl ${change >= 0 ? "text-emerald-300" : "text-rose-300"}">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</p>
               </div>
@@ -236,7 +236,7 @@ function dashboardView() {
           <div class="asset-scroll mt-6">${topAssets || emptyState("No assets", "Create or import a wallet to populate simulated balances.")}</div>
         </section>
         <section class="glass rounded-[2rem] p-6">
-          <div class="mb-5 flex items-center justify-between"><h2 class="text-xl font-black">Recent activity</h2><button class="text-sm font-bold text-acid" data-view="activity">View all</button></div>
+          <div class="mb-5 flex items-center justify-between"><h2 class="text-xl font-black">Recent activity</h2><button class="theme-text-accent text-sm font-bold" data-view="activity">View all</button></div>
           <div class="space-y-3">${recent}</div>
         </section>
       </div>
@@ -277,11 +277,11 @@ function signedTransactionView(signed: SignedTransaction) {
     <section class="glass max-w-4xl rounded-[2rem] p-6">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p class="text-sm uppercase tracking-[0.3em] text-acid">Signed transfer</p>
+          <p class="theme-text-accent text-sm uppercase tracking-[0.3em]">Signed transfer</p>
           <h2 class="mt-2 text-3xl font-black">Review signature</h2>
           <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-400">The backend signed this chain-specific transaction with the derived key material. Broadcast only if the details match your intent.</p>
         </div>
-        <span class="rounded-full bg-acid/15 px-3 py-1 text-xs font-black uppercase tracking-[0.2em] text-acid">Ready</span>
+        <span class="theme-pill-accent rounded-full border-0 px-3 py-1 text-xs font-black uppercase tracking-[0.2em]">Ready</span>
       </div>
       <div class="mt-6 grid gap-4 sm:grid-cols-2">
         ${signedDetail("From", shortAddress(signed.from))}
@@ -330,8 +330,8 @@ function receiveView() {
         <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Receive network</span>${receiveNetworkSelect()}</label>
         <label class="space-y-2"><span class="text-sm font-bold text-slate-300">QR resilience</span>${qrResilienceSelect()}</label>
       </div>
-      <div class="mt-6 rounded-3xl border border-dashed border-acid/40 bg-acid/10 p-6 text-center">
-        <div class="qr-code mx-auto flex h-56 w-56 items-center justify-center rounded-2xl bg-white p-4 shadow-glow">${qrContent}</div>
+      <div class="theme-panel-accent mt-6 rounded-3xl border border-dashed p-6 text-center">
+        <div class="theme-glow qr-code mx-auto flex h-56 w-56 items-center justify-center rounded-2xl bg-white p-4">${qrContent}</div>
         <div class="mt-4 flex flex-col justify-center gap-3 sm:flex-row">
           <button class="btn-secondary" data-action="copy-qr" type="button" ${qrActionsDisabled}>${iconCopy()} Copy SVG</button>
           <button class="btn-secondary" data-action="download-qr" type="button" ${qrActionsDisabled}>${iconDownload()} Download SVG</button>
@@ -399,7 +399,7 @@ function settingsView() {
         <div class="mt-6 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm text-amber-100">This build simulates balances and transactions. Connect audited chain clients and hardware-backed signing before using real funds.</div>
       </section>
       <section class="glass rounded-[2rem] p-6">
-        <p class="text-sm uppercase tracking-[0.3em] text-acid">Security center</p>
+        <p class="theme-text-accent text-sm uppercase tracking-[0.3em]">Security center</p>
         <h2 class="mt-2 text-3xl font-black">Local protection</h2>
         <div class="mt-6 grid gap-3 sm:grid-cols-2">
           ${securityTile("Storage", "AES-GCM encrypted")}
@@ -477,7 +477,7 @@ function assetCard(asset: Asset) {
       <p class="mt-1 text-sm text-slate-400">${formatWei(asset.balance, asset.decimals)} ${escapeHtml(asset.symbol)}</p>
       <div class="mt-4">
         <div class="flex justify-between text-xs font-bold text-slate-500"><span>Allocation</span><span>${allocation.toFixed(1)}%</span></div>
-        <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-900"><div class="h-full rounded-full bg-acid" style="width: ${Math.max(2, allocation).toFixed(1)}%"></div></div>
+        <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-900"><div class="theme-progress-accent h-full rounded-full" style="width: ${Math.max(2, allocation).toFixed(1)}%"></div></div>
       </div>
     </article>
   `;
@@ -500,9 +500,9 @@ function emptyState(title: string, body: string) {
 
 function activityRow(item: Activity) {
   return `
-    <article class="flex cursor-pointer flex-col gap-3 rounded-2xl border ${appState.selectedActivityId === item.id ? "border-acid/50 bg-acid/10" : "border-white/10 bg-white/[0.035]"} p-4 sm:flex-row sm:items-center sm:justify-between" data-action="select-activity" data-activity-id="${escapeHtml(item.id)}">
+    <article class="flex cursor-pointer flex-col gap-3 rounded-2xl border ${appState.selectedActivityId === item.id ? "theme-activity-selected" : "border-white/10 bg-white/[0.035]"} p-4 sm:flex-row sm:items-center sm:justify-between" data-action="select-activity" data-activity-id="${escapeHtml(item.id)}">
       <div><p class="font-black">${escapeHtml(item.title)}</p><p class="mt-1 text-sm text-slate-500">${escapeHtml(item.subtitle)} - ${new Date(item.timestamp).toLocaleString()}</p></div>
-      <div class="text-left sm:text-right"><p class="font-mono font-bold">${escapeHtml(item.amount ?? "")}</p><p class="text-xs uppercase tracking-[0.2em] text-acid">${escapeHtml(item.status)}</p></div>
+      <div class="text-left sm:text-right"><p class="font-mono font-bold">${escapeHtml(item.amount ?? "")}</p><p class="theme-text-accent text-xs uppercase tracking-[0.2em]">${escapeHtml(item.status)}</p></div>
     </article>
   `;
 }
@@ -587,5 +587,5 @@ function qrResilienceSelect() {
 }
 
 function loadingBar() {
-  return `<div class="fixed left-0 top-0 z-50 h-1 w-full overflow-hidden bg-slate-900"><div class="h-full w-1/2 animate-pulse bg-acid"></div></div>`;
+  return `<div class="fixed left-0 top-0 z-50 h-1 w-full overflow-hidden bg-slate-900"><div class="theme-progress-accent h-full w-1/2 animate-pulse"></div></div>`;
 }
