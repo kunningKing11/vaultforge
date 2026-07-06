@@ -1,7 +1,8 @@
 use bech32::{self, FromBase32, Variant};
 use k256::ecdsa::signature::hazmat::PrehashSigner;
+use ripemd::digest::Digest as RipemdDigest;
 use ripemd::Ripemd160;
-use sha2::{Digest, Sha256};
+use sha2::{Digest as Sha2Digest, Sha256};
 
 use crate::derivation::{bitcoin_bech32_address, signing_key_from_private_key};
 use crate::providers::bitcoin::BitcoinUtxo;
@@ -115,8 +116,8 @@ fn bitcoin_txid_le(txid: &str) -> Result<Vec<u8>, String> {
 }
 
 fn bitcoin_double_sha256(data: &[u8]) -> [u8; 32] {
-    let first = Sha256::digest(data);
-    Sha256::digest(first).into()
+    let first = <Sha256 as Sha2Digest>::digest(data);
+    <Sha256 as Sha2Digest>::digest(first).into()
 }
 
 fn bitcoin_txid_from_stripped(stripped_tx: &[u8]) -> String {
@@ -237,7 +238,7 @@ pub(crate) fn bitcoin_signed_transfer(
     let signing_key = signing_key_from_private_key(private_key)?;
     let public_key = signing_key.verifying_key().to_encoded_point(true);
     let public_key_bytes = public_key.as_bytes();
-    let pubkey_hash = Ripemd160::digest(Sha256::digest(public_key_bytes));
+    let pubkey_hash = <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_key_bytes));
     let expected_from = bitcoin_bech32_address(private_key, false)?;
     if from_address != expected_from {
         return Err("Derived BTC key does not match wallet BTC address".to_string());

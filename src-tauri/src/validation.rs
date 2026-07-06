@@ -1,5 +1,6 @@
 use crate::dto::Wallet;
-use sha2::{Digest, Sha256};
+use sha2::{Digest as Sha2Digest, Sha256};
+use sha3::digest::Digest as Sha3Digest;
 use sha3::Keccak256;
 
 pub(crate) fn validate_passphrase(passphrase: &str) -> Result<(), String> {
@@ -79,7 +80,7 @@ pub(crate) fn validate_evm_address(address: &str) -> Result<(), String> {
     let has_upper = hex_part.chars().any(|c| c.is_ascii_uppercase());
     if has_lower && has_upper {
         let hex_lower = hex_part.to_lowercase();
-        let hash = Keccak256::digest(hex_lower.as_bytes());
+        let hash = <Keccak256 as Sha3Digest>::digest(hex_lower.as_bytes());
         let hash_hex = hex::encode(hash);
         for (i, c) in hex_part.chars().enumerate() {
             if c.is_ascii_digit() {
