@@ -31,7 +31,7 @@ rlp = "0.6"
 sha3 = "0.12"
 ripemd = "0.2"
 bs58 = { version = "0.5", features = ["check"] }
-bech32 = "0.8"
+bech32 = "0.12"
 ed25519-dalek = "1.0"
 zeroize = { version = "1", features = ["zeroize_derive"] }
 tokio = { version = "1", features = ["time"] }
