@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
     "generate-icon": "tauri icon src-tauri/icons/icon.svg -o src-tauri/icons",
-    "build": "npm run generate-icon && tsc && vite build",
+    "prepare-tauri": "npm run sync-cargo-version && npm run generate-icon",
+    "build": "tsc && vite build",
     "preview": "vite preview",
     "sync-cargo-version": "node scripts/sync-cargo-version.mjs",
     "tauri": "tauri"

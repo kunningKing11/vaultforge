@@ -19,6 +19,12 @@ use state::AppState;
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
+            let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png"))?
+                .to_owned();
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_icon(icon)?;
+            }
+
             let storage_path = app
                 .path()
                 .app_data_dir()
