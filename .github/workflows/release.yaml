@@ -107,6 +107,9 @@ jobs:
             New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts" -Name "Noto Sans Math (TrueType)" -Value $fontPath -PropertyType String -Force | Out-Null
           }
 
+      - name: Sync package lock
+        run: npm run sync-package-lock
+
       - name: Install frontend dependencies
         run: npm ci
 

@@ -1,8 +1,8 @@
-use bech32::{self, ToBase32, Variant};
+use bech32::{self, hrp, segwit, Bech32, Hrp};
 use bip32::{DerivationPath, XPrv};
 use bip39::{Language, Mnemonic};
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use k256::ecdsa::SigningKey;
 use rand::Rng;
 use ripemd::digest::Digest as RipemdDigest;
@@ -71,7 +71,7 @@ pub(crate) fn solana_secret_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32]
     type HmacSha512 = Hmac<Sha512>;
 
     let seed = mnemonic_seed(mnemonic)?;
-    let mut mac = <HmacSha512 as Mac>::new_from_slice(b"ed25519 seed")
+    let mut mac = HmacSha512::new_from_slice(b"ed25519 seed")
         .map_err(|_| "Failed to initialize Solana derivation".to_string())?;
     mac.update(&seed);
     let result = mac.finalize().into_bytes();
@@ -87,7 +87,7 @@ pub(crate) fn solana_secret_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32]
         data.extend_from_slice(&key);
         data.extend_from_slice(&hardened.to_be_bytes());
 
-        let mut mac = <HmacSha512 as Mac>::new_from_slice(&chain_code)
+        let mut mac = HmacSha512::new_from_slice(&chain_code)
             .map_err(|_| "Failed to derive Solana child key".to_string())?;
         mac.update(&data);
         let result = mac.finalize().into_bytes();
@@ -153,10 +153,8 @@ pub(crate) fn bitcoin_bech32_address(
     let encoded = verifying_key.to_encoded_point(true);
     let public_bytes = encoded.as_bytes();
     let hashed = <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_bytes));
-    let hrp = if is_testnet { "tb" } else { "bc" };
-    let mut bech32_data = vec![bech32::u5::try_from_u8(0).map_err(|_| "Failed to encode address")?];
-    bech32_data.extend(hashed.to_base32());
-    bech32::encode(hrp, bech32_data, Variant::Bech32)
+    let hrp = if is_testnet { hrp::TB } else { hrp::BC };
+    segwit::encode_v0(hrp, &hashed)
         .map_err(|_| "Failed to encode address".to_string())
 }
 
@@ -206,7 +204,7 @@ pub(crate) fn bech32_account_address(private_key: &[u8; 32], hrp: &str) -> Resul
     let encoded = verifying_key.to_encoded_point(true);
     let public_bytes = encoded.as_bytes();
     let payload = <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_bytes));
-    let bech32_data = payload.to_base32();
-    bech32::encode(hrp, bech32_data, Variant::Bech32)
+    let hrp = Hrp::parse(hrp).map_err(|_| "Invalid bech32 prefix".to_string())?;
+    bech32::encode::<Bech32>(hrp, &payload)
         .map_err(|_| "Failed to encode address".to_string())
 }

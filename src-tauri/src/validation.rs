@@ -1,4 +1,5 @@
 use crate::dto::Wallet;
+use bech32::segwit;
 use sha2::{Digest as Sha2Digest, Sha256};
 use sha3::digest::Digest as Sha3Digest;
 use sha3::Keccak256;
@@ -99,7 +100,7 @@ pub(crate) fn validate_evm_address(address: &str) -> Result<(), String> {
 
 pub(crate) fn validate_bitcoin_address(address: &str) -> Result<(), String> {
     if address.starts_with("bc1") || address.starts_with("tb1") {
-        bech32::decode(address)
+        segwit::decode(address)
             .map_err(|_| "Recipient must be a valid Bitcoin bech32 address".to_string())?;
         return Ok(());
     }

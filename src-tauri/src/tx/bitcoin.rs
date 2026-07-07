@@ -1,4 +1,4 @@
-use bech32::{self, FromBase32, Variant};
+use bech32::{hrp, segwit};
 use k256::ecdsa::signature::hazmat::PrehashSigner;
 use ripemd::digest::Digest as RipemdDigest;
 use ripemd::Ripemd160;
@@ -66,16 +66,10 @@ fn bitcoin_p2pkh_script_code(pubkey_hash: &[u8]) -> Vec<u8> {
 
 fn bitcoin_script_pubkey_from_address(address: &str) -> Result<Vec<u8>, String> {
     if address.starts_with("bc1") {
-        let (hrp, data, variant) =
-            bech32::decode(address).map_err(|_| "Invalid Bitcoin bech32 recipient".to_string())?;
-        if hrp != "bc" || variant != Variant::Bech32 || data.is_empty() {
+        let (decoded_hrp, version, program) =
+            segwit::decode(address).map_err(|_| "Invalid Bitcoin bech32 recipient".to_string())?;
+        if decoded_hrp != hrp::BC || version != segwit::VERSION_0 || program.len() != 20 {
             return Err("Unsupported Bitcoin bech32 recipient".to_string());
-        }
-        let version = data[0].to_u8();
-        let program = Vec::<u8>::from_base32(&data[1..])
-            .map_err(|_| "Invalid Bitcoin witness program".to_string())?;
-        if version != 0 || program.len() != 20 {
-            return Err("Only mainnet P2WPKH bc1 recipients are supported".to_string());
         }
         return Ok(bitcoin_p2wpkh_script_pubkey(&program));
     }
