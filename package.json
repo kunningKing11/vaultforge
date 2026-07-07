@@ -1,13 +1,14 @@
 {
   "name": "vaultforge-wallet",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
     "generate-icon": "tauri icon src-tauri/icons/icon.svg -o src-tauri/icons",
     "build": "npm run generate-icon && tsc && vite build",
     "preview": "vite preview",
+    "sync-cargo-version": "node scripts/sync-cargo-version.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
