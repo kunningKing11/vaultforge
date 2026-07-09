@@ -19,6 +19,43 @@ use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfe
 use crate::tx::solana::{sign_solana_token_transfer, sign_solana_transfer};
 use crate::validation::validate_transfer;
 
+pub(crate) fn required_native_debit(
+    is_native_transfer: bool,
+    amount: u128,
+    fee: u128,
+    native_symbol: &str,
+) -> Result<u128, String> {
+    if is_native_transfer {
+        amount
+            .checked_add(fee)
+            .ok_or_else(|| format!("{native_symbol} total debit is too large"))
+    } else {
+        Ok(fee)
+    }
+}
+
+pub(crate) fn ensure_native_balance_covers_debit(
+    balance: u128,
+    required: u128,
+    native_symbol: &str,
+    is_native_transfer: bool,
+    fee_context: &str,
+) -> Result<(), String> {
+    if balance >= required {
+        return Ok(());
+    }
+
+    if is_native_transfer {
+        Err(format!(
+            "Insufficient {native_symbol} balance for amount plus fee"
+        ))
+    } else {
+        Err(format!(
+            "Insufficient {native_symbol} balance for {fee_context}"
+        ))
+    }
+}
+
 #[tauri::command]
 pub(crate) async fn sign_transaction(
     state: State<'_, Mutex<AppState>>,
@@ -118,22 +155,25 @@ pub(crate) async fn sign_transaction(
                 )
                 .await?
             };
-            if sol_balance < signed_sol.fee_lamports as u128 {
-                return Err("Insufficient SOL balance for Solana transaction fee".to_string());
-            }
+
+            let fee_lamports = signed_sol.fee_lamports as u128;
+            let required_sol = required_native_debit(symbol == "SOL", value, fee_lamports, "SOL")?;
+            ensure_native_balance_covers_debit(
+                sol_balance,
+                required_sol,
+                "SOL",
+                symbol == "SOL",
+                "Solana transaction fee",
+            )?;
+
             let total_debit = if symbol == "SOL" {
-                amount_u64
-                    .checked_add(signed_sol.fee_lamports)
-                    .ok_or_else(|| "SOL total debit is too large".to_string())?
-                    .to_string()
+                required_sol.to_string()
             } else {
                 value.to_string()
             };
+
             let post_balance = if symbol == "SOL" {
-                let balance: u128 = asset.balance.parse().unwrap_or(0);
-                balance
-                    .saturating_sub(total_debit.parse().unwrap_or(0))
-                    .to_string()
+                sol_balance.saturating_sub(required_sol).to_string()
             } else {
                 let balance: u128 = asset.balance.parse().unwrap_or(0);
                 balance.saturating_sub(value).to_string()
@@ -192,6 +232,26 @@ pub(crate) async fn sign_transaction(
             let max_fee_per_gas = gas_price;
             let total_fee_wei: u128 = gas_limit as u128 * max_fee_per_gas as u128;
 
+            let native_asset = assets
+                .iter()
+                .find(|a| a.network == config.id && a.symbol == config.native_symbol)
+                .ok_or_else(|| format!("{} balance is not available", config.native_symbol))?;
+
+            let native_balance: u128 = native_asset
+                .balance
+                .parse()
+                .map_err(|_| format!("Invalid {} balance", config.native_symbol))?;
+
+            let required_native =
+                required_native_debit(is_native, value, total_fee_wei, config.native_symbol)?;
+            ensure_native_balance_covers_debit(
+                native_balance,
+                required_native,
+                config.native_symbol,
+                is_native,
+                "transaction fee",
+            )?;
+
             let signing_key = signing_key_from_mnemonic(&mnemonic)?;
             let (_, tx_hash, raw_tx_hex, r_hex, s_hex) = sign_eip1559_transfer(&Eip1559TxDraft {
                 signing_key: &signing_key,
@@ -207,17 +267,17 @@ pub(crate) async fn sign_transaction(
 
             let fee_str = total_fee_wei.to_string();
             let total_debit_str = if is_native {
-                (value + total_fee_wei).to_string()
+                required_native.to_string()
             } else {
                 total_fee_wei.to_string()
             };
             let signature_str = format!("0x{}{}", r_hex, s_hex);
 
-            let post_balance_wei: u128 = asset.balance.parse().unwrap_or(0);
-            let post_balance = if post_balance_wei >= value {
-                (post_balance_wei - value).to_string()
+            let post_balance = if is_native {
+                native_balance.saturating_sub(required_native).to_string()
             } else {
-                "0".to_string()
+                let token_balance: u128 = asset.balance.parse().unwrap_or(0);
+                token_balance.saturating_sub(value).to_string()
             };
 
             Ok(SignedTransaction {
