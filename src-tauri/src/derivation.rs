@@ -1,15 +1,15 @@
-use bech32::{self, hrp, segwit, Bech32, Hrp};
+use bech32::{self, Bech32, Hrp, hrp, segwit};
 use bip32::{DerivationPath, XPrv};
 use bip39::{Language, Mnemonic};
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
 use hmac::{Hmac, KeyInit, Mac};
 use k256::ecdsa::SigningKey;
 use rand::Rng;
-use ripemd::digest::Digest as RipemdDigest;
 use ripemd::Ripemd160;
+use ripemd::digest::Digest as RipemdDigest;
 use sha2::{Digest as Sha2Digest, Sha256, Sha512};
-use sha3::digest::Digest as Sha3Digest;
 use sha3::Keccak256;
+use sha3::digest::Digest as Sha3Digest;
 use std::collections::HashMap;
 
 const EVM_DERIVATION_PATH: &str = "m/44'/60'/0'/0/0";
@@ -154,8 +154,7 @@ pub(crate) fn bitcoin_bech32_address(
     let public_bytes = encoded.as_bytes();
     let hashed = <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_bytes));
     let hrp = if is_testnet { hrp::TB } else { hrp::BC };
-    segwit::encode_v0(hrp, &hashed)
-        .map_err(|_| "Failed to encode address".to_string())
+    segwit::encode_v0(hrp, &hashed).map_err(|_| "Failed to encode address".to_string())
 }
 
 pub(crate) fn zcash_transparent_address(
@@ -205,6 +204,5 @@ pub(crate) fn bech32_account_address(private_key: &[u8; 32], hrp: &str) -> Resul
     let public_bytes = encoded.as_bytes();
     let payload = <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_bytes));
     let hrp = Hrp::parse(hrp).map_err(|_| "Invalid bech32 prefix".to_string())?;
-    bech32::encode::<Bech32>(hrp, &payload)
-        .map_err(|_| "Failed to encode address".to_string())
+    bech32::encode::<Bech32>(hrp, &payload).map_err(|_| "Failed to encode address".to_string())
 }

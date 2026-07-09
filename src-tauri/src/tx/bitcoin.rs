@@ -1,7 +1,7 @@
 use bech32::{hrp, segwit};
 use k256::ecdsa::signature::hazmat::PrehashSigner;
-use ripemd::digest::Digest as RipemdDigest;
 use ripemd::Ripemd160;
+use ripemd::digest::Digest as RipemdDigest;
 use sha2::{Digest as Sha2Digest, Sha256};
 
 use crate::derivation::{bitcoin_bech32_address, signing_key_from_private_key};
@@ -232,7 +232,8 @@ pub(crate) fn bitcoin_signed_transfer(
     let signing_key = signing_key_from_private_key(private_key)?;
     let public_key = signing_key.verifying_key().to_encoded_point(true);
     let public_key_bytes = public_key.as_bytes();
-    let pubkey_hash = <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_key_bytes));
+    let pubkey_hash =
+        <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_key_bytes));
     let expected_from = bitcoin_bech32_address(private_key, false)?;
     if from_address != expected_from {
         return Err("Derived BTC key does not match wallet BTC address".to_string());

@@ -1,8 +1,8 @@
 use crate::dto::Wallet;
 use bech32::segwit;
 use sha2::{Digest as Sha2Digest, Sha256};
-use sha3::digest::Digest as Sha3Digest;
 use sha3::Keccak256;
+use sha3::digest::Digest as Sha3Digest;
 
 pub(crate) fn validate_passphrase(passphrase: &str) -> Result<(), String> {
     if passphrase.chars().count() < 8 {

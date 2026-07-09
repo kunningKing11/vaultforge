@@ -126,13 +126,11 @@ pub(crate) fn derive_storage_key(
     passphrase: &str,
     salt: Option<&[u8]>,
 ) -> Result<([u8; 32], Vec<u8>), String> {
-    let salt = salt
-        .map(|value| value.to_vec())
-        .unwrap_or_else(|| {
-            let mut salt = vec![0u8; 16];
-            rand::rng().fill(salt.as_mut_slice());
-            salt
-        });
+    let salt = salt.map(|value| value.to_vec()).unwrap_or_else(|| {
+        let mut salt = vec![0u8; 16];
+        rand::rng().fill(salt.as_mut_slice());
+        salt
+    });
     let mut key = [0u8; 32];
     Argon2::default()
         .hash_password_into(passphrase.as_bytes(), &salt, &mut key)
