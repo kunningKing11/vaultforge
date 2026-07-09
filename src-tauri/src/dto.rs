@@ -34,6 +34,8 @@ pub(crate) struct Asset {
     pub(crate) price_usd: f64,
     pub(crate) change_24h: f64,
     pub(crate) network: String,
+    #[serde(default)]
+    pub(crate) token_address: Option<String>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]

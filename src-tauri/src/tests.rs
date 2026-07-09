@@ -37,6 +37,7 @@ fn starter_assets(network: &str) -> Vec<Asset> {
             price_usd: 3480.62,
             change_24h: 2.84,
             network: network.to_string(),
+            token_address: None,
         },
         Asset {
             symbol: "BTC".to_string(),
@@ -46,6 +47,7 @@ fn starter_assets(network: &str) -> Vec<Asset> {
             price_usd: 102_240.12,
             change_24h: -0.62,
             network: network.to_string(),
+            token_address: None,
         },
         Asset {
             symbol: "SOL".to_string(),
@@ -55,6 +57,7 @@ fn starter_assets(network: &str) -> Vec<Asset> {
             price_usd: 184.33,
             change_24h: 5.18,
             network: network.to_string(),
+            token_address: None,
         },
         Asset {
             symbol: "USDC".to_string(),
@@ -64,6 +67,7 @@ fn starter_assets(network: &str) -> Vec<Asset> {
             price_usd: 1.0,
             change_24h: 0.01,
             network: network.to_string(),
+            token_address: Some("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string()),
         },
     ]
 }
@@ -114,6 +118,7 @@ fn validates_solana_token_transfer_recipient_as_solana_address() {
             price_usd: 0.0,
             change_24h: 0.0,
             network: "solana".to_string(),
+            token_address: Some("So11111111111111111111111111111111111111112".to_string()),
         }],
         activity: vec![],
     };

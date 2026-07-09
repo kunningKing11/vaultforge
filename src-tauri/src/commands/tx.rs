@@ -9,15 +9,15 @@ use crate::providers::bitcoin::{
     broadcast_bitcoin_transaction, fetch_bitcoin_tx_status, sign_bitcoin_transfer,
 };
 use crate::providers::evm::{
-    EVM_NETWORKS, broadcast_evm_tx, evm_config_by_id, evm_tokens_for_network,
-    fetch_evm_estimated_gas, fetch_evm_gas_price, fetch_evm_nonce, fetch_evm_tx_status,
+    EVM_NETWORKS, broadcast_evm_tx, evm_config_by_id, fetch_evm_estimated_gas, fetch_evm_gas_price,
+    fetch_evm_nonce, fetch_evm_tx_status,
 };
 use crate::providers::solana::{broadcast_solana_transaction, fetch_solana_tx_status};
 use crate::state::{AppState, session_from_state, validate_unlocked};
 use crate::storage::persist_state_wallet;
 use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
 use crate::tx::solana::{sign_solana_token_transfer, sign_solana_transfer};
-use crate::validation::validate_transfer;
+use crate::validation::{validate_evm_address, validate_transfer};
 
 pub(crate) fn required_native_debit(
     is_native_transfer: bool,
@@ -142,18 +142,16 @@ pub(crate) async fn sign_transaction(
             let signed_sol = if symbol == "SOL" {
                 sign_solana_transfer(&mnemonic, &from, &to, amount_u64).await?
             } else {
+                let mint = asset
+                    .token_address
+                    .as_deref()
+                    .ok_or_else(|| format!("{symbol} mint address is not available"))?;
                 let decimals_u8: u8 = decimals
                     .try_into()
                     .map_err(|_| "SPL token decimals are too large".to_string())?;
-                sign_solana_token_transfer(
-                    &mnemonic,
-                    &from,
-                    &to,
-                    &asset.name,
-                    amount_u64,
-                    decimals_u8,
-                )
-                .await?
+
+                sign_solana_token_transfer(&mnemonic, &from, &to, mint, amount_u64, decimals_u8)
+                    .await?
             };
 
             let fee_lamports = signed_sol.fee_lamports as u128;
@@ -209,12 +207,13 @@ pub(crate) async fn sign_transaction(
             let (tx_to, tx_data, display_to) = if is_native {
                 (to.clone(), Vec::new(), to.clone())
             } else {
-                let token = evm_tokens_for_network(config.id)
-                    .iter()
-                    .find(|t| t.symbol == symbol)
-                    .ok_or_else(|| format!("Token {symbol} not found on {network_id}"))?;
+                let token_address = asset
+                    .token_address
+                    .as_deref()
+                    .ok_or_else(|| format!("{symbol} token address is not available"))?;
+                validate_evm_address(token_address)?;
                 (
-                    token.contract.to_string(),
+                    token_address.to_string(),
                     encode_erc20_transfer(&to, value)?,
                     to.clone(),
                 )

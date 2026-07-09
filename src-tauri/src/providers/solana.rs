@@ -46,6 +46,7 @@ pub(crate) async fn fetch_solana_assets(address: &str, cached_assets: &[Asset]) 
             price_usd: 0.0,
             change_24h: 0.0,
             network: "solana".to_string(),
+            token_address: None,
         },
         Err(_) => cached_asset(cached_assets, "solana", "SOL").unwrap_or_else(|| Asset {
             symbol: "SOL".to_string(),
@@ -55,6 +56,7 @@ pub(crate) async fn fetch_solana_assets(address: &str, cached_assets: &[Asset]) 
             price_usd: 0.0,
             change_24h: 0.0,
             network: "solana".to_string(),
+            token_address: None,
         }),
     };
 
@@ -76,12 +78,13 @@ pub(crate) async fn fetch_solana_assets(address: &str, cached_assets: &[Asset]) 
 
         assets.push(Asset {
             symbol,
-            name: account.mint,
+            name: account.mint.clone(), // TODO: add proper human-readable name
             balance: account.amount,
             decimals: account.decimals,
             price_usd: 0.0,
             change_24h: 0.0,
             network: "solana".to_string(),
+            token_address: Some(account.mint),
         });
     }
     assets

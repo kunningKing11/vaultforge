@@ -232,6 +232,7 @@ pub(crate) async fn fetch_evm_assets(
             price_usd: 0.0,
             change_24h: 0.0,
             network: config.id.to_string(),
+            token_address: None,
         },
         Err(_) => {
             cached_asset(cached_assets, config.id, config.native_symbol).unwrap_or_else(|| Asset {
@@ -242,6 +243,7 @@ pub(crate) async fn fetch_evm_assets(
                 price_usd: 0.0,
                 change_24h: 0.0,
                 network: config.id.to_string(),
+                token_address: None,
             })
         }
     };
@@ -259,6 +261,7 @@ pub(crate) async fn fetch_evm_assets(
                     price_usd: 0.0,
                     change_24h: 0.0,
                     network: config.id.to_string(),
+                    token_address: Some(token.contract.to_string()),
                 });
             }
             Err(_) => {

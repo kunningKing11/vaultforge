@@ -6,6 +6,7 @@ export type Asset = {
   price_usd: number;
   change_24h: number;
   network: string;
+  token_address?: string | null;
 };
 
 export type Activity = {

@@ -119,6 +119,7 @@ async fn fetch_non_evm_native_asset(
         price_usd: 0.0,
         change_24h: 0.0,
         network: config.network_id.to_string(),
+        token_address: None,
     })
 }
 
