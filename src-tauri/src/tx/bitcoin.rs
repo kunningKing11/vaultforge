@@ -241,7 +241,8 @@ pub(crate) fn bitcoin_signed_transfer(
 
     let (selected, fee_sats, change_sats) =
         bitcoin_select_coins(utxos, amount_sats, fee_rate_sat_vb)?;
-    let total_in: u64 = selected.iter().map(|u| u.value).sum();
+    let wallet_total: u64 = utxos.iter().map(|u| u.value).sum();
+
     let mut outputs = vec![BitcoinTxOutput {
         value: amount_sats,
         script_pubkey: bitcoin_script_pubkey_from_address(to_address)?,
@@ -299,7 +300,7 @@ pub(crate) fn bitcoin_signed_transfer(
         raw_tx_hex: hex::encode(raw),
         first_signature_hex: signatures.first().map(hex::encode).unwrap_or_default(),
         fee_sats,
-        post_balance: total_in
+        post_balance: wallet_total
             .saturating_sub(amount_sats)
             .saturating_sub(fee_sats),
     })
