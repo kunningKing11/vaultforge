@@ -10,23 +10,25 @@ This is a roadmap of features that will be built for this project. They are in l
   [ ] SOL
   [ ] TRX
 2. [ ] Slider for network priority fee when sending
-3. [ ] Actual cross-chain swaps via NEAR Intents (non-simulated)
-4. [x] Public GitHub repository
-5. [ ] Full support for more chains, including (but not limited to):
+3. [ ] Support multiple BTC address types instead of just `bc1q`
+4. [ ] Actual cross-chain swaps via NEAR Intents (non-simulated)
+5. [x] Public GitHub repository
+6. [ ] Full support for more chains, including (but not limited to):
   [ ] Ripple (XRP)
+  [ ] edgeX (EDGE) - support for trading derivatives
   [ ] Hyperliquid (HYPE) - support for trading perps (perpetuals)
   [ ] Injective (INJ)
   [ ] Algorand (ALGO)
   [ ] Zcash (ZEC) - support transparent AND shielded addresses
   [ ] Monero (XMR) - alternative to Zcash
-6. [ ] NFT support on relevant chains:
+7. [ ] NFT support on relevant chains:
   [ ] EVM
   [ ] SOL
   [ ] TRX
   [ ] ALGO
-7. [ ] Support for the Open Wallet Standard
-8. [ ] Native DeFi support:
+8. [ ] Support for the Open Wallet Standard
+9. [ ] Native DeFi support:
   [ ] Native Aerodrome Finance LPing (liquidity providing)
   [ ] Native Aave lending
-9. [ ] (hopefully) Filecoin storage integration so you can easily store, download, and access files stored on Filecoin
-10. [ ] (hopefully) Integration with Tor for anonymity
+10. [ ] (hopefully) Filecoin storage integration so you can easily store, download, and access files stored on Filecoin
+11. [ ] (hopefully) Integration with Tor for anonymity
