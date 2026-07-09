@@ -27,6 +27,8 @@ The frontend currently defines or exposes these network families and assets. Bac
 - Filecoin
 - Injective
 
+Current implemented transfer paths are basic Bitcoin, EVM native/ERC-20, and Solana native/classic SPL transfers. Treat other exposed chains as address/portfolio scaffolding unless their provider, fee, signing, broadcast, and status paths are present.
+
 Lightning has frontend type definitions but is not currently present in `rawNetworks`. Do not claim Lightning support until there is a real node, LSP, channel, invoice, payment, and liquidity strategy.
 
 ## Architecture Boundary
@@ -142,6 +144,8 @@ type WalletSession = {
 };
 ```
 
+Current frontend `Asset` contract includes optional `token_address?: string | null`. Native assets must use `None`/`null`; ERC-20 assets must use the contract address; Solana SPL assets must use the mint address. Token signing must use this explicit identifier instead of display `name`.
+
 Session rules:
 
 - No wallet: return `has_wallet = false`, `locked = false`, no address, empty assets, and empty activity.
@@ -223,11 +227,11 @@ Provider responsibilities:
 - Broadcast signed transactions.
 - Fetch transaction status and receipts.
 
-EVM providers must support chain ID, RPC URL, native currency, token contracts, nonce retrieval, gas estimation, EIP-1559 where available, raw transaction broadcast, and receipt polling.
+EVM providers must support chain ID, RPC URL, native currency, token contracts, nonce retrieval, gas estimation, EIP-1559 where available, raw transaction broadcast, and receipt polling. Current EVM sends fetch pending nonces but do not yet maintain a local nonce reservation manager.
 
 Bitcoin providers must support UTXO discovery, fee rate estimation, PSBT or transaction construction, signing strategy, broadcast, and confirmation tracking.
 
-Solana providers must support recent blockhash retrieval, account balance reads, SPL token account reads, transaction construction, signing, send, and confirmation tracking.
+Solana providers must support recent blockhash retrieval, account balance reads, SPL token account reads, associated token account derivation, recipient ATA rent checks, transaction construction, signing, send, and confirmation tracking. Current SPL support targets classic SPL Token accounts, not Token-2022 extensions.
 
 Zcash support must explicitly distinguish transparent and shielded support. Do not imply shielded support unless viewing keys, note scanning, proving, and transaction construction are implemented.
 

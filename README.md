@@ -29,7 +29,9 @@ A local-first crypto wallet desktop app built with a TypeScript frontend, Tailwi
 - Create, import, lock, and unlock a wallet session
 - Portfolio dashboard with token balances, fiat valuation, allocation, and weighted 24h change
 - Sign and review chain-specific transactions before broadcasting them
+- Basic real transfer paths for BTC, EVM native/ERC-20, and Solana native/classic SPL assets
 - Review provider-derived fees, total debit, USD value, and post-send balance estimates
+- Solana SPL sends account for recipient associated token account rent when needed
 - Encrypted local wallet persistence using the app data directory
 - Activity details with transaction hashes, signatures, payload hashes, and copy actions
 - Security center with storage status, signing status, and local wallet clearing
@@ -62,6 +64,8 @@ Run the web frontend:
 npm run dev
 ```
 
+`npm run dev` runs `eslint --fix src/` before starting Vite.
+
 Run the Tauri desktop app:
 
 ```bash
@@ -73,6 +77,8 @@ Build the frontend:
 ```bash
 npm run build
 ```
+
+`npm run build` runs `eslint --fix src/` before TypeScript and Vite build steps.
 
 Build the desktop bundle:
 
