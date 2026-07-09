@@ -20,12 +20,12 @@ const FILECOIN_DERIVATION_PATH: &str = "m/44'/461'/0'/0/0";
 const INJECTIVE_DERIVATION_PATH: &str = EVM_DERIVATION_PATH;
 
 struct DerivedWalletKeys {
-    evm: [u8; 32],
     bitcoin: [u8; 32],
-    zcash: [u8; 32],
+    evm: [u8; 32],
     solana: [u8; 32],
-    filecoin: [u8; 32],
+    zcash: [u8; 32],
     injective: [u8; 32],
+    filecoin: [u8; 32],
 }
 
 pub(crate) fn signing_key_from_mnemonic(mnemonic: &str) -> Result<k256::ecdsa::SigningKey, String> {
