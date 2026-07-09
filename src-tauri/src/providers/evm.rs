@@ -282,7 +282,7 @@ pub(crate) async fn fetch_evm_nonce(
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "eth_getTransactionCount",
-        "params": [address, "latest"],
+        "params": [address, "pending"],
         "id": 1,
     });
     let json = rpc_post(config.rpc_url, &body).await?;
