@@ -173,6 +173,12 @@ fn parse_blockhash(value: &str) -> Result<Hash, String> {
     Hash::from_str(value).map_err(|_| "Invalid Solana recent blockhash".to_string())
 }
 
+pub(crate) fn solana_associated_token_address(owner: &str, mint: &str) -> Result<String, String> {
+    let owner_pubkey = parse_pubkey(owner, "owner")?;
+    let mint_pubkey = parse_pubkey(mint, "mint")?;
+    Ok(get_associated_token_address(&owner_pubkey, &mint_pubkey).to_string())
+}
+
 fn native_transfer_instructions(
     from: &str,
     to: &str,

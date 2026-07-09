@@ -16,7 +16,8 @@ use crate::providers::evm::EVM_NETWORKS;
 use crate::providers::get_provider;
 use crate::providers::solana::{
     parse_latest_solana_blockhash, parse_solana_balance, parse_solana_fee_for_message,
-    parse_solana_token_accounts, parse_solana_tx_status,
+    parse_solana_rent_exemption, parse_solana_token_account_state, parse_solana_token_accounts,
+    parse_solana_tx_status,
 };
 use crate::state::{AppState, StoredWalletMetadata, session_from_state};
 use crate::storage::{decrypt_wallet, derive_storage_key, encrypt_wallet};
@@ -24,6 +25,7 @@ use crate::tx::bitcoin::{bitcoin_estimated_vbytes, bitcoin_select_coins, bitcoin
 use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
 use crate::tx::solana::{
     sign_solana_token_transfer_with_blockhash, sign_solana_transfer_with_blockhash,
+    solana_associated_token_address,
 };
 use crate::validation::{validate_address_for_symbol, validate_evm_address, validate_transfer};
 
@@ -328,6 +330,60 @@ fn parses_solana_status_and_fee() {
 }
 
 #[test]
+fn parses_solana_token_account_state() {
+    let owner = "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ";
+    let mint = "So11111111111111111111111111111111111111112";
+
+    let missing = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": { "value": null },
+        "id": 1
+    });
+    assert_eq!(
+        parse_solana_token_account_state(&missing, owner, mint).unwrap(),
+        None
+    );
+
+    let existing = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": {
+            "value": {
+                "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                "data": {
+                    "parsed": {
+                        "info": {
+                            "owner": owner,
+                            "mint": mint
+                        }
+                    }
+                }
+            }
+        },
+        "id": 1
+    });
+    assert!(parse_solana_token_account_state(&existing, owner, mint)
+        .unwrap()
+        .is_some());
+
+    assert!(parse_solana_token_account_state(
+        &existing,
+        owner,
+        "TokenzQdBNbLqP5VEhdkAS6EP1z9kF9t79yDMQH9z"
+    )
+    .is_err());
+}
+
+#[test]
+fn parses_solana_rent_exemption() {
+    let json = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": 2039280,
+        "id": 1
+    });
+    assert_eq!(parse_solana_rent_exemption(&json).unwrap(), 2039280);
+}
+
+#[test]
 fn parses_latest_solana_blockhash() {
     let json = serde_json::json!({
         "jsonrpc": "2.0",
@@ -387,6 +443,17 @@ fn signs_solana_spl_token_transfer() {
     assert!(!signed.signature.is_empty());
     assert!(!signed.raw_tx_base64.is_empty());
     assert_eq!(signed.fee_lamports, 5000);
+}
+
+#[test]
+fn derives_solana_associated_token_address() {
+    let ata = solana_associated_token_address(
+        "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
+        "So11111111111111111111111111111111111111112",
+    )
+    .unwrap();
+
+    assert!(!ata.is_empty());
 }
 
 #[test]

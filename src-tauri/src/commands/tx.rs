@@ -12,11 +12,16 @@ use crate::providers::evm::{
     EVM_NETWORKS, broadcast_evm_tx, evm_config_by_id, fetch_evm_estimated_gas, fetch_evm_gas_price,
     fetch_evm_nonce, fetch_evm_tx_status,
 };
-use crate::providers::solana::{broadcast_solana_transaction, fetch_solana_tx_status};
+use crate::providers::solana::{
+    broadcast_solana_transaction, fetch_solana_token_account_rent,
+    fetch_solana_token_account_state, fetch_solana_tx_status,
+};
 use crate::state::{AppState, session_from_state, validate_unlocked};
 use crate::storage::persist_state_wallet;
 use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
-use crate::tx::solana::{sign_solana_token_transfer, sign_solana_transfer};
+use crate::tx::solana::{
+    sign_solana_token_transfer, sign_solana_transfer, solana_associated_token_address,
+};
 use crate::validation::{validate_evm_address, validate_transfer};
 
 pub(crate) fn required_native_debit(
@@ -138,6 +143,7 @@ pub(crate) async fn sign_transaction(
                 .find(|a| a.network == "solana" && a.symbol == "SOL")
                 .and_then(|a| a.balance.parse().ok())
                 .unwrap_or(0);
+            let mut extra_sol_lamports = 0u64;
 
             let signed_sol = if symbol == "SOL" {
                 sign_solana_transfer(&mnemonic, &from, &to, amount_u64).await?
@@ -150,19 +156,37 @@ pub(crate) async fn sign_transaction(
                     .try_into()
                     .map_err(|_| "SPL token decimals are too large".to_string())?;
 
+                let destination_ata = solana_associated_token_address(&to, mint)?;
+                let ata_exists = fetch_solana_token_account_state(&destination_ata, &to, mint)
+                    .await?
+                    .is_some();
+                if !ata_exists {
+                    extra_sol_lamports = fetch_solana_token_account_rent().await?;
+                }
+
                 sign_solana_token_transfer(&mnemonic, &from, &to, mint, amount_u64, decimals_u8)
                     .await?
             };
 
             let fee_lamports = signed_sol.fee_lamports as u128;
-            let required_sol = required_native_debit(symbol == "SOL", value, fee_lamports, "SOL")?;
-            ensure_native_balance_covers_debit(
-                sol_balance,
-                required_sol,
-                "SOL",
-                symbol == "SOL",
-                "Solana transaction fee",
-            )?;
+            let extra_sol_lamports = extra_sol_lamports as u128;
+            let required_sol = if symbol == "SOL" {
+                required_native_debit(true, value, fee_lamports, "SOL")?
+            } else {
+                fee_lamports
+                    .checked_add(extra_sol_lamports)
+                    .ok_or_else(|| "SOL total debit is too large".to_string())?
+            };
+
+            if sol_balance < required_sol {
+                return Err(if symbol == "SOL" {
+                    "Insufficient SOL balance for amount plus fee".to_string()
+                } else if extra_sol_lamports > 0 {
+                    "Insufficient SOL balance for Solana transaction fee and token account rent".to_string()
+                } else {
+                    "Insufficient SOL balance for Solana transaction fee".to_string()
+                });
+            }
 
             let total_debit = if symbol == "SOL" {
                 required_sol.to_string()

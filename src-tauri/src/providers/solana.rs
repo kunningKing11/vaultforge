@@ -186,6 +186,82 @@ pub(crate) async fn fetch_solana_tx_status(signature: &str) -> Result<Option<Str
     parse_solana_tx_status(&json)
 }
 
+pub(crate) async fn fetch_solana_token_account_state(
+    ata_address: &str,
+    expected_owner: &str,
+    expected_mint: &str,
+) -> Result<Option<()>, String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "getAccountInfo",
+        "params": [ata_address, {"encoding": "jsonParsed"}],
+        "id": 1,
+    });
+    let json = rpc_post(SOLANA_RPC_URL, &body).await?;
+    parse_solana_token_account_state(&json, expected_owner, expected_mint)
+}
+
+pub(crate) fn parse_solana_token_account_state(
+    json: &serde_json::Value,
+    expected_owner: &str,
+    expected_mint: &str,
+) -> Result<Option<()>, String> {
+    if let Some(error) = json.get("error") {
+        return Err(format!("Solana account info RPC error: {error}"));
+    }
+
+    let value = &json["result"]["value"];
+    if value.is_null() {
+        return Ok(None);
+    }
+
+    let program_owner = value["owner"]
+        .as_str()
+        .ok_or_else(|| "Solana token account missing owner program".to_string())?;
+    if program_owner != SOLANA_TOKEN_PROGRAM_ID {
+        return Err("Existing Solana token account is not owned by SPL Token program".to_string());
+    }
+
+    let info = &value["data"]["parsed"]["info"];
+
+    let mint = info["mint"]
+        .as_str()
+        .ok_or_else(|| "Solana token account missing mint".to_string())?;
+    if mint != expected_mint {
+        return Err("Existing Solana token account mint does not match transfer mint".to_string());
+    }
+
+    let owner = info["owner"]
+        .as_str()
+        .ok_or_else(|| "Solana token account missing owner".to_string())?;
+    if owner != expected_owner {
+        return Err("Existing Solana token account owner does not match recipient".to_string());
+    }
+
+    Ok(Some(()))
+}
+
+pub(crate) async fn fetch_solana_token_account_rent() -> Result<u64, String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "getMinimumBalanceForRentExemption",
+        "params": [165],
+        "id": 1,
+    });
+    let json = rpc_post(SOLANA_RPC_URL, &body).await?;
+    parse_solana_rent_exemption(&json)
+}
+
+pub(crate) fn parse_solana_rent_exemption(json: &serde_json::Value) -> Result<u64, String> {
+    if let Some(error) = json.get("error") {
+        return Err(format!("Solana rent exemption RPC error: {error}"));
+    }
+
+    json["result"]
+        .as_u64()
+        .ok_or_else(|| "Solana rent exemption RPC missing result".to_string())
+}
+
 pub(crate) async fn fetch_latest_solana_blockhash() -> Result<String, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
