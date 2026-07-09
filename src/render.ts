@@ -1,8 +1,7 @@
 import { appRoot } from "./main";
 import { escapeHtml, formatWei, money, shortAddress, weiToNumber } from "./format";
-import { DEFAULT_NETWORK_ID, networkDisplayName, networks, normalizeNetworkId } from "./networks";
-import { pushToast } from "./toasts";
-import type { Activity, Asset, Network, NetworkId, QrResilience, SendDraft, SignedTransaction, WalletSession } from "./types";
+import { networkDisplayName, networks } from "./networks";
+import type { Activity, Asset, QrResilience, SignedTransaction } from "./types";
 import {
   appState,
   selectedNetwork,
