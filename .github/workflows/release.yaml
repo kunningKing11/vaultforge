@@ -207,7 +207,7 @@ jobs:
             printf 'Release %s\n\n' "${RELEASE_TAG}"
 
             if [ -n "${previous_tag}" ]; then
-              printf 'Changes since %s:\n\n' "${previous_tag}"
+              printf 'Changes since %s (newest commits first):\n\n' "${previous_tag}"
               range="${previous_tag}..HEAD"
             else
               printf 'Changes in this release:\n\n'
