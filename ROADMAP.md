@@ -23,7 +23,7 @@ The below items are the priority for this project and an item will probably get 
     - [x] native gas balance checks
     - [x] token contract address tracking
     - [ ] pending nonce handling / local nonce manager
-    - [ ] EIP-1559 fee estimation via `eth_feeHistory`
+    - [x] EIP-1559 fee estimation via `eth_feeHistory`
   - [x] SOL basic transfers
     - [x] native SOL transfers
     - [x] SPL token transfers
@@ -31,7 +31,7 @@ The below items are the priority for this project and an item will probably get 
     - [ ] Token-2022 support
     - [ ] pre-sign live balance refresh
   - [ ] TRX
-- [ ] Slider for network priority fee when sending
+- [ ] Slider for network priority fee when sending using priority fee percentiles
 - [ ] Actual cross-chain swaps (non-simulated)
   - [ ] via NEAR Intents
   - [ ] sponsored swaps (using paymaster/ERC-4337 or smart contract deposits)

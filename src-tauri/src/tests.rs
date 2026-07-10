@@ -12,7 +12,7 @@ use crate::dto::{Asset, Wallet};
 use crate::providers::bitcoin::{
     BitcoinUtxo, parse_bitcoin_balance, parse_bitcoin_fee_rate, parse_bitcoin_utxos,
 };
-use crate::providers::evm::EVM_NETWORKS;
+use crate::providers::evm::{EVM_NETWORKS, parse_evm_fee_history};
 use crate::providers::get_provider;
 use crate::providers::solana::{
     parse_latest_solana_blockhash, parse_solana_balance, parse_solana_fee_for_message,
@@ -361,16 +361,20 @@ fn parses_solana_token_account_state() {
         },
         "id": 1
     });
-    assert!(parse_solana_token_account_state(&existing, owner, mint)
-        .unwrap()
-        .is_some());
+    assert!(
+        parse_solana_token_account_state(&existing, owner, mint)
+            .unwrap()
+            .is_some()
+    );
 
-    assert!(parse_solana_token_account_state(
-        &existing,
-        owner,
-        "TokenzQdBNbLqP5VEhdkAS6EP1z9kF9t79yDMQH9z"
-    )
-    .is_err());
+    assert!(
+        parse_solana_token_account_state(
+            &existing,
+            owner,
+            "TokenzQdBNbLqP5VEhdkAS6EP1z9kF9t79yDMQH9z"
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -600,6 +604,22 @@ fn encodes_erc20_transfer_abi() {
     let recip_bytes = hex::decode(recipient.trim_start_matches("0x")).unwrap();
     assert_eq!(&data[16..36], &recip_bytes[..]);
     assert_eq!(data[data.len() - 1], 0x00);
+}
+
+#[test]
+fn parses_evm_fee_history() {
+    let json = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": {
+            "baseFeePerGas": ["0x3b9aca00", "0x4a817c800"],
+            "reward": [["0x59682f00"], ["0x77359400"]]
+        },
+        "id": 1
+    });
+
+    let estimate = parse_evm_fee_history(&json).unwrap();
+    assert_eq!(estimate.max_priority_fee_per_gas, 2_000_000_000);
+    assert_eq!(estimate.max_fee_per_gas, 42_000_000_000);
 }
 
 #[test]

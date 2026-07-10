@@ -9,8 +9,8 @@ use crate::providers::bitcoin::{
     broadcast_bitcoin_transaction, fetch_bitcoin_tx_status, sign_bitcoin_transfer,
 };
 use crate::providers::evm::{
-    EVM_NETWORKS, broadcast_evm_tx, evm_config_by_id, fetch_evm_estimated_gas, fetch_evm_gas_price,
-    fetch_evm_nonce, fetch_evm_tx_status,
+    EVM_NETWORKS, broadcast_evm_tx, evm_config_by_id, fetch_evm_estimated_gas,
+    fetch_evm_fee_estimate, fetch_evm_nonce, fetch_evm_tx_status,
 };
 use crate::providers::solana::{
     broadcast_solana_transaction, fetch_solana_token_account_rent,
@@ -182,7 +182,8 @@ pub(crate) async fn sign_transaction(
                 return Err(if symbol == "SOL" {
                     "Insufficient SOL balance for amount plus fee".to_string()
                 } else if extra_sol_lamports > 0 {
-                    "Insufficient SOL balance for Solana transaction fee and token account rent".to_string()
+                    "Insufficient SOL balance for Solana transaction fee and token account rent"
+                        .to_string()
                 } else {
                     "Insufficient SOL balance for Solana transaction fee".to_string()
                 });
@@ -244,15 +245,15 @@ pub(crate) async fn sign_transaction(
             };
 
             let nonce = fetch_evm_nonce(config, &address).await?;
-            let gas_price = fetch_evm_gas_price(config).await?;
+            let fee_estimate = fetch_evm_fee_estimate(config).await?;
             let gas_limit = if tx_data.is_empty() {
                 fetch_evm_estimated_gas(config, &address, &tx_to, value, &[]).await?
             } else {
                 fetch_evm_estimated_gas(config, &address, &tx_to, 0, &tx_data).await?
             };
 
-            let max_priority_fee_per_gas = gas_price;
-            let max_fee_per_gas = gas_price;
+            let max_priority_fee_per_gas = fee_estimate.max_priority_fee_per_gas;
+            let max_fee_per_gas = fee_estimate.max_fee_per_gas;
             let total_fee_wei: u128 = gas_limit as u128 * max_fee_per_gas as u128;
 
             let native_asset = assets

@@ -11,6 +11,11 @@ pub(crate) struct EvmNetworkConfig {
     pub(crate) rpc_url: &'static str,
 }
 
+pub(crate) struct EvmFeeEstimate {
+    pub(crate) max_priority_fee_per_gas: u128,
+    pub(crate) max_fee_per_gas: u128,
+}
+
 pub(crate) const DEFAULT_EVM_CONFIG: &EvmNetworkConfig = &EVM_NETWORKS[0];
 
 pub(crate) const EVM_NETWORKS: &[EvmNetworkConfig] = &[
@@ -293,6 +298,7 @@ pub(crate) async fn fetch_evm_nonce(
         .map_err(|e| format!("Invalid nonce hex: {e}"))
 }
 
+// Fallback function if the RPC does not support eth_feeHistory, which is used to estimate EIP-1559 fees.
 pub(crate) async fn fetch_evm_gas_price(config: &EvmNetworkConfig) -> Result<u128, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
@@ -306,6 +312,65 @@ pub(crate) async fn fetch_evm_gas_price(config: &EvmNetworkConfig) -> Result<u12
         .ok_or_else(|| "Gas price RPC missing result".to_string())?;
     u128::from_str_radix(hex_str.trim_start_matches("0x"), 16)
         .map_err(|e| format!("Invalid gas price hex: {e}"))
+}
+
+pub(crate) async fn fetch_evm_fee_estimate(
+    config: &EvmNetworkConfig,
+) -> Result<EvmFeeEstimate, String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_feeHistory",
+        "params": ["0x5", "latest", [50]],
+        "id": 1,
+    });
+
+    match rpc_post(config.rpc_url, &body).await {
+        Ok(json) => parse_evm_fee_history(&json),
+        Err(_) => {
+            let gas_price = fetch_evm_gas_price(config).await?;
+            Ok(EvmFeeEstimate {
+                max_priority_fee_per_gas: gas_price,
+                max_fee_per_gas: gas_price,
+            })
+        }
+    }
+}
+
+pub(crate) fn parse_evm_fee_history(json: &serde_json::Value) -> Result<EvmFeeEstimate, String> {
+    if let Some(error) = json.get("error") {
+        return Err(format!("EVM fee history RPC error: {error}"));
+    }
+
+    let base_fees = json["result"]["baseFeePerGas"]
+        .as_array()
+        .ok_or_else(|| "EVM fee history missing baseFeePerGas".to_string())?;
+    let latest_base_fee_hex = base_fees
+        .last()
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| "EVM fee history missing latest base fee".to_string())?;
+    let base_fee = u128::from_str_radix(latest_base_fee_hex.trim_start_matches("0x"), 16)
+        .map_err(|e| format!("Invalid EVM base fee hex: {e}"))?;
+
+    let priority_fee = json["result"]["reward"]
+        .as_array()
+        .and_then(|rewards| rewards.last())
+        .and_then(|last_reward| last_reward.as_array())
+        .and_then(|percentiles| percentiles.first())
+        .and_then(|value| value.as_str())
+        .and_then(|hex| u128::from_str_radix(hex.trim_start_matches("0x"), 16).ok())
+        .unwrap_or(1_500_000_000);
+
+    let doubled_base_fee = base_fee
+        .checked_mul(2)
+        .ok_or_else(|| "EVM base fee estimate is too large".to_string())?;
+    let max_fee_per_gas = doubled_base_fee
+        .checked_add(priority_fee)
+        .ok_or_else(|| "EVM max fee estimate is too large".to_string())?;
+
+    Ok(EvmFeeEstimate {
+        max_priority_fee_per_gas: priority_fee,
+        max_fee_per_gas,
+    })
 }
 
 pub(crate) async fn fetch_evm_estimated_gas(
