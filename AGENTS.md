@@ -227,7 +227,7 @@ Provider responsibilities:
 - Broadcast signed transactions.
 - Fetch transaction status and receipts.
 
-EVM providers must support chain ID, RPC URL, native currency, token contracts, nonce retrieval, gas estimation, EIP-1559 where available, raw transaction broadcast, and receipt polling. Current EVM sends fetch pending nonces but do not yet maintain a local nonce reservation manager.
+EVM providers must support chain ID, RPC URL, native currency, token contracts, nonce retrieval, gas estimation, EIP-1559 where available, raw transaction broadcast, and receipt polling. Current EVM sends fetch pending nonces and use `eth_feeHistory` with `eth_gasPrice` fallback for fee estimates, but do not yet maintain a local nonce reservation manager or user priority fee policy.
 
 Bitcoin providers must support UTXO discovery, fee rate estimation, PSBT or transaction construction, signing strategy, broadcast, and confirmation tracking.
 
