@@ -21,7 +21,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 solana-sdk = { version = "2", features = ["openssl-vendored"] }
 spl-associated-token-account = "4"
-spl-token = "6"
+spl-token = "9"
 sha2 = "0.11"
 bip39 = "2.2"
 bip32 = "0.5"
