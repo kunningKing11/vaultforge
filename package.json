@@ -25,7 +25,7 @@
     "@tauri-apps/cli": "^2.11.4",
     "@types/qrcode": "^1.5.6",
     "autoprefixer": "^10.5.2",
-    "eslint": "^10.6.0",
+    "eslint": "^10.7.0",
     "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^17.7.0",
     "postcss": "^8.5.16",
