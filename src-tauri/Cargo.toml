@@ -26,7 +26,7 @@ sha2 = "0.11"
 bip39 = "2.2"
 bip32 = "0.5"
 hmac = "0.13"
-k256 = { version = "0.13", features = ["ecdsa"] }
+k256 = { version = "0.14", features = ["ecdsa"] }
 rlp = "0.6"
 sha3 = "0.12"
 ripemd = "0.2"
