@@ -37,4 +37,4 @@ zeroize = { version = "1", features = ["zeroize_derive"] }
 tokio = { version = "1", features = ["time"] }
 tauri = { version = "2", features = ["image-png"] }
 # cookie 0.18.1 does not compile against time 0.3.52's parsing API.
-time = "=0.3.51"
+time = "=0.3.53"
