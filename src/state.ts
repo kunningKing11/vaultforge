@@ -37,12 +37,12 @@ export function addressForNetwork(network: Network): string {
 }
 
 export function receivePayload(): string {
-  const net = selectedNetwork();
-  const addr = addressForNetwork(net);
+  const network = selectedNetwork();
+  const addr = addressForNetwork(network);
   if (!addr) return "";
-  if (net.kind === "bitcoin") return `bitcoin:${addr}`;
-  if (net.kind === "evm") return `ethereum:${addr}@${net.chainId}`;
-  if (net.kind === "solana") return `solana:${addr}`;
+  if (network.kind === "bitcoin") return `bitcoin:${addr}`;
+  if (network.kind === "evm") return `ethereum:${addr}@${network.chainId}`;
+  if (network.kind === "svm") return `solana:${addr}`;
   return addr;
 }
 

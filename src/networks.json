@@ -1,15 +1,62 @@
-[
-  { "kind": "evm", "id": "avalanche_c", "name": "Avalanche C-Chain", "nickname": "Avalanche", "chainId": 43114, "ticker": "AVAX", "vm_type": "EVM", "isL2": false, "isTestNet": false },
-  { "kind": "evm", "id": "bnb", "name": "BNB Smart Chain", "nickname": "BSC", "chainId": 56, "ticker": "BNB", "vm_type": "EVM", "isL2": false, "isTestNet": false },
-  { "kind": "evm", "id": "ethereum", "name": "Ethereum", "chainId": 1, "ticker": "ETH", "vm_type": "EVM", "isL2": false, "isTestNet": false },
-  { "kind": "evm", "id": "monad", "name": "Monad", "chainId": 167004, "ticker": "MON", "vm_type": "EVM", "isL2": false, "isTestNet": false },
-  { "kind": "evm", "id": "arbitrum_one", "name": "Arbitrum One", "nickname": "Arbitrum", "chainId": 42161, "ticker": "ETH", "vm_type": "EVM", "isL2": true, "isTestNet": false },
-  { "kind": "evm", "id": "base", "name": "Base", "chainId": 8453, "ticker": "ETH", "vm_type": "EVM", "isL2": true, "isTestNet": false },
-  { "kind": "evm", "id": "optimism", "name": "Optimism", "chainId": 10, "ticker": "ETH", "vm_type": "EVM", "isL2": true, "isTestNet": false },
-  { "kind": "evm", "id": "polygon", "name": "Polygon", "chainId": 137, "ticker": "MATIC", "vm_type": "EVM", "isL2": true, "isTestNet": false },
-  { "kind": "bitcoin", "id": "bitcoin", "name": "Bitcoin", "ticker": "BTC", "isL2": false, "isTestNet": false },
-  { "kind": "solana", "id": "solana", "name": "Solana", "ticker": "SOL", "vm_type": "SVM", "isL2": false, "isTestNet": false },
-  { "kind": "zcash", "id": "zcash", "name": "Zcash", "ticker": "ZEC", "isL2": false, "isTestNet": false },
-  { "kind": "filecoin", "id": "filecoin", "name": "Filecoin", "ticker": "FIL", "vm_type": "FVM", "isL2": false, "isTestNet": false },
-  { "kind": "injective", "id": "injective", "name": "Injective", "ticker": "INJ", "vm_type": "MultiVM", "isL2": false, "isTestNet": false }
-]
+{
+"network_types": {
+    "bitcoin": {
+      "vm_type": null,
+      "ticker": "BTC",
+      "isL2": false,
+      "isTestNet": false
+    },
+    "evm": {
+      "vm_type": "EVM",
+      "ticker": "ETH",
+      "isL2": false,
+      "isTestNet": false
+    },
+    "filecoin": {
+      "vm_type": "FVM",
+      "ticker": "FIL",
+      "isL2": false,
+      "isTestNet": false
+    },
+    "injective": {
+      "vm_type": "Multi-VM",
+      "ticker": "INJ",
+      "isL2": false,
+      "isTestNet": false
+    },
+    "svm": {
+      "vm_type": "SVM",
+      "ticker": "SOL",
+      "isL2": false,
+      "isTestNet": false
+    },
+    "tron": {
+      "vm_type": "TrVM",
+      "ticker": "TRX",
+      "isL2": false,
+      "isTestNet": false
+    },
+    "zcash": {
+      "vm_type": null,
+      "ticker": "ZEC",
+      "isL2": false,
+      "isTestNet": false
+    }
+  },
+  "networks": [
+      { "kind": "bitcoin", "id": "bitcoin", "name": "Bitcoin" },
+      { "kind": "evm", "id": "avalanche_c", "name": "Avalanche C-Chain", "nickname": "Avalanche", "chainId": 43114, "ticker": "AVAX" },
+      { "kind": "evm", "id": "bnb", "name": "BNB Smart Chain", "nickname": "BSC", "chainId": 56, "ticker": "BNB" },
+      { "kind": "evm", "id": "ethereum", "name": "Ethereum", "chainId": 1 },
+      { "kind": "evm", "id": "monad", "name": "Monad", "chainId": 167004, "ticker": "MON" },
+      { "kind": "evm", "id": "arbitrum_one", "name": "Arbitrum One", "nickname": "Arbitrum", "chainId": 42161, "isL2": true },
+      { "kind": "evm", "id": "base", "name": "Base", "chainId": 8453, "isL2": true },
+      { "kind": "evm", "id": "optimism", "name": "Optimism", "chainId": 10, "isL2": true },
+      { "kind": "evm", "id": "polygon", "name": "Polygon", "chainId": 137, "ticker": "POL", "isL2": true },
+      { "kind": "filecoin", "id": "filecoin", "name": "Filecoin" },
+      { "kind": "injective", "id": "injective", "name": "Injective" },
+      { "kind": "svm", "id": "solana", "name": "Solana" },
+      { "kind": "tron", "id": "tron", "name": "Tron" },
+      { "kind": "zcash", "id": "zcash", "name": "Zcash" }
+  ]
+}

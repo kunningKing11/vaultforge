@@ -5,7 +5,7 @@ export type Asset = {
   decimals: number;
   price_usd: number;
   change_24h: number;
-  network: string;
+  network: NetworkId;
   token_address?: string | null;
 };
 
@@ -71,20 +71,6 @@ export type View = "dashboard" | "send" | "receive" | "swap" | "assets" | "activ
 
 export type QrResilience = "L" | "M" | "Q" | "H";
 
-export type NetworkId =
-  | "ethereum"
-  | "monad"
-  | "polygon"
-  | "arbitrum_one"
-  | "base"
-  | "optimism"
-  | "avalanche_c"
-  | "bitcoin"
-  | "solana"
-  | "zcash"
-  | "filecoin"
-  | "injective";
-
 export type Toast = {
   id: number;
   message: string;
@@ -94,79 +80,63 @@ export type Toast = {
   exiting: boolean;
 };
 
-export type EvmNetwork = {
-  kind: "evm";
-  id: NetworkId;
-  name: string;
-  chainId: number;
+type NetworkKind =
+  | "bitcoin"
+  | "evm"
+  | "filecoin"
+  | "injective"
+  | "svm"
+  | "tron"
+  | "zcash";
+
+type ChainVM =
+  | "EVM"
+  | "FVM"
+  | "Multi-VM"
+  | "SVM"
+  | "TrVM"
+  | null;
+
+export type NetworkId =
+  | "bitcoin"
+  | "avalanche_c"
+  | "bnb"
+  | "ethereum"
+  | "monad"
+  | "arbitrum_one"
+  | "base"
+  | "optimism"
+  | "polygon"
+  | "filecoin"
+  | "injective"
+  | "solana"
+  | "tron"
+  | "zcash";
+
+
+export interface NetworkConfig {
+  vm_type: ChainVM;
   ticker: string;
-  vm_type?: "EVM";
   isL2: boolean;
   isTestNet: boolean;
-};
-
-export type BitcoinNetwork = {
-  kind: "bitcoin";
-  id: NetworkId;
-  name: string;
-  ticker: "BTC";
-  isL2: boolean,
-  isTestNet: boolean,
+  rpcUrl?: string;
 }
 
-export type LightningNetwork = {
-  kind: "lightning";
+export interface NetworkInstance {
+  kind: NetworkKind;
   id: NetworkId;
   name: string;
-  ticker: "BTC";
-  isL2: boolean,
-  isTestNet: boolean,
+  nickname?: string;
+  chainId?: number;
+  isL2?: boolean;
+  isTestNet?: boolean;
+  ticker?: string;
+  vm_type?: ChainVM;
 }
 
-export type SolanaNetwork = {
-  kind: "solana";
-  id: NetworkId;
-  name: string;
-  ticker: "SOL";
-  vm_type: "SVM",
-  isL2: boolean,
-  isTestNet: boolean,
-}
+export type Network = NetworkConfig & NetworkInstance; // TODO: does it matter in which order they are put in?
 
-export type ZcashNetwork = {
-  kind: "zcash";
-  id: NetworkId;
-  name: string;
-  ticker: "ZEC";
-  isL2: boolean;
-  isTestNet: boolean;
+export interface NetworkData {
+  network_types: Record<string, NetworkConfig>;
+  networks: NetworkInstance[];
 }
-
-export type FilecoinNetwork = {
-  kind: "filecoin";
-  id: NetworkId;
-  name: string;
-  ticker: "FIL";
-  vm_type: "FVM",
-  isL2: boolean,
-  isTestNet: boolean,
-}
-
-export type InjectiveNetwork = {
-  kind: "injective";
-  id: NetworkId;
-  name: string;
-  ticker: "INJ";
-  vm_type: "MultiVM",
-  isL2: boolean,
-  isTestNet: boolean,
-}
-
-export type Network =
-  | EvmNetwork
-  | BitcoinNetwork
-  | LightningNetwork
-  | SolanaNetwork
-  | ZcashNetwork
-  | FilecoinNetwork
-  | InjectiveNetwork;
