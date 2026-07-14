@@ -28,20 +28,14 @@ pub(crate) struct NativeAssetConfig {
     pub(crate) decimals: u32,
 }
 
-pub(crate) const NON_EVM_NATIVE_ASSETS: &[NativeAssetConfig] = &[
+// Chains with no non-native token implementation yet
+pub(crate) const BASIC_NATIVE_ASSETS: &[NativeAssetConfig] = &[
     NativeAssetConfig {
         network_id: "bitcoin",
         address_key: "bitcoin",
         symbol: "BTC",
         name: "Bitcoin",
         decimals: 8,
-    },
-    NativeAssetConfig {
-        network_id: "solana",
-        address_key: "solana",
-        symbol: "SOL",
-        name: "Solana",
-        decimals: 9,
     },
     NativeAssetConfig {
         network_id: "zcash",
@@ -80,10 +74,7 @@ pub(crate) async fn fetch_portfolio_assets(
         assets.extend(fetch_solana_assets(solana_address, cached_assets).await);
     }
 
-    for config in NON_EVM_NATIVE_ASSETS {
-        if config.network_id == "solana" {
-            continue;
-        }
+    for config in BASIC_NATIVE_ASSETS {
         let Some(address) = addresses.get(config.address_key) else {
             continue;
         };
