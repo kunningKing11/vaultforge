@@ -1,16 +1,3 @@
-/*
-pub(crate) async fn parse_rpc_response(
-    url: &str,
-    body: &serde_json::Value
-) -> Result<serde_json::Value, String> {
-    let json = rpc_post("https://solana-rpc.publicnode.com", &body).await?;
-    if json.get("error").is_none() {
-        Ok(json)
-    } else {
-        Err(format!("RPC request to {url} failed: {:?}", json.get("error")))
-    }
-}
-*/
 pub(crate) async fn rpc_post(
     url: &str,
     body: &serde_json::Value,
