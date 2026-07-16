@@ -20,7 +20,7 @@ export type Activity = {
   amount?: string;
   from?: string | null;
   to?: string | null;
-  network?: string | null;
+  network?: NetworkId | null;
   payload_hash?: string | null;
   signature?: string | null;
   fee?: string | null;
@@ -42,7 +42,7 @@ export type SignedTransaction = {
   symbol: string;
   amount: string;
   note: string;
-  network: string;
+  network: NetworkId;
   nonce: string;
   signedAt: string;
   payloadHash: string;
@@ -60,7 +60,7 @@ export type SignedTransaction = {
 export type SendDraft = {
   to: string;
   symbol: string;
-  network: string;
+  network: NetworkId;
   amount: string;
   note: string;
 };

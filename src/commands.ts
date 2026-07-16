@@ -1,6 +1,7 @@
 import { pushToast } from "./toasts";
 import { formatError, toWei } from "./format";
 import { walletApi } from "./walletApi";
+import { networkById } from "./networks";
 import { appState, addressForNetwork, selectedNetwork } from "./state";
 import { render } from "./render";
 import type { SessionCommand, WalletSession } from "./types";
@@ -37,11 +38,17 @@ export async function unlockWallet(form: HTMLFormElement) {
 
 export async function signTransaction(form: HTMLFormElement) {
   const formData = new FormData(form);
-  const [network, symbol] = String(formData.get("asset") || "ethereum:ETH").split(":");
+  const [networkValue, symbol] = String(formData.get("asset") || "ethereum:ETH").split(":");
+  const network = networkById(networkValue)?.id;
+  if (!network) {
+    pushToast("Please select a supported network.", "error");
+    return;
+  }
+
   appState.sendDraft = {
     to: String(formData.get("to") || ""),
     symbol: symbol || "ETH",
-    network: network || "ethereum",
+    network,
     amount: String(formData.get("amount") || ""),
     note: String(formData.get("note") || ""),
   };

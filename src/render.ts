@@ -1,7 +1,7 @@
 import { appRoot } from "./main";
 import { escapeHtml, formatWei, money, shortAddress, weiToNumber } from "./format";
 import { networkDisplayName, networks } from "./networks";
-import type { Activity, Asset, QrResilience, SignedTransaction } from "./types";
+import type { Activity, Asset, NetworkId, QrResilience, SignedTransaction } from "./types";
 import {
   appState,
   selectedNetwork,
@@ -550,7 +550,7 @@ function sendAssetSelect(selectedAssetId: string) {
   }).join("") ?? ""}</select>`;
 }
 
-function decimalsForAsset(symbol: string, network: string, fallback: number) {
+function decimalsForAsset(symbol: string, network: NetworkId, fallback: number) {
   return appState.session?.assets.find((asset) => asset.symbol === symbol && asset.network === network)?.decimals
     ?? appState.session?.assets.find((asset) => asset.symbol === symbol)?.decimals
     ?? fallback;
