@@ -16,12 +16,16 @@ use crate::providers::solana::{
     broadcast_solana_transaction, fetch_solana_token_account_rent,
     fetch_solana_token_account_state, fetch_solana_tx_status,
 };
+use crate::providers::tron::{
+    broadcast_tron_transaction, fetch_tron_tx_status,
+};
 use crate::state::{AppState, session_from_state, validate_unlocked};
 use crate::storage::persist_state_wallet;
 use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
 use crate::tx::solana::{
     sign_solana_token_transfer, sign_solana_transfer, solana_associated_token_address,
 };
+use crate::tx::tron::sign_tron_transfer;
 use crate::validation::{validate_evm_address, validate_transfer};
 
 pub(crate) fn required_native_debit(
@@ -223,6 +227,52 @@ pub(crate) async fn sign_transaction(
                 tx_hash: Some(signed_sol.signature),
             })
         }
+        "tron" if symbol == "TRX" => {
+            let from = addresses
+                .get("tron")
+                .ok_or_else(|| "Wallet Tron address is not available".to_string())?
+                .clone();
+            let amount_sun: u64 = value
+                .try_into()
+                .map_err(|_| "TRX amount is too large".to_string())?;
+            let trx_balance: u128 = asset
+                .balance
+                .parse()
+                .map_err(|_| "Invalid TRX balance".to_string())?;
+            let signed_trx = sign_tron_transfer(&mnemonic, &from, &to, amount_sun).await?;
+            let fee_sun = signed_trx.fee_sun as u128;
+            let required_trx = required_native_debit(true, value, fee_sun, "TRX")?;
+            ensure_native_balance_covers_debit(
+                trx_balance,
+                required_trx,
+                "TRX",
+                true,
+                "Tron transaction fee",
+            )?;
+            let raw_tx = serde_json::to_string(&signed_trx.raw_tx)
+                .map_err(|_| "Failed to serialize signed Tron transaction".to_string())?;
+
+            Ok(SignedTransaction {
+                from,
+                to,
+                symbol: symbol.clone(),
+                amount: value.to_string(),
+                note: note.trim().to_string(),
+                network: "tron".to_string(),
+                nonce: "resource".to_string(),
+                signed_at: Utc::now().to_rfc3339(),
+                payload_hash: signed_trx.txid.clone(),
+                signature: signed_trx.signature,
+                fee_amount: signed_trx.fee_sun.to_string(),
+                fee_symbol: "TRX".to_string(),
+                total_debit: required_trx.to_string(),
+                post_balance: trx_balance.saturating_sub(required_trx).to_string(),
+                decimals,
+                fiat_value: (value as f64) * asset.price_usd,
+                raw_tx: Some(raw_tx),
+                tx_hash: Some(signed_trx.txid),
+            })
+        }
         network_id if evm_config_by_id(network_id).is_some() => {
             let config = evm_config_by_id(network_id)
                 .ok_or_else(|| format!("No EVM chain configured for network {network_id}"))?;
@@ -363,6 +413,11 @@ pub(crate) async fn send_transaction(
     let tx_hash = match signed.network.as_str() {
         "bitcoin" if signed.symbol == "BTC" => broadcast_bitcoin_transaction(raw_tx).await?,
         "solana" => broadcast_solana_transaction(raw_tx).await?,
+        "tron" if signed.symbol == "TRX" => {
+            let tx: serde_json::Value = serde_json::from_str(raw_tx)
+                .map_err(|_| "Invalid signed Tron transaction JSON".to_string())?;
+            broadcast_tron_transaction(&tx).await?
+        }
         network_id if evm_config_by_id(network_id).is_some() => {
             let config = evm_config_by_id(network_id)
                 .ok_or_else(|| format!("No EVM chain configured for {network_id}"))?;
@@ -475,6 +530,7 @@ pub(crate) async fn check_transaction_status(
     match network.as_str() {
         "bitcoin" => fetch_bitcoin_tx_status(&tx_hash).await,
         "solana" => fetch_solana_tx_status(&tx_hash).await,
+        "tron" => fetch_tron_tx_status(&tx_hash).await,
         network_id if evm_config_by_id(network_id).is_some() => {
             let config = EVM_NETWORKS
                 .iter()

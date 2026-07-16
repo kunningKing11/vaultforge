@@ -564,7 +564,12 @@ export function updateRecipientPlaceholder(symbol: string) {
 function addressPlaceholder(symbol: string) {
   const placeholders: Record<string, string> = {
     BTC: "bc1... / 1... / 3...",
+    ETH: "0x...",
+    FIL: "f1... / f3...",
+    INJ: "inj1...",
     SOL: "Solana address",
+    TRX: "T...",
+    ZEC: "t1... / t3...",
   };
   return placeholders[symbol] ?? "0x...";
 }

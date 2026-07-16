@@ -1,15 +1,17 @@
 use crate::assets::cached_asset;
 use crate::derivation::{
     bech32_account_address, bitcoin_bech32_address, ethereum_address_from_private_key,
-    filecoin_address_from_private_key, zcash_transparent_address,
+    filecoin_address_from_private_key, tron_address_from_private_key, zcash_transparent_address,
 };
 use crate::dto::Asset;
 use crate::providers::bitcoin::fetch_bitcoin_balance;
 use crate::providers::evm::{DEFAULT_EVM_CONFIG, fetch_evm_assets};
 use crate::providers::solana::fetch_solana_assets;
+use crate::providers::tron::fetch_tron_assets;
 use crate::validation::{
     validate_bitcoin_address, validate_evm_address, validate_filecoin_address,
-    validate_injective_address, validate_solana_address, validate_zcash_address,
+    validate_injective_address, validate_solana_address, validate_tron_address,
+    validate_zcash_address,
 };
 use std::collections::HashMap;
 
@@ -18,6 +20,7 @@ pub(crate) mod evm;
 pub(crate) mod http;
 pub(crate) mod prices;
 pub(crate) mod solana;
+pub(crate) mod tron;
 
 #[derive(Clone, Copy)]
 pub(crate) struct NativeAssetConfig {
@@ -29,19 +32,13 @@ pub(crate) struct NativeAssetConfig {
 }
 
 // Chains with no non-native token implementation yet
+// TODO: fully support Tron tokens
 pub(crate) const BASIC_NATIVE_ASSETS: &[NativeAssetConfig] = &[
     NativeAssetConfig {
         network_id: "bitcoin",
         address_key: "bitcoin",
         symbol: "BTC",
         name: "Bitcoin",
-        decimals: 8,
-    },
-    NativeAssetConfig {
-        network_id: "zcash",
-        address_key: "zcash",
-        symbol: "ZEC",
-        name: "Zcash",
         decimals: 8,
     },
     NativeAssetConfig {
@@ -57,6 +54,13 @@ pub(crate) const BASIC_NATIVE_ASSETS: &[NativeAssetConfig] = &[
         symbol: "INJ",
         name: "Injective",
         decimals: 18,
+    },
+    NativeAssetConfig {
+        network_id: "zcash",
+        address_key: "zcash",
+        symbol: "ZEC",
+        name: "Zcash",
+        decimals: 8,
     },
 ];
 
@@ -74,7 +78,14 @@ pub(crate) async fn fetch_portfolio_assets(
         assets.extend(fetch_solana_assets(solana_address, cached_assets).await);
     }
 
+    if let Some(tron_address) = addresses.get("tron") {
+        assets.extend(fetch_tron_assets(tron_address, cached_assets).await);
+    }
+
     for config in BASIC_NATIVE_ASSETS {
+        if config.network_id == "solana" {
+            continue;
+        }
         let Some(address) = addresses.get(config.address_key) else {
             continue;
         };
@@ -122,12 +133,13 @@ pub(crate) trait ChainProvider: Send + Sync {
     fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String>;
 }
 
-struct EvmProvider;
 struct BitcoinProvider;
-struct SolanaProvider;
-struct ZcashProvider;
+struct EvmProvider;
 struct FilecoinProvider;
 struct InjectiveProvider;
+struct SolanaProvider;
+struct TronProvider;
+struct ZcashProvider;
 
 impl ChainProvider for EvmProvider {
     fn chain_name(&self) -> &'static str {
@@ -156,36 +168,6 @@ impl ChainProvider for BitcoinProvider {
     }
     fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> {
         bitcoin_bech32_address(private_key, false)
-    }
-}
-
-impl ChainProvider for SolanaProvider {
-    fn chain_name(&self) -> &'static str {
-        "Solana"
-    }
-    fn symbol(&self) -> &'static str {
-        "SOL"
-    }
-    fn validate_address(&self, address: &str) -> Result<(), String> {
-        validate_solana_address(address)
-    }
-    fn derive_address(&self, _private_key: &[u8; 32]) -> Result<String, String> {
-        Err("Solana derivation requires seed bytes, not secp256k1 key".to_string())
-    }
-}
-
-impl ChainProvider for ZcashProvider {
-    fn chain_name(&self) -> &'static str {
-        "Zcash"
-    }
-    fn symbol(&self) -> &'static str {
-        "ZEC"
-    }
-    fn validate_address(&self, address: &str) -> Result<(), String> {
-        validate_zcash_address(address)
-    }
-    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> {
-        zcash_transparent_address(private_key, false)
     }
 }
 
@@ -219,14 +201,60 @@ impl ChainProvider for InjectiveProvider {
     }
 }
 
+impl ChainProvider for SolanaProvider {
+    fn chain_name(&self) -> &'static str {
+        "Solana"
+    }
+    fn symbol(&self) -> &'static str {
+        "SOL"
+    }
+    fn validate_address(&self, address: &str) -> Result<(), String> {
+        validate_solana_address(address)
+    }
+    fn derive_address(&self, _private_key: &[u8; 32]) -> Result<String, String> {
+        Err("Solana derivation requires seed bytes, not secp256k1 key".to_string())
+    }
+}
+
+impl ChainProvider for TronProvider {
+    fn chain_name(&self) -> &'static str {
+        "Tron"
+    }
+    fn symbol(&self) -> &'static str {
+        "TRX"
+    }
+    fn validate_address(&self, address: &str) -> Result<(), String> {
+        validate_tron_address(address)
+    }
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> {
+        tron_address_from_private_key(private_key)
+    }
+}
+
+impl ChainProvider for ZcashProvider {
+    fn chain_name(&self) -> &'static str {
+        "Zcash"
+    }
+    fn symbol(&self) -> &'static str {
+        "ZEC"
+    }
+    fn validate_address(&self, address: &str) -> Result<(), String> {
+        validate_zcash_address(address)
+    }
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> {
+        zcash_transparent_address(private_key, false)
+    }
+}
+
 #[allow(dead_code)]
 pub(crate) fn get_provider(symbol: &str) -> Option<Box<dyn ChainProvider>> {
     match symbol {
         "BTC" => Some(Box::new(BitcoinProvider)),
-        "SOL" => Some(Box::new(SolanaProvider)),
-        "ZEC" => Some(Box::new(ZcashProvider)),
         "FIL" => Some(Box::new(FilecoinProvider)),
         "INJ" => Some(Box::new(InjectiveProvider)),
+        "SOL" => Some(Box::new(SolanaProvider)),
+        "TRX" => Some(Box::new(TronProvider)),
+        "ZEC" => Some(Box::new(ZcashProvider)),
         _ => Some(Box::new(EvmProvider)),
     }
 }

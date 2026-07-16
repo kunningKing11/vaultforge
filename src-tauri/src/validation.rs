@@ -53,9 +53,11 @@ pub(crate) fn validate_transfer(
     Ok(())
 }
 
+// TODO: validate all chains
 fn validate_address_for_transfer(address: &str, symbol: &str, network: &str) -> Result<(), String> {
     match network {
         "solana" => validate_solana_address(address),
+        "tron" => validate_tron_address(address),
         _ => validate_address_for_symbol(address, symbol),
     }
 }
@@ -63,12 +65,34 @@ fn validate_address_for_transfer(address: &str, symbol: &str, network: &str) -> 
 pub(crate) fn validate_address_for_symbol(address: &str, symbol: &str) -> Result<(), String> {
     match symbol {
         "BTC" => validate_bitcoin_address(address),
-        "SOL" => validate_solana_address(address),
-        "ZEC" => validate_zcash_address(address),
         "FIL" => validate_filecoin_address(address),
         "INJ" => validate_injective_address(address),
+        "SOL" => validate_solana_address(address),
+        "TRX" => validate_tron_address(address),
+        "ZEC" => validate_zcash_address(address),
         _ => validate_evm_address(address),
     }
+}
+
+pub(crate) fn validate_bitcoin_address(address: &str) -> Result<(), String> {
+    if address.starts_with("bc1") || address.starts_with("tb1") {
+        segwit::decode(address)
+            .map_err(|_| "Recipient must be a valid Bitcoin bech32 address".to_string())?;
+        return Ok(());
+    }
+    if address.starts_with('1')
+        || address.starts_with('3')
+        || address.starts_with('2')
+        || address.starts_with('m')
+        || address.starts_with('n')
+    {
+        bs58::decode(address)
+            .with_check(None)
+            .into_vec()
+            .map_err(|_| "Recipient must be a valid Bitcoin base58 address".to_string())?;
+        return Ok(());
+    }
+    Err("Recipient must be a valid Bitcoin address (bc1, 1, or 3)".to_string())
 }
 
 pub(crate) fn validate_evm_address(address: &str) -> Result<(), String> {
@@ -96,59 +120,6 @@ pub(crate) fn validate_evm_address(address: &str) -> Result<(), String> {
     }
 
     Ok(())
-}
-
-pub(crate) fn validate_bitcoin_address(address: &str) -> Result<(), String> {
-    if address.starts_with("bc1") || address.starts_with("tb1") {
-        segwit::decode(address)
-            .map_err(|_| "Recipient must be a valid Bitcoin bech32 address".to_string())?;
-        return Ok(());
-    }
-    if address.starts_with('1')
-        || address.starts_with('3')
-        || address.starts_with('2')
-        || address.starts_with('m')
-        || address.starts_with('n')
-    {
-        bs58::decode(address)
-            .with_check(None)
-            .into_vec()
-            .map_err(|_| "Recipient must be a valid Bitcoin base58 address".to_string())?;
-        return Ok(());
-    }
-    Err("Recipient must be a valid Bitcoin address (bc1, 1, or 3)".to_string())
-}
-
-pub(crate) fn validate_solana_address(address: &str) -> Result<(), String> {
-    let bytes = bs58::decode(address)
-        .into_vec()
-        .map_err(|_| "Recipient must be a valid base58 Solana address".to_string())?;
-    if bytes.len() != 32 {
-        return Err("Solana address must decode to 32 bytes".to_string());
-    }
-    Ok(())
-}
-
-pub(crate) fn validate_zcash_address(address: &str) -> Result<(), String> {
-    if address.starts_with("zs1") || address.starts_with("ztestsapling") {
-        return Err("Zcash shielded addresses are not yet supported".to_string());
-    }
-    if address.starts_with("t1") || address.starts_with("t3") || address.starts_with("tm") {
-        let bytes = bs58::decode(address)
-            .into_vec()
-            .map_err(|_| "Recipient must be a valid Zcash transparent address".to_string())?;
-        if bytes.len() != 26 {
-            return Err("Zcash transparent address must decode to 26 bytes".to_string());
-        }
-        let payload = &bytes[..22];
-        let checksum = &bytes[22..];
-        let hash = Sha256::digest(Sha256::digest(payload));
-        if &hash[..4] != checksum {
-            return Err("Zcash transparent address checksum invalid".to_string());
-        }
-        return Ok(());
-    }
-    Err("Recipient must be a valid Zcash address (t1 or tm)".to_string())
 }
 
 pub(crate) fn validate_filecoin_address(address: &str) -> Result<(), String> {
@@ -211,5 +182,54 @@ pub(crate) fn validate_injective_address(address: &str) -> Result<(), String> {
     }
     bech32::decode(address)
         .map_err(|_| "Recipient must be a valid Injective bech32 address".to_string())?;
+    Ok(())
+}
+
+pub(crate) fn validate_solana_address(address: &str) -> Result<(), String> {
+    let bytes = bs58::decode(address)
+        .into_vec()
+        .map_err(|_| "Recipient must be a valid base58 Solana address".to_string())?;
+    if bytes.len() != 32 {
+        return Err("Solana address must decode to 32 bytes".to_string());
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_zcash_address(address: &str) -> Result<(), String> {
+    if address.starts_with("zs1") || address.starts_with("ztestsapling") {
+        return Err("Zcash shielded addresses are not yet supported".to_string());
+    }
+    if address.starts_with("t1") || address.starts_with("t3") || address.starts_with("tm") {
+        let bytes = bs58::decode(address)
+            .into_vec()
+            .map_err(|_| "Recipient must be a valid Zcash transparent address".to_string())?;
+        if bytes.len() != 26 {
+            return Err("Zcash transparent address must decode to 26 bytes".to_string());
+        }
+        let payload = &bytes[..22];
+        let checksum = &bytes[22..];
+        let hash = Sha256::digest(Sha256::digest(payload));
+        if &hash[..4] != checksum {
+            return Err("Zcash transparent address checksum invalid".to_string());
+        }
+        return Ok(());
+    }
+    Err("Recipient must be a valid Zcash address (t1 or tm)".to_string())
+}
+
+pub(crate) fn validate_tron_address(address: &str) -> Result<(), String> {
+    let bytes = bs58::decode(address)
+        .with_check(None)
+        .into_vec()
+        .map_err(|_| "Recipient must be a valid Tron base58check address".to_string())?;
+
+    if bytes.len() != 21 {
+        return Err("Tron address must decode to 21 bytes".to_string());
+    }
+
+    if bytes[0] != 0x41 {
+        return Err("Tron address must use mainnet 0x41 prefix".to_string());
+    }
+
     Ok(())
 }

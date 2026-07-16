@@ -31,6 +31,8 @@ The below items are the priority for this project and an item will probably get 
     - [ ] Token-2022 support
     - [ ] pre-sign live balance refresh
   - [ ] TRX
+    - [x] native TRX transfers
+    - [ ] TRX token transfers
 - [ ] Slider for network priority fee when sending using priority fee percentiles
 - [ ] Actual cross-chain swaps (non-simulated)
   - [ ] via NEAR Intents

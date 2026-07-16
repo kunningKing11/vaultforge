@@ -12,26 +12,33 @@ use sha3::Keccak256;
 use sha3::digest::Digest as Sha3Digest;
 use std::collections::HashMap;
 
-const EVM_DERIVATION_PATH: &str = "m/44'/60'/0'/0/0";
+// TODO: why some are pub(crate) and some are not? Should we make them all pub(crate)?
 pub(crate) const BITCOIN_DERIVATION_PATH: &str = "m/84'/0'/0'/0/0";
-const ZCASH_DERIVATION_PATH: &str = "m/44'/133'/0'/0/0";
-pub(crate) const SOLANA_DERIVATION_PATH: &[u32] = &[44, 501, 0, 0];
+const EVM_DERIVATION_PATH: &str = "m/44'/60'/0'/0/0";
 const FILECOIN_DERIVATION_PATH: &str = "m/44'/461'/0'/0/0";
 const INJECTIVE_DERIVATION_PATH: &str = EVM_DERIVATION_PATH;
+pub(crate) const SOLANA_DERIVATION_PATH: &[u32] = &[44, 501, 0, 0];
+pub(crate) const TRON_DERIVATION_PATH: &str = "m/44'/195'/0'/0/0";
+const ZCASH_DERIVATION_PATH: &str = "m/44'/133'/0'/0/0";
 
 struct DerivedWalletKeys {
     bitcoin: [u8; 32],
     evm: [u8; 32],
-    solana: [u8; 32],
-    zcash: [u8; 32],
-    injective: [u8; 32],
     filecoin: [u8; 32],
+    injective: [u8; 32],
+    solana: [u8; 32],
+    tron: [u8; 32],
+    zcash: [u8; 32],
 }
 
 pub(crate) fn signing_key_from_mnemonic(mnemonic: &str) -> Result<k256::ecdsa::SigningKey, String> {
     let private_key = secp256k1_private_key_from_mnemonic(mnemonic, EVM_DERIVATION_PATH)?;
     k256::ecdsa::SigningKey::from_bytes((&private_key).into())
         .map_err(|_| "Failed to create signing key".to_string())
+}
+
+pub(crate) fn tron_private_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32], String> {
+    secp256k1_private_key_from_mnemonic(mnemonic, TRON_DERIVATION_PATH)
 }
 
 pub(crate) fn generate_mnemonic() -> Result<String, String> {
@@ -100,12 +107,13 @@ pub(crate) fn solana_secret_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32]
 
 fn derive_wallet_keys(mnemonic: &str) -> Result<DerivedWalletKeys, String> {
     Ok(DerivedWalletKeys {
-        evm: secp256k1_private_key_from_mnemonic(mnemonic, EVM_DERIVATION_PATH)?,
         bitcoin: secp256k1_private_key_from_mnemonic(mnemonic, BITCOIN_DERIVATION_PATH)?,
-        zcash: secp256k1_private_key_from_mnemonic(mnemonic, ZCASH_DERIVATION_PATH)?,
-        solana: solana_secret_key_from_mnemonic(mnemonic)?,
+        evm: secp256k1_private_key_from_mnemonic(mnemonic, EVM_DERIVATION_PATH)?,
         filecoin: secp256k1_private_key_from_mnemonic(mnemonic, FILECOIN_DERIVATION_PATH)?,
         injective: secp256k1_private_key_from_mnemonic(mnemonic, INJECTIVE_DERIVATION_PATH)?,
+        solana: solana_secret_key_from_mnemonic(mnemonic)?,
+        tron: secp256k1_private_key_from_mnemonic(mnemonic, TRON_DERIVATION_PATH)?,
+        zcash: secp256k1_private_key_from_mnemonic(mnemonic, ZCASH_DERIVATION_PATH)?,
     })
 }
 
@@ -114,20 +122,22 @@ pub(crate) fn derive_addresses_from_mnemonic(
 ) -> Result<HashMap<String, String>, String> {
     let keys = derive_wallet_keys(mnemonic)?;
 
-    let evm_address = ethereum_address_from_private_key(&keys.evm)?;
     let bitcoin_address = bitcoin_bech32_address(&keys.bitcoin, false)?;
-    let zcash_address = zcash_transparent_address(&keys.zcash, false)?;
-    let solana_address = solana_address_from_secret_key(&keys.solana)?;
+    let evm_address = ethereum_address_from_private_key(&keys.evm)?;
     let filecoin_address = filecoin_address_from_private_key(&keys.filecoin)?;
     let injective_address = bech32_account_address(&keys.injective, "inj")?;
+    let solana_address = solana_address_from_secret_key(&keys.solana)?;
+    let tron_address = tron_address_from_private_key(&keys.tron)?;
+    let zcash_address = zcash_transparent_address(&keys.zcash, false)?;
 
     let mut addresses = HashMap::new();
-    addresses.insert("evm".to_string(), evm_address);
     addresses.insert("bitcoin".to_string(), bitcoin_address);
-    addresses.insert("zcash".to_string(), zcash_address);
-    addresses.insert("solana".to_string(), solana_address);
+    addresses.insert("evm".to_string(), evm_address);
     addresses.insert("filecoin".to_string(), filecoin_address);
     addresses.insert("injective".to_string(), injective_address);
+    addresses.insert("solana".to_string(), solana_address);
+    addresses.insert("tron".to_string(), tron_address);
+    addresses.insert("zcash".to_string(), zcash_address);
     Ok(addresses)
 }
 
@@ -142,6 +152,20 @@ pub(crate) fn ethereum_address_from_private_key(private_key: &[u8; 32]) -> Resul
     let public_bytes = public_key.as_bytes();
     let hash = <Keccak256 as Sha3Digest>::digest(&public_bytes[1..]);
     Ok(format!("0x{}", hex::encode(&hash[12..])))
+}
+
+pub(crate) fn tron_address_from_private_key(private_key: &[u8; 32]) -> Result<String, String> {
+    let signing_key = signing_key_from_private_key(private_key)?;
+    let verifying_key = signing_key.verifying_key();
+    let public_key = verifying_key.to_encoded_point(false);
+    let public_bytes = public_key.as_bytes();
+    let hash = <Keccak256 as Sha3Digest>::digest(&public_bytes[1..]);
+
+    let mut address = Vec::with_capacity(21);
+    address.push(0x41);
+    address.extend_from_slice(&hash[12..]);
+
+    Ok(bs58::encode(address).with_check().into_string())
 }
 
 pub(crate) fn bitcoin_bech32_address(
