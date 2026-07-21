@@ -28,7 +28,7 @@
     "eslint": "^10.6.0",
     "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^17.7.0",
-    "postcss": "^8.5.16",
+    "postcss": "^8.5.21",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.63.0",
