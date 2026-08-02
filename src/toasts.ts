@@ -1,5 +1,5 @@
-import { escapeHtml } from "./format";
 import type { Toast } from "./types";
+import { toastTemplate } from "./views/toast";
 
 let toastId = 0;
 let toasts: Toast[] = [];
@@ -43,7 +43,9 @@ function renderToasts() {
     previousTops.set(Number(element.dataset.toastId), element.getBoundingClientRect().top);
   });
 
-  toastRoot.innerHTML = toasts.map(toastHtml).join("");
+  toastRoot.innerHTML = toasts
+    .map((toast) => toastTemplate(toast, enteredToasts.has(toast.id)))
+    .join("");
 
   toastRoot.querySelectorAll<HTMLElement>("[data-toast-id]").forEach((element) => {
     const id = Number(element.dataset.toastId);
@@ -66,21 +68,4 @@ function renderToasts() {
 
     enteredToasts.add(id);
   });
-}
-
-function toastHtml(toast: Toast) {
-  const elapsed = Date.now() - toast.createdAt;
-  const entryClass = enteredToasts.has(toast.id) || toast.exiting ? "" : "toast-enter";
-  const exitClass = toast.exiting ? "toast-exit" : "";
-  const toneClass = toast.tone === "error" ? "toast-error" : "toast-success";
-
-  return `
-    <article class="toast-card ${toneClass} ${entryClass} ${exitClass}" data-toast-id="${toast.id}">
-      <div class="flex items-start gap-3">
-        <div class="toast-dot"></div>
-        <p class="text-sm font-bold leading-6">${escapeHtml(toast.message)}</p>
-      </div>
-      <div class="toast-track"><div class="toast-progress" style="animation-duration: ${toast.duration}ms; animation-delay: -${Math.min(elapsed, toast.duration)}ms;"></div></div>
-    </article>
-  `;
 }
