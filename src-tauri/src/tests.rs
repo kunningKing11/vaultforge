@@ -422,7 +422,10 @@ fn signs_solana_native_transfer() {
     .unwrap();
 
     assert!(!signed.signature.is_empty());
-    assert!(!signed.raw_tx_base64.is_empty());
+    assert_eq!(
+        signed.raw_tx_base64,
+        "Ad6quY5jtfdWLlVxx8ao2zvT6EknQABbIysXyEsl0Gtpb0v0YpwaCUp7UlOcwjbEDCsoTuOIYx2WUqYM1RxyXwUBAAED8DYnYkanW53jNJ7UKxXiMvZRj8IPX81PHWToH5vSWPdgZHxcfemexzdm9yU3fQRHL/i9mRHwgYGLefMeankFrwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAgIAAQwCAAAAQEIPAAAAAAA="
+    );
     assert_eq!(signed.recent_blockhash, "11111111111111111111111111111111");
     assert_eq!(signed.fee_lamports, 5000);
 }
@@ -445,7 +448,10 @@ fn signs_solana_spl_token_transfer() {
     .unwrap();
 
     assert!(!signed.signature.is_empty());
-    assert!(!signed.raw_tx_base64.is_empty());
+    assert_eq!(
+        signed.raw_tx_base64,
+        "ASdwuShdy+hvKd+3RP6ckHTP6BAjEGJLuPwevJRja3Zk3Hb4Q7nwjJ/FHaoVAY4f1E8oRVAwDBqdelbMm0ZBagoBAAUI8DYnYkanW53jNJ7UKxXiMvZRj8IPX81PHWToH5vSWPen/90BBnpik/KR8QwNjg/a6SNBG1AeiRuWANppcU+NcKxDUtSdBJ4UBoX1qj6IDJwis9EKDvzorJnUS4uWuFwSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGm4hX/quBhPtof2NGGMA12sQ53BrrO1WYoPAAAAAAAQbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpYGR8XH3pnsc3ZvclN30ERy/4vZkR8IGBi3nzHmp5Ba+MlyWPTiSJ8bs9ECkUjg2DC1oTmdr/EIQEjnvY2+n4WQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgcGAAIGBAMFAQEFBAEEAgAKDEBCDwAAAAAACQ=="
+    );
     assert_eq!(signed.fee_lamports, 5000);
 }
 

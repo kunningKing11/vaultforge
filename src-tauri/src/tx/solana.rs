@@ -1,20 +1,18 @@
 use std::str::FromStr;
 
 use base64::Engine;
-#[allow(deprecated)]
-use solana_sdk::{
-    hash::Hash,
-    instruction::Instruction,
-    message::Message,
-    pubkey::Pubkey,
-    signature::{Keypair, Signer, keypair_from_seed},
-    system_instruction,
-    transaction::Transaction,
+use solana_hash::Hash;
+use solana_instruction::Instruction;
+use solana_keypair::{Keypair, keypair_from_seed};
+use solana_message::Message;
+use solana_pubkey::Pubkey;
+use solana_signer::Signer;
+use solana_system_interface::instruction as system_instruction;
+use solana_transaction::Transaction;
+use spl_associated_token_account_interface::{
+    address::get_associated_token_address, instruction::create_associated_token_account_idempotent,
 };
-use spl_associated_token_account::{
-    get_associated_token_address, instruction::create_associated_token_account_idempotent,
-};
-use spl_token::instruction::transfer_checked;
+use spl_token_interface::instruction::transfer_checked;
 
 use crate::derivation::solana_secret_key_from_mnemonic;
 use crate::providers::solana::{fetch_latest_solana_blockhash, fetch_solana_fee_for_message};
@@ -96,7 +94,7 @@ fn sign_solana_instructions(draft: SolanaTransferDraft) -> Result<SignedSolanaTr
         .first()
         .ok_or_else(|| "Solana transaction missing signature".to_string())?
         .to_string();
-    let raw_tx = bincode::serialize(&transaction)
+    let raw_tx = wincode::serialize(&transaction)
         .map_err(|_| "Failed to serialize Solana transaction".to_string())?;
     let raw_tx_base64 = base64::engine::general_purpose::STANDARD.encode(raw_tx);
 
@@ -159,7 +157,7 @@ async fn estimate_solana_fee(
     let from_pubkey = parse_pubkey(from, "from")?;
     let blockhash = parse_blockhash(recent_blockhash)?;
     let message = Message::new_with_blockhash(&instructions, Some(&from_pubkey), &blockhash);
-    let message_bytes = bincode::serialize(&message)
+    let message_bytes = wincode::serialize(&message)
         .map_err(|_| "Failed to serialize Solana fee message".to_string())?;
     let message_base64 = base64::engine::general_purpose::STANDARD.encode(message_bytes);
     fetch_solana_fee_for_message(&message_base64).await
@@ -209,10 +207,10 @@ fn spl_token_transfer_instructions(
         &from_pubkey,
         &to_pubkey,
         &mint_pubkey,
-        &spl_token::ID,
+        &spl_token_interface::ID,
     );
     let transfer = transfer_checked(
-        &spl_token::ID,
+        &spl_token_interface::ID,
         &source_ata,
         &mint_pubkey,
         &destination_ata,
