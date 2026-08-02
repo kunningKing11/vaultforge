@@ -1,7 +1,7 @@
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
 use argon2::Argon2;
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 
