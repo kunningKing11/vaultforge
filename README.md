@@ -44,24 +44,37 @@ A local-first crypto wallet desktop app built with a TypeScript frontend, Tailwi
 
 For a full list of upcoming features (there are quite a few!), click [here](https://github.com/kunningKing11/vaultforge/blob/main/ROADMAP.md).
 
-## Project Structure
+## Supported chains
 
-- `src/` contains the TypeScript frontend, including rendering, event binding, command calls, app state, formatting, QR handling, network metadata, and shared types.
-- `src-tauri/src/main.rs` wires the Tauri app, managed state, and command handlers.
-- `src-tauri/src/commands/` contains Tauri command handlers split by domain: wallet lifecycle, transactions, and market data.
-- `src-tauri/src/providers/` contains chain RPC/provider code for balances, fee data, broadcast, and transaction status.
-- `src-tauri/src/tx/` contains chain-specific transaction construction, encoding, and signing code.
-- `src-tauri/src/assets.rs` contains shared asset-cache helpers used by provider refresh paths.
-- `src-tauri/src/activity.rs`, `assets.rs`, `derivation.rs`, `dto.rs`, `state.rs`, `storage.rs`, and `validation.rs` contain the backend domain support code used by commands:
-  - `activity.rs`:
-  - `assets.rs`:
-  - `derivation.rs`: key derivation and
-  - `dto.rs`: serialization and
-  - `state.rs`:
-  - `storage.rs`:
-  - `validation.rs`:
+- Bitcoin Mainnet (BTC)
+- EVM: Ethereum Mainnet (ETH), Arbitrum One, Avalanche C-Chain (AVAX), Base, BNB Smart Chain (BNB), Monad (MON), Optimism, and Polygon (POL)
+- Solana Mainnet (SOL)
+- Tron Mainnet (TRX; native transfers only)
+
+### Supported features
+
+The table distinguishes implemented backend paths from network entries that are currently address or validation scaffolding. “No” means the feature is not implemented; it does not imply that the underlying chain lacks it.
+
+| Chain             |              Native transfer              |     Token transfer      | NFTs / Filecoin storage | Shielded pools |
+| :---------------- | :---------------------------------------: | :---------------------: | :---------------------: | :------------: |
+| Arbitrum One      |                    Yes                    |         ERC-20          |           No            |       No       |
+| Avalanche C-Chain |                    Yes                    |         ERC-20          |           No            |       No       |
+| Base              |                    Yes                    |         ERC-20          |           No            |       No       |
+| BNB Smart Chain   |                    Yes                    |         ERC-20          |           No            |       No       |
+| Bitcoin           |          Yes (basic P2WPKH path)          |           No            |           No            |       No       |
+| Ethereum Mainnet  |                    Yes                    |         ERC-20          |           No            |       No       |
+| Filecoin          |                    No                     |           No            |           No            |       No       |
+| Injective         |                    No                     |           No            |           No            |       No       |
+| Monad             |                    Yes                    |         ERC-20          |           No            |       No       |
+| Optimism          |                    Yes                    |         ERC-20          |           No            |       No       |
+| Polygon           |                    Yes                    |         ERC-20          |           No            |       No       |
+| Solana            |                    Yes                    |    Classic SPL Token    |           No            |       No       |
+| Tron              |                    Yes                    | No (TRC-20 unavailable) |           No            |       No       |
+| Zcash             | No (transparent address scaffolding only) |           No            |           No            |       No       |
 
 ## Development
+
+### Setup
 
 **Install dependencies:**
 
@@ -152,3 +165,20 @@ bun run format
 ```
 
 `dev` and `build` run the non-mutating Oxlint, Oxfmt, and TypeScript checks before starting Vite. Run `./lint.sh` for the same quality gate or `./lint.sh --fix` to apply safe lint fixes and formatting first.
+
+### Project Structure
+
+- `src/` contains the TypeScript frontend, including rendering, event binding, command calls, app state, formatting, QR handling, network metadata, and shared types.
+- `src-tauri/src/main.rs` wires the Tauri app, managed state, and command handlers.
+- `src-tauri/src/commands/` contains Tauri command handlers split by domain: wallet lifecycle, transactions, and market data.
+- `src-tauri/src/providers/` contains chain RPC/provider code for balances, fee data, broadcast, and transaction status.
+- `src-tauri/src/tx/` contains chain-specific transaction construction, encoding, and signing code.
+- `src-tauri/src/assets.rs` contains shared asset-cache helpers used by provider refresh paths.
+- `src-tauri/src/activity.rs`, `assets.rs`, `derivation.rs`, `dto.rs`, `state.rs`, `storage.rs`, and `validation.rs` contain the backend domain support code used by commands:
+  - `activity.rs`:
+  - `assets.rs`:
+  - `derivation.rs`: key derivation
+  - `dto.rs`: serialization
+  - `state.rs`:
+  - `storage.rs`:
+  - `validation.rs`:
