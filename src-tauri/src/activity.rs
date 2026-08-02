@@ -1,6 +1,6 @@
 use crate::dto::Activity;
 use chrono::Utc;
-use rand::Rng;
+use rand::RngExt;
 use sha2::{Digest, Sha256};
 
 pub(crate) fn activity(kind: &str, title: &str, subtitle: &str, amount: &str) -> Activity {

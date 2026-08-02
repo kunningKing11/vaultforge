@@ -4,7 +4,7 @@ use bip39::{Language, Mnemonic};
 use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
 use hmac::{Hmac, KeyInit, Mac};
 use k256::ecdsa::SigningKey;
-use rand::Rng;
+use rand::RngExt;
 use ripemd::Ripemd160;
 use ripemd::digest::Digest as RipemdDigest;
 use sha2::{Digest as Sha2Digest, Sha256, Sha512};
