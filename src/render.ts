@@ -214,7 +214,12 @@ function dashboardView() {
     .sort((left, right) => assetValue(right) - assetValue(left))
     .map(assetCard)
     .join("");
-  const recent = appState.session.activity.slice(0, 5).map(activityRow).join("") || emptyState("No recent activity", "Sign, send, swap, or change networks to build a local activity timeline.");
+  const recent =
+    appState.session.activity.slice(0, 5).map(activityRow).join("") ||
+    emptyState(
+      "No recent activity",
+      "Sign, send, swap, or change networks to build a local activity timeline.",
+    );
   const change = portfolioChange();
   return `
     <div class="grid gap-5 xl:grid-cols-[1.35fr_0.75fr]">
@@ -271,7 +276,12 @@ function sendView() {
 
 function signedTransactionView(signed: SignedTransaction) {
   const feeDecimals = decimalsForAsset(signed.feeSymbol, signed.network, signed.decimals);
-  const chainReferenceLabel = signed.network === "bitcoin" ? "Input model" : signed.network === "solana" ? "Blockhash" : "Nonce";
+  const chainReferenceLabel =
+    signed.network === "bitcoin"
+      ? "Input model"
+      : signed.network === "solana"
+        ? "Blockhash"
+        : "Nonce";
   return `
     <section class="glass max-w-4xl rounded-[2rem] p-6">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -319,7 +329,9 @@ function receiveView() {
   const network = selectedNetwork();
   const addr = addressForNetwork(network);
   const payload = receivePayload();
-  const qrContent = payload ? appState.qrSvg || `<span class="text-sm font-bold text-slate-500">Generating QR...</span>` : `<span class="text-sm font-bold text-slate-500">Receive is not available for this network yet.</span>`;
+  const qrContent = payload
+    ? appState.qrSvg || `<span class="text-sm font-bold text-slate-500">Generating QR...</span>`
+    : `<span class="text-sm font-bold text-slate-500">Receive is not available for this network yet.</span>`;
   const qrActionsDisabled = payload ? "" : "disabled";
   return `
     <section class="glass max-w-3xl rounded-[2rem] p-6">
@@ -464,7 +476,9 @@ function mobileNavButton(view: string, label: string) {
 function assetCard(asset: Asset) {
   const value = assetValue(asset);
   const positive = asset.change_24h >= 0;
-  const total = appState.session ? appState.session.assets.reduce((s, a) => s + assetValue(a), 0) : 0;
+  const total = appState.session
+    ? appState.session.assets.reduce((s, a) => s + assetValue(a), 0)
+    : 0;
   const allocation = total ? (value / total) * 100 : 0;
   return `
     <article class="asset-card rounded-3xl border border-white/10 bg-white/[0.04] p-5">
@@ -544,16 +558,23 @@ function assetSelect(name: string, selected = "ETH", attributes = "") {
 }
 
 function sendAssetSelect(selectedAssetId: string) {
-  return `<select class="field" name="asset" data-send-asset>${appState.session?.assets.map((asset) => {
-    const assetId = `${asset.network}:${asset.symbol}`;
-    return `<option value="${escapeHtml(assetId)}" ${assetId === selectedAssetId ? "selected" : ""}>${asset.symbol} - ${asset.name} (${networkDisplayName(asset.network)})</option>`;
-  }).join("") ?? ""}</select>`;
+  return `<select class="field" name="asset" data-send-asset>${
+    appState.session?.assets
+      .map((asset) => {
+        const assetId = `${asset.network}:${asset.symbol}`;
+        return `<option value="${escapeHtml(assetId)}" ${assetId === selectedAssetId ? "selected" : ""}>${asset.symbol} - ${asset.name} (${networkDisplayName(asset.network)})</option>`;
+      })
+      .join("") ?? ""
+  }</select>`;
 }
 
 function decimalsForAsset(symbol: string, network: NetworkId, fallback: number) {
-  return appState.session?.assets.find((asset) => asset.symbol === symbol && asset.network === network)?.decimals
-    ?? appState.session?.assets.find((asset) => asset.symbol === symbol)?.decimals
-    ?? fallback;
+  return (
+    appState.session?.assets.find((asset) => asset.symbol === symbol && asset.network === network)
+      ?.decimals ??
+    appState.session?.assets.find((asset) => asset.symbol === symbol)?.decimals ??
+    fallback
+  );
 }
 
 export function updateRecipientPlaceholder(symbol: string) {

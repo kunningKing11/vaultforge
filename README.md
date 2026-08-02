@@ -133,4 +133,22 @@ With `bun`:
 bunx tauri build
 ```
 
-**All build commands run `eslint --fix src/` before starting Vite.**
+**Check and fix frontend quality:**
+
+With `npm`:
+
+```bash
+npm run check
+npm run lint:fix
+npm run format
+```
+
+With `bun`:
+
+```bash
+bun run check
+bun run lint:fix
+bun run format
+```
+
+`dev` and `build` run the non-mutating Oxlint, Oxfmt, and TypeScript checks before starting Vite. Run `./lint.sh` for the same quality gate or `./lint.sh --fix` to apply safe lint fixes and formatting first.

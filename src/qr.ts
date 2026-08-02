@@ -5,7 +5,8 @@ import { appState, receivePayload, selectedNetwork } from "./state";
 import { theme } from "./theme";
 
 export async function ensureReceiveQr(): Promise<boolean> {
-  if (appState.currentView !== "receive" || !appState.session?.address || appState.session?.locked) return false;
+  if (appState.currentView !== "receive" || !appState.session?.address || appState.session?.locked)
+    return false;
 
   const payload = receivePayload();
   if (!payload) {
@@ -17,7 +18,8 @@ export async function ensureReceiveQr(): Promise<boolean> {
   }
 
   const nextQrKey = `${payload}:${appState.qrResilience}`;
-  if ((appState.qrKey === nextQrKey && appState.qrSvg) || appState.qrGeneratingKey === nextQrKey) return false;
+  if ((appState.qrKey === nextQrKey && appState.qrSvg) || appState.qrGeneratingKey === nextQrKey)
+    return false;
 
   appState.qrGeneratingKey = nextQrKey;
   try {

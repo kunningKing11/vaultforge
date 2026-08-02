@@ -1,15 +1,19 @@
 {
   "name": "vaultforge-wallet",
-  "private": true,
   "version": "0.3.0",
+  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npm run lint:fix && vite --host 127.0.0.1 --port 1420",
+    "dev": "npm run check && vite --host 127.0.0.1 --port 1420",
     "generate-icon": "tauri icon src-tauri/icons/icon.svg -o src-tauri/icons",
     "prepare-tauri": "npm run sync-package-lock && npm run sync-cargo-version && npm run generate-icon",
-    "build": "npm run lint:fix && tsc && vite build",
-    "lint": "eslint src/",
-    "lint:fix": "eslint --fix src/",
+    "build": "npm run check && vite build",
+    "lint": "oxlint . && oxfmt --check .",
+    "lint:fix": "oxlint --fix . && oxfmt --write .",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run lint && npm run typecheck",
     "preview": "vite preview",
     "sync-package-lock": "npm install --package-lock-only --ignore-scripts --no-audit --no-fund",
     "sync-cargo-version": "node scripts/sync-cargo-version.mjs",
@@ -20,19 +24,15 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@tailwindcss/postcss": "^4.3.2",
     "@tauri-apps/cli": "^2.11.4",
     "@types/qrcode": "^1.5.6",
     "autoprefixer": "^10.5.2",
-    "eslint": "^10.7.0",
-    "eslint-plugin-unused-imports": "^4.4.1",
-    "globals": "^17.7.0",
+    "oxfmt": "^0.61.0",
+    "oxlint": "^1.76.0",
     "postcss": "^8.5.25",
     "tailwindcss": "^4.3.2",
-    "@typescript/native": "npm:typescript@^7.0.2",
-    "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "typescript-eslint": "^8.65.0",
+    "typescript": "^7.0.2",
     "vite": "^8.1.5"
   }
 }

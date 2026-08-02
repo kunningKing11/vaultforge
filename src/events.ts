@@ -56,7 +56,8 @@ export function bindEvents() {
       render();
     }
     if (action === "select-activity") {
-      appState.selectedActivityId = target.closest<HTMLElement>("[data-activity-id]")?.dataset.activityId ?? "";
+      appState.selectedActivityId =
+        target.closest<HTMLElement>("[data-activity-id]")?.dataset.activityId ?? "";
       render();
     }
     if (action === "copy-value") {
@@ -104,13 +105,22 @@ export function bindEvents() {
     if (target.matches("[data-passphrase-input]")) updatePassphraseStrength(target);
   });
 
-  document.addEventListener("wheel", (event) => {
-    const rail = (event.target as HTMLElement).closest<HTMLElement>(".asset-scroll");
-    if (!rail || rail.scrollWidth <= rail.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+  document.addEventListener(
+    "wheel",
+    (event) => {
+      const rail = (event.target as HTMLElement).closest<HTMLElement>(".asset-scroll");
+      if (
+        !rail ||
+        rail.scrollWidth <= rail.clientWidth ||
+        Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      )
+        return;
 
-    event.preventDefault();
-    rail.scrollLeft += event.deltaY;
-  }, { passive: false });
+      event.preventDefault();
+      rail.scrollLeft += event.deltaY;
+    },
+    { passive: false },
+  );
 }
 
 async function loadSession() {

@@ -9,9 +9,13 @@ function toKebabCase(value: string): string {
 
 function hexToRgbChannels(value: string): string | null {
   const normalized = value.trim().replace(/^#/, "");
-  const hex = normalized.length === 3
-    ? normalized.split("").map((char) => `${char}${char}`).join("")
-    : normalized;
+  const hex =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((char) => `${char}${char}`)
+          .join("")
+      : normalized;
 
   if (!/^[0-9a-fA-F]{6}$/.test(hex)) return null;
 

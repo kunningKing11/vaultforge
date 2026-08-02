@@ -11,10 +11,12 @@ export async function createWallet(form: HTMLFormElement) {
   const passphrase = String(formData.get("passphrase") || "");
   if (!validatePassphraseConfirmation(form, passphrase)) return;
 
-  await runCommand("create_wallet", () => walletApi.createWallet({
-    name: String(formData.get("name") || "Primary Wallet"),
-    passphrase,
-  }));
+  await runCommand("create_wallet", () =>
+    walletApi.createWallet({
+      name: String(formData.get("name") || "Primary Wallet"),
+      passphrase,
+    }),
+  );
 }
 
 export async function importWallet(form: HTMLFormElement) {
@@ -22,17 +24,21 @@ export async function importWallet(form: HTMLFormElement) {
   const passphrase = String(formData.get("passphrase") || "");
   if (!validatePassphraseConfirmation(form, passphrase)) return;
 
-  await runCommand("import_wallet", () => walletApi.importWallet({
-    mnemonic: String(formData.get("mnemonic") || ""),
-    passphrase,
-  }));
+  await runCommand("import_wallet", () =>
+    walletApi.importWallet({
+      mnemonic: String(formData.get("mnemonic") || ""),
+      passphrase,
+    }),
+  );
 }
 
 export async function unlockWallet(form: HTMLFormElement) {
   const formData = new FormData(form);
-  const ok = await runCommand("unlock_wallet", () => walletApi.unlockWallet({
-    passphrase: String(formData.get("passphrase") || ""),
-  }));
+  const ok = await runCommand("unlock_wallet", () =>
+    walletApi.unlockWallet({
+      passphrase: String(formData.get("passphrase") || ""),
+    }),
+  );
   if (ok) resetLockedDeleteWallet();
 }
 
@@ -55,7 +61,9 @@ export async function signTransaction(form: HTMLFormElement) {
   appState.busy = true;
   render();
   try {
-    const asset = appState.session?.assets.find(a => a.symbol === appState.sendDraft.symbol && a.network === appState.sendDraft.network);
+    const asset = appState.session?.assets.find(
+      (a) => a.symbol === appState.sendDraft.symbol && a.network === appState.sendDraft.network,
+    );
     const decimals = asset?.decimals ?? 18;
     appState.signedTransaction = await walletApi.signTransaction({
       to: appState.sendDraft.to,
@@ -77,7 +85,9 @@ export async function broadcastSignedTransaction() {
   if (!appState.signedTransaction) return;
   if (!window.confirm("Broadcast this signed transaction to the chain RPC?")) return;
 
-  const ok = await runCommand("send_transaction", () => walletApi.sendTransaction({ signed: appState.signedTransaction! }));
+  const ok = await runCommand("send_transaction", () =>
+    walletApi.sendTransaction({ signed: appState.signedTransaction! }),
+  );
   if (ok) {
     appState.signedTransaction = null;
     appState.sendDraft = { to: "", symbol: "ETH", network: "ethereum", amount: "", note: "" };
@@ -101,7 +111,9 @@ function stopPendingTxPolling() {
 
 async function pollPendingTransactions() {
   if (!appState.session) return;
-  const pending = appState.session.activity.filter((a) => a.status === "pending" && a.hash && a.network);
+  const pending = appState.session.activity.filter(
+    (a) => a.status === "pending" && a.hash && a.network,
+  );
   if (pending.length === 0) {
     stopPendingTxPolling();
     return;
@@ -132,13 +144,15 @@ async function pollPendingTransactions() {
 export async function swapTokens(form: HTMLFormElement) {
   const formData = new FormData(form);
   const fromSymbol = String(formData.get("fromSymbol") || "ETH");
-  const asset = appState.session?.assets.find(a => a.symbol === fromSymbol);
+  const asset = appState.session?.assets.find((a) => a.symbol === fromSymbol);
   const decimals = asset?.decimals ?? 18;
-  await runCommand("swap_tokens", () => walletApi.swapTokens({
-    fromSymbol,
-    toSymbol: String(formData.get("toSymbol") || "USDC"),
-    amount: toWei(String(formData.get("amount") || "0"), decimals),
-  }));
+  await runCommand("swap_tokens", () =>
+    walletApi.swapTokens({
+      fromSymbol,
+      toSymbol: String(formData.get("toSymbol") || "USDC"),
+      amount: toWei(String(formData.get("amount") || "0"), decimals),
+    }),
+  );
 }
 
 export async function lockWallet() {
@@ -159,7 +173,12 @@ export async function lockWallet() {
 }
 
 export async function clearWallet() {
-  if (!window.confirm("Remove the encrypted local wallet and return to onboarding? This cannot be undone.")) return;
+  if (
+    !window.confirm(
+      "Remove the encrypted local wallet and return to onboarding? This cannot be undone.",
+    )
+  )
+    return;
   await deleteStoredWallet();
 }
 
