@@ -514,22 +514,14 @@ fn solana_token_requires_sol_for_fee() {
 fn derives_documented_wallet_paths_deterministically() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     let addresses = derive_addresses_from_mnemonic(mnemonic).unwrap();
-    assert_eq!(addresses.len(), 6);
-    assert_eq!(
-        addresses.get("evm").unwrap(),
-        "0x9858effd232b4033e47d90003d41ec34ecaeda94"
-    );
+    assert_eq!(addresses.len(), 7);
     assert_eq!(
         addresses.get("bitcoin").unwrap(),
         "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
     );
     assert_eq!(
-        addresses.get("zcash").unwrap(),
-        "t1XVXWCvpMgBvUaed4XDqWtgQgJSu1Ghz7F"
-    );
-    assert_eq!(
-        addresses.get("solana").unwrap(),
-        "HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk"
+        addresses.get("evm").unwrap(),
+        "0x9858effd232b4033e47d90003d41ec34ecaeda94"
     );
     assert_eq!(
         addresses.get("filecoin").unwrap(),
@@ -538,6 +530,18 @@ fn derives_documented_wallet_paths_deterministically() {
     assert_eq!(
         addresses.get("injective").unwrap(),
         "inj1gsvdpdxec8hsu57lhxg5xem7refr233zkczfgv"
+    );
+    assert_eq!(
+        addresses.get("solana").unwrap(),
+        "HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk"
+    );
+    assert_eq!(
+        addresses.get("tron").unwrap(),
+        "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH"
+    );
+    assert_eq!(
+        addresses.get("zcash").unwrap(),
+        "t1XVXWCvpMgBvUaed4XDqWtgQgJSu1Ghz7F"
     );
 }
 
