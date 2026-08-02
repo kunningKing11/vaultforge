@@ -148,7 +148,7 @@ pub(crate) fn signing_key_from_private_key(private_key: &[u8; 32]) -> Result<Sig
 pub(crate) fn ethereum_address_from_private_key(private_key: &[u8; 32]) -> Result<String, String> {
     let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
-    let public_key = verifying_key.to_encoded_point(false);
+    let public_key = verifying_key.to_sec1_point(false);
     let public_bytes = public_key.as_bytes();
     let hash = <Keccak256 as Sha3Digest>::digest(&public_bytes[1..]);
     Ok(format!("0x{}", hex::encode(&hash[12..])))
@@ -157,7 +157,7 @@ pub(crate) fn ethereum_address_from_private_key(private_key: &[u8; 32]) -> Resul
 pub(crate) fn tron_address_from_private_key(private_key: &[u8; 32]) -> Result<String, String> {
     let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
-    let public_key = verifying_key.to_encoded_point(false);
+    let public_key = verifying_key.to_sec1_point(false);
     let public_bytes = public_key.as_bytes();
     let hash = <Keccak256 as Sha3Digest>::digest(&public_bytes[1..]);
 
@@ -174,7 +174,7 @@ pub(crate) fn bitcoin_bech32_address(
 ) -> Result<String, String> {
     let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
-    let encoded = verifying_key.to_encoded_point(true);
+    let encoded = verifying_key.to_sec1_point(true);
     let public_bytes = encoded.as_bytes();
     let hashed = <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_bytes));
     let hrp = if is_testnet { hrp::TB } else { hrp::BC };
@@ -187,7 +187,7 @@ pub(crate) fn zcash_transparent_address(
 ) -> Result<String, String> {
     let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
-    let encoded = verifying_key.to_encoded_point(true);
+    let encoded = verifying_key.to_sec1_point(true);
     let public_bytes = encoded.as_bytes();
     let payload = <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_bytes));
     let prefix = if is_testnet {
@@ -210,7 +210,7 @@ pub(crate) fn solana_address_from_secret_key(secret_bytes: &[u8; 32]) -> Result<
 pub(crate) fn filecoin_address_from_private_key(private_key: &[u8; 32]) -> Result<String, String> {
     let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
-    let encoded = verifying_key.to_encoded_point(true);
+    let encoded = verifying_key.to_sec1_point(true);
     let public_bytes = encoded.as_bytes();
     let payload = <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_bytes));
     let mut bytes = vec![0x01];
@@ -224,7 +224,7 @@ pub(crate) fn filecoin_address_from_private_key(private_key: &[u8; 32]) -> Resul
 pub(crate) fn bech32_account_address(private_key: &[u8; 32], hrp: &str) -> Result<String, String> {
     let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
-    let encoded = verifying_key.to_encoded_point(true);
+    let encoded = verifying_key.to_sec1_point(true);
     let public_bytes = encoded.as_bytes();
     let payload = <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_bytes));
     let hrp = Hrp::parse(hrp).map_err(|_| "Invalid bech32 prefix".to_string())?;

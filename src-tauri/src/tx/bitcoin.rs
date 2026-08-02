@@ -230,7 +230,7 @@ pub(crate) fn bitcoin_signed_transfer(
     }
 
     let signing_key = signing_key_from_private_key(private_key)?;
-    let public_key = signing_key.verifying_key().to_encoded_point(true);
+    let public_key = signing_key.verifying_key().to_sec1_point(true);
     let public_key_bytes = public_key.as_bytes();
     let pubkey_hash =
         <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_key_bytes));
