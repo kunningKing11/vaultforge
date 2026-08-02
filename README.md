@@ -168,7 +168,10 @@ bun run format
 
 ### Project Structure
 
-- `src/` contains the TypeScript frontend, including rendering, event binding, command calls, app state, formatting, QR handling, network metadata, and shared types.
+- `src/` contains the TypeScript frontend, including event binding, command calls, app state, formatting, QR handling, network metadata, and shared types.
+- `src/render.ts` composes the current application state into the root UI and coordinates QR refreshes.
+- `src/views/` contains focused TypeScript HTML-template modules for screens, shell layout, shared UI fragments, locked-state UI, and toast markup.
+- `src/toasts.ts` owns toast timing and animation behavior while using the toast template in `src/views/toast.ts`.
 - `src-tauri/src/main.rs` wires the Tauri app, managed state, and command handlers.
 - `src-tauri/src/commands/` contains Tauri command handlers split by domain: wallet lifecycle, transactions, and market data.
 - `src-tauri/src/providers/` contains chain RPC/provider code for balances, fee data, broadcast, and transaction status.
