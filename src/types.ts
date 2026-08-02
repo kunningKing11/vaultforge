@@ -65,9 +65,24 @@ export type SendDraft = {
   note: string;
 };
 
-export type SessionCommand = "create_wallet" | "import_wallet" | "unlock_wallet" | "send_transaction" | "swap_tokens" | "clear_wallet" | "refresh_prices";
+export type SessionCommand =
+  | "create_wallet"
+  | "import_wallet"
+  | "unlock_wallet"
+  | "send_transaction"
+  | "swap_tokens"
+  | "clear_wallet"
+  | "refresh_prices";
 
-export type View = "dashboard" | "send" | "receive" | "swap" | "assets" | "activity" | "security" | "settings";
+export type View =
+  | "dashboard"
+  | "send"
+  | "receive"
+  | "swap"
+  | "assets"
+  | "activity"
+  | "security"
+  | "settings";
 
 export type QrResilience = "L" | "M" | "Q" | "H";
 
@@ -80,22 +95,9 @@ export type Toast = {
   exiting: boolean;
 };
 
-type NetworkKind =
-  | "bitcoin"
-  | "evm"
-  | "filecoin"
-  | "injective"
-  | "svm"
-  | "tron"
-  | "zcash";
+type NetworkKind = "bitcoin" | "evm" | "filecoin" | "injective" | "svm" | "tron" | "zcash";
 
-type ChainVM =
-  | "EVM"
-  | "FVM"
-  | "Multi-VM"
-  | "SVM"
-  | "TrVM"
-  | null;
+type ChainVM = "EVM" | "FVM" | "Multi-VM" | "SVM" | "TrVM" | null;
 
 export type NetworkId =
   | "bitcoin"
@@ -112,7 +114,6 @@ export type NetworkId =
   | "solana"
   | "tron"
   | "zcash";
-
 
 export interface NetworkConfig {
   vm_type: ChainVM;

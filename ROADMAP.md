@@ -73,7 +73,7 @@ These should be expected to be worked on only occasionally and as the main list 
   - [ ] ALGO
 - [ ] Support for the Open Wallet Standard
 - [ ] Native DeFi support:
-  [ ] Native Aerodrome Finance LPing (liquidity providing)
-  [ ] Native Aave lending
+      [ ] Native Aerodrome Finance LPing (liquidity providing)
+      [ ] Native Aave lending
 - [ ] (hopefully) Filecoin storage integration so you can easily store, download, and access files stored on Filecoin
 - [ ] (hopefully) Integration with Tor for anonymity when sending to RPC

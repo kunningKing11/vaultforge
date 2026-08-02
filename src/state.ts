@@ -1,4 +1,13 @@
-import type { Activity, Network, NetworkId, QrResilience, SendDraft, SignedTransaction, View, WalletSession } from "./types";
+import type {
+  Activity,
+  Network,
+  NetworkId,
+  QrResilience,
+  SendDraft,
+  SignedTransaction,
+  View,
+  WalletSession,
+} from "./types";
 import { DEFAULT_NETWORK_ID, networks } from "./networks";
 
 export const appState = {
@@ -24,7 +33,8 @@ export function selectedNetwork(): Network {
 }
 
 export function networkDetail(network: Network, short = true): string {
-  if (network.kind === "evm") return `${network.ticker}${short ? "" : ` - Chain ID ${network.chainId}`}`;
+  if (network.kind === "evm")
+    return `${network.ticker}${short ? "" : ` - Chain ID ${network.chainId}`}`;
   if (network.kind === "bitcoin") return network.ticker;
   return network.ticker;
 }

@@ -50,11 +50,18 @@ function renderToasts() {
     const previousTop = previousTops.get(id);
     const nextTop = element.getBoundingClientRect().top;
 
-    if (previousTop !== undefined && previousTop !== nextTop && !element.classList.contains("toast-exit")) {
-      element.animate([{ transform: `translateY(${previousTop - nextTop}px)` }, { transform: "translateY(0)" }], {
-        duration: 260,
-        easing: "cubic-bezier(.2, .9, .2, 1)",
-      });
+    if (
+      previousTop !== undefined &&
+      previousTop !== nextTop &&
+      !element.classList.contains("toast-exit")
+    ) {
+      element.animate(
+        [{ transform: `translateY(${previousTop - nextTop}px)` }, { transform: "translateY(0)" }],
+        {
+          duration: 260,
+          easing: "cubic-bezier(.2, .9, .2, 1)",
+        },
+      );
     }
 
     enteredToasts.add(id);
