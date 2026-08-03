@@ -1,5 +1,11 @@
 pre-commit:
   jobs:
-    - name: install dependencies and run checks
-      run: npm run hooks:check
+    - name: install dependencies and run fast checks
+      run: npm run hooks:check -- commit
       fail_text: "Commit blocked: one or more quality checks failed. See the summary above."
+
+pre-push:
+  jobs:
+    - name: run full Rust validation
+      run: npm run hooks:check -- push
+      fail_text: "Push blocked: one or more Rust validation checks failed. See the summary above."

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-# Run every command even when one fails, then print one summary and block the
-# commit if any check was unsuccessful. The package managers may update their
-# manifest/lockfiles; stage those dependency files for this same commit only.
+# Run every command in the selected hook mode even when one fails, then print
+# one summary and block the Git operation if any check was unsuccessful.
 set -uo pipefail
 
 declare -a check_names=()
@@ -25,17 +24,31 @@ run_check() {
   fi
 }
 
-run_check "npm install" npm install
-run_check "bun install" bun install
-run_check "Stage dependency files" git add -- package.json package-lock.json bun.lock
-run_check "Oxlint" npm run lint:oxlint
-run_check "Oxfmt" npm run format:check
-run_check "TypeScript" npm run typecheck
-run_check "Cargo check" cargo check --manifest-path src-tauri/Cargo.toml
-run_check "Rust Analyzer analysis" bash -c 'cd src-tauri && rust-analyzer analysis-stats .'
-run_check "Cargo test" cargo test --manifest-path src-tauri/Cargo.toml
+case "${1:-}" in
+  commit)
+    # The package managers may update manifests or lockfiles; stage those
+    # dependency files for this same commit only.
+    run_check "npm install" npm install
+    run_check "bun install" bun install
+    run_check "Stage dependency files" git add -- package.json package-lock.json bun.lock
+    run_check "Oxlint" npm run lint:oxlint
+    run_check "Oxfmt" npm run format:check
+    run_check "TypeScript" npm run typecheck
+    run_check "Cargo check" cargo check --manifest-path src-tauri/Cargo.toml
+    operation="commit"
+    ;;
+  push)
+    run_check "Rust Analyzer analysis" bash -c 'cd src-tauri && rust-analyzer analysis-stats .'
+    run_check "Cargo test" cargo test --manifest-path src-tauri/Cargo.toml
+    operation="push"
+    ;;
+  *)
+    printf 'Usage: %s {commit|push}\n' "$0" >&2
+    exit 2
+    ;;
+esac
 
-printf '\nSummary\n'
+printf '\n%s quality-gate summary\n' "$operation"
 printf '%-24s %s\n' "Check" "Result"
 printf '%-24s %s\n' "------------------------" "------------"
 for index in "${!check_names[@]}"; do
@@ -43,7 +56,7 @@ for index in "${!check_names[@]}"; do
 done
 
 if (( failures > 0 )); then
-  printf '\n%d check(s) failed; blocking commit.\n' "$failures" >&2
+  printf '\n%d check(s) failed; blocking %s.\n' "$failures" "$operation" >&2
   exit 1
 fi
 

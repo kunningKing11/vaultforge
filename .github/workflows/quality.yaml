@@ -46,3 +46,21 @@ jobs:
 
       - name: Check frontend quality
         run: bun run check
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: beta
+
+      - name: Check Rust
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Test Rust
+        run: cargo test --manifest-path src-tauri/Cargo.toml
