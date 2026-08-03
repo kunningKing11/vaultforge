@@ -1,5 +1,6 @@
 import { escapeHtml, shortAddress } from "../format";
 import { appState } from "../state";
+import vaultForgeLogoUrl from "../../src-tauri/icons/icon.svg";
 import { walletView } from "./wallet";
 
 export function walletShell() {
@@ -8,7 +9,7 @@ export function walletShell() {
     <div class="mx-auto grid max-w-[1500px] gap-5 pb-24 lg:grid-cols-[280px_1fr] lg:pb-0">
       <aside class="glass hidden rounded-[2rem] p-5 lg:sticky lg:top-5 lg:block lg:h-[calc(100vh-2.5rem)]">
         <div class="mb-8 flex items-center gap-3">
-          <div class="theme-badge-accent flex h-12 w-12 items-center justify-center rounded-2xl text-xl font-black">VF</div>
+          <img class="h-12 w-12 rounded-2xl" src="${vaultForgeLogoUrl}" alt="VaultForge" />
           <div><p class="font-black">${escapeHtml(appState.session.wallet_name ?? "VaultForge")}</p></div>
         </div>
         <nav class="space-y-2">
