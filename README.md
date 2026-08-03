@@ -166,7 +166,7 @@ bun run format
 
 `dev` and `build` run the non-mutating Oxlint, Oxfmt, and TypeScript checks before starting Vite. Run `./lint.sh` for the same checks or `./lint.sh --fix` to apply safe lint fixes and formatting first.
 
-Every commit runs the Lefthook pre-commit checks including Oxlint, Oxfmt, TypeScript, `cargo check`, Rust Analyzer analysis, and the full Rust test suite. The Lefthook script runs every check before printing a pass/fail summary; a failed check blocks the commit.
+Every commit first runs `npm install` and `bun install`, then stages dependency changes in `package.json`, `package-lock.json`, and `bun.lock` into that same commit. It then runs the Lefthook pre-commit checks including Oxlint, Oxfmt, TypeScript, `cargo check`, Rust Analyzer analysis, and the full Rust test suite. The Lefthook script runs every command before printing a pass/fail summary; a failed command blocks the commit.
 
 You can the same script manually with `npm run hooks:check`. After cloning or installing dependencies, `npm install` installs the Git hook through the `prepare` script; run `npm run prepare` in an already-installed checkout.
 

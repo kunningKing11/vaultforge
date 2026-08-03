@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
-# Run every check even when one fails, then print one summary and block the
-# commit if any check was unsuccessful.
+# Run every command even when one fails, then print one summary and block the
+# commit if any check was unsuccessful. The package managers may update their
+# manifest/lockfiles; stage those dependency files for this same commit only.
 set -uo pipefail
 
 declare -a check_names=()
@@ -24,6 +25,9 @@ run_check() {
   fi
 }
 
+run_check "npm install" npm install
+run_check "bun install" bun install
+run_check "Stage dependency files" git add -- package.json package-lock.json bun.lock
 run_check "Oxlint" npm run lint:oxlint
 run_check "Oxfmt" npm run format:check
 run_check "TypeScript" npm run typecheck
