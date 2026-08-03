@@ -20,14 +20,15 @@ The target product is a desktop wallet that can create/import a wallet, derive r
 
 The frontend currently defines or exposes these network families and assets. Backend architecture should support this scope, even if implementation lands incrementally.
 
-- EVM: Ethereum, Monad, Polygon, Arbitrum One, Base, Optimism, Avalanche C-Chain
 - Bitcoin
-- Solana
-- Zcash
+- EVM: Ethereum, Monad, Polygon, Arbitrum One, Base, Optimism, Avalanche C-Chain
 - Filecoin
 - Injective
+- Solana
+- Tron
+- Zcash
 
-Current implemented transfer paths are basic Bitcoin, EVM native/ERC-20, and Solana native/classic SPL transfers. Treat other exposed chains as address/portfolio scaffolding unless their provider, fee, signing, broadcast, and status paths are present.
+Current implemented transfer paths are basic Bitcoin, EVM native/ERC-20, Solana native/classic SPL, and Tron native transfers. Treat other exposed chains as address/portfolio scaffolding unless their provider, fee, signing, broadcast, and status paths are present.
 
 Lightning has frontend type definitions but is not currently present in `rawNetworks`. Do not claim Lightning support until there is a real node, LSP, channel, invoice, payment, and liquidity strategy.
 
@@ -51,6 +52,18 @@ Do not let local UI state or simulator state become the source of truth for real
 Keep code DRY. Repeated business logic, command orchestration, provider parsing, validation, derivation, signing setup, and frontend formatting should be extracted into the narrowest shared helper or module that preserves clarity.
 
 Avoid copy-pasting wallet, transaction, provider, or DTO logic across chains or UI flows. If two implementations look similar but have chain-specific rules, share only the common plumbing and keep the chain-specific behavior explicit.
+
+## Frontend Module Layout
+
+Keep `src/render.ts` limited to root UI composition, state-based screen selection, and post-render coordination such as QR refreshes. Place HTML template functions under `src/views/` by screen or layout responsibility:
+
+- `views/onboarding.ts` and `views/locked.ts` for wallet lifecycle screens and locked-state UI.
+- `views/shell.ts` for desktop/mobile navigation and the unlocked wallet shell.
+- `views/wallet.ts` for dashboard, send, receive, swap, assets, activity, and settings screens.
+- `views/shared.ts` for reusable template fragments, selectors, formatting helpers, and loading UI.
+- `views/toast.ts` for toast markup only; keep timing, animation, and DOM lifecycle behavior in `src/toasts.ts`.
+
+Keep event binding and command behavior in `src/events.ts` and `src/commands.ts`, not view modules. Preserve existing `data-action`, `data-view`, form field names, and escaping of dynamic content when moving or editing templates.
 
 ## Backend Module Layout
 
