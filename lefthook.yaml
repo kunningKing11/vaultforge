@@ -1,0 +1,5 @@
+pre-commit:
+  jobs:
+    - name: checks
+      run: npm run hooks:check
+      fail_text: "Commit blocked: one or more quality checks failed. See the summary above."

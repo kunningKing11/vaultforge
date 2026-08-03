@@ -164,7 +164,13 @@ bun run lint:fix
 bun run format
 ```
 
-`dev` and `build` run the non-mutating Oxlint, Oxfmt, and TypeScript checks before starting Vite. Run `./lint.sh` for the same quality gate or `./lint.sh --fix` to apply safe lint fixes and formatting first.
+`dev` and `build` run the non-mutating Oxlint, Oxfmt, and TypeScript checks before starting Vite. Run `./lint.sh` for the same checks or `./lint.sh --fix` to apply safe lint fixes and formatting first.
+
+Every commit runs the Lefthook pre-commit checks including Oxlint, Oxfmt, TypeScript, `cargo check`, Rust Analyzer analysis, and the full Rust test suite. The Lefthook script runs every check before printing a pass/fail summary; a failed check blocks the commit.
+
+You can the same script manually with `npm run hooks:check`. After cloning or installing dependencies, `npm install` installs the Git hook through the `prepare` script; run `npm run prepare` in an already-installed checkout.
+
+**NOTE: Rust Analyzer must be installed in the active Rust toolchain (for example, `rustup component add rust-analyzer`) or its check will fail and block the commit.**
 
 ### Project Structure
 
