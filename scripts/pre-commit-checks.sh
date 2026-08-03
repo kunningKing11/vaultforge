@@ -26,15 +26,15 @@ run_check() {
 
 case "${1:-}" in
   commit)
-    # The package managers may update manifests or lockfiles; stage those
+    # Package managers and Cargo may update manifests or lockfiles; stage those
     # dependency files for this same commit only.
     run_check "npm install" npm install
     run_check "bun install" bun install
-    run_check "Stage dependency files" git add -- package.json package-lock.json bun.lock
     run_check "Oxlint" npm run lint:oxlint
     run_check "Oxfmt" npm run format:check
     run_check "TypeScript" npm run typecheck
     run_check "Cargo check" cargo check --manifest-path src-tauri/Cargo.toml
+    run_check "Stage dependency files" git add -- package.json package-lock.json bun.lock src-tauri/Cargo.lock
     operation="commit"
     ;;
   push)
