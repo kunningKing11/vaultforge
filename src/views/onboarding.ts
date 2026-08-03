@@ -29,10 +29,9 @@ export function onboardingView() {
       <div class="glass rounded-[2rem] p-6 sm:p-8">
         <div class="mb-6 flex items-center justify-between">
           <div>
-            <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Start</p>
+            <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Setup</p>
             <h2 class="text-2xl font-black">Create wallet</h2>
           </div>
-          <span class="theme-badge-accent rounded-full px-3 py-1 text-xs font-black">NEW</span>
         </div>
         <form data-action="create-wallet" class="space-y-4">
           <label class="block space-y-2"><span class="text-sm font-bold text-slate-300">Wallet name</span><input class="field" name="name" placeholder="Primary Vault" required /></label>
