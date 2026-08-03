@@ -226,6 +226,11 @@ jobs:
             fi
 
             git log --format='- %h %s' "${range}"
+
+            if [ -n "${previous_tag}" ]; then
+              printf '\nSee the full changelog: %s/%s/compare/%s...%s\n' \
+                "${GITHUB_SERVER_URL}" "${GITHUB_REPOSITORY}" "${previous_tag}" "${RELEASE_TAG}"
+            fi
           } > release-notes.md
 
       - name: Create GitHub release
