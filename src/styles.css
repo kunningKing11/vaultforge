@@ -8,6 +8,11 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  scrollbar-width: none;
+}
+
+:root::-webkit-scrollbar {
+  display: none;
 }
 
 body {
@@ -15,6 +20,11 @@ body {
   min-height: 100vh;
   margin: 0;
   overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+body::-webkit-scrollbar {
+  display: none;
 }
 
 h1,
@@ -266,29 +276,72 @@ select.field option:checked {
   gap: 1rem;
   max-width: 100%;
   overflow-x: auto;
-  padding-bottom: 0.65rem;
-  scroll-snap-type: x proximity;
-  scrollbar-color: rgb(var(--color-accent-rgb) / 0.45) rgb(var(--color-surface-rgb) / 0.72);
+  overflow-y: hidden;
+  scrollbar-width: none;
 }
 
 .asset-scroll .asset-card {
   flex: 0 0 16.25rem;
   min-width: 16.25rem;
-  scroll-snap-align: start;
 }
 
 .asset-scroll::-webkit-scrollbar {
-  height: 0.55rem;
+  display: none;
 }
 
-.asset-scroll::-webkit-scrollbar-track {
+.asset-scrollbar {
+  position: relative;
+  display: block;
+  height: 0.65rem;
+  width: 100%;
+  margin-top: 0.65rem;
   border-radius: 999px;
-  background: rgb(var(--color-surface-rgb) / 0.72);
+  background: ButtonFace;
+  cursor: pointer;
+  touch-action: none;
 }
 
-.asset-scroll::-webkit-scrollbar-thumb {
+.asset-scrollbar:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 3px;
+}
+
+.asset-scrollbar-thumb {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
   border-radius: 999px;
-  background: rgb(var(--color-accent-rgb) / 0.45);
+  background: ButtonText;
+  opacity: 0.65;
+  will-change: transform;
+}
+
+.app-scrollbar {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.4rem;
+  bottom: 0.75rem;
+  z-index: 55;
+  width: 0.65rem;
+  border-radius: 999px;
+  background: ButtonFace;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.app-scrollbar:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 3px;
+}
+
+.app-scrollbar-thumb {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  border-radius: 999px;
+  background: ButtonText;
+  opacity: 0.65;
+  will-change: transform;
 }
 
 .asset-card {

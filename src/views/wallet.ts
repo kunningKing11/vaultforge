@@ -64,7 +64,12 @@ function dashboardView() {
               </div>
             </div>
           </div>
-          <div class="asset-scroll mt-6">${topAssets || emptyState("No assets", "Create or import a wallet to populate simulated balances.")}</div>
+          <div class="asset-carousel mt-6">
+            <div id="portfolio-assets" class="asset-scroll" data-horizontal-scroll tabindex="0" aria-label="Portfolio assets">${topAssets || emptyState("No assets", "Create or import a wallet to populate simulated balances.")}</div>
+            <div class="asset-scrollbar" data-horizontal-scrollbar role="scrollbar" tabindex="0" aria-controls="portfolio-assets" aria-label="Scroll portfolio assets horizontally" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+              <div class="asset-scrollbar-thumb" data-horizontal-scrollbar-thumb></div>
+            </div>
+          </div>
         </section>
         <section class="glass rounded-[2rem] p-6">
           <div class="mb-5 flex items-center justify-between"><h2 class="text-xl font-black">Recent activity</h2><button class="theme-text-accent text-sm font-bold" data-view="activity">View all</button></div>

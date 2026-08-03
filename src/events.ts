@@ -25,6 +25,7 @@ import { downloadQrSvg } from "./qr";
 import { walletApi } from "./walletApi";
 import { formatError } from "./format";
 import { pushToast } from "./toasts";
+import { installScrollbarBehavior } from "./scrollbars";
 
 export function bindEvents() {
   document.addEventListener("click", (event) => {
@@ -104,23 +105,6 @@ export function bindEvents() {
     const target = event.target as HTMLInputElement;
     if (target.matches("[data-passphrase-input]")) updatePassphraseStrength(target);
   });
-
-  document.addEventListener(
-    "wheel",
-    (event) => {
-      const rail = (event.target as HTMLElement).closest<HTMLElement>(".asset-scroll");
-      if (
-        !rail ||
-        rail.scrollWidth <= rail.clientWidth ||
-        Math.abs(event.deltaX) > Math.abs(event.deltaY)
-      )
-        return;
-
-      event.preventDefault();
-      rail.scrollLeft += event.deltaY;
-    },
-    { passive: false },
-  );
 }
 
 async function loadSession() {
@@ -139,6 +123,7 @@ async function loadSession() {
 export async function boot() {
   await loadSession();
   bindEvents();
+  installScrollbarBehavior();
 }
 
 import type { QrResilience } from "./types";
