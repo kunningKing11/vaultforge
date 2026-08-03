@@ -296,7 +296,7 @@ select.field option:checked {
   width: 100%;
   margin-top: 0.65rem;
   border-radius: 999px;
-  background: ButtonFace;
+  background: ButtonText;
   cursor: pointer;
   touch-action: none;
 }
@@ -311,7 +311,7 @@ select.field option:checked {
   inset-block: 0;
   left: 0;
   border-radius: 999px;
-  background: ButtonText;
+  background: ButtonFace;
   opacity: 0.65;
   will-change: transform;
 }
@@ -324,7 +324,7 @@ select.field option:checked {
   z-index: 55;
   width: 0.65rem;
   border-radius: 999px;
-  background: ButtonFace;
+  background: ButtonText;
   cursor: pointer;
   touch-action: none;
 }
@@ -339,7 +339,7 @@ select.field option:checked {
   inset-inline: 0;
   top: 0;
   border-radius: 999px;
-  background: ButtonText;
+  background: ButtonFace;
   opacity: 0.65;
   will-change: transform;
 }
