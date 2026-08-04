@@ -254,5 +254,5 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "${{ steps.version.outputs.tag }}" release-assets/* \
-            --title "${{ steps.version.outputs.tag }}" \
+            --title "VaultForge ${{ steps.version.outputs.tag }}" \
             --notes-file release-notes.md
