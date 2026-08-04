@@ -13,6 +13,7 @@ mod storage;
 mod tests;
 mod tx;
 mod validation;
+mod webview;
 
 use state::AppState;
 
@@ -22,6 +23,7 @@ fn main() {
             let icon =
                 tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png"))?.to_owned();
             if let Some(window) = app.get_webview_window("main") {
+                webview::disable_zoom(&window)?;
                 window.set_icon(icon)?;
             }
 
