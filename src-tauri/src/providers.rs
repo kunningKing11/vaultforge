@@ -5,9 +5,10 @@ use crate::derivation::{
 };
 use crate::dto::Asset;
 use crate::providers::bitcoin::fetch_bitcoin_balance;
-use crate::providers::evm::{DEFAULT_EVM_CONFIG, fetch_evm_assets};
+use crate::providers::evm::fetch_evm_assets;
 use crate::providers::solana::fetch_solana_assets;
 use crate::providers::tron::fetch_tron_assets;
+use crate::registry::{NetworkConfig, evm_networks, registry};
 use crate::validation::{
     validate_bitcoin_address, validate_evm_address, validate_filecoin_address,
     validate_injective_address, validate_solana_address, validate_tron_address,
@@ -22,48 +23,6 @@ pub(crate) mod prices;
 pub(crate) mod solana;
 pub(crate) mod tron;
 
-#[derive(Clone, Copy)]
-pub(crate) struct NativeAssetConfig {
-    pub(crate) network_id: &'static str,
-    pub(crate) address_key: &'static str,
-    pub(crate) symbol: &'static str,
-    pub(crate) name: &'static str,
-    pub(crate) decimals: u32,
-}
-
-// Chains with no non-native token implementation yet
-// TODO: fully support Tron tokens
-pub(crate) const BASIC_NATIVE_ASSETS: &[NativeAssetConfig] = &[
-    NativeAssetConfig {
-        network_id: "bitcoin",
-        address_key: "bitcoin",
-        symbol: "BTC",
-        name: "Bitcoin",
-        decimals: 8,
-    },
-    NativeAssetConfig {
-        network_id: "filecoin",
-        address_key: "filecoin",
-        symbol: "FIL",
-        name: "Filecoin",
-        decimals: 18,
-    },
-    NativeAssetConfig {
-        network_id: "injective",
-        address_key: "injective",
-        symbol: "INJ",
-        name: "Injective",
-        decimals: 18,
-    },
-    NativeAssetConfig {
-        network_id: "zcash",
-        address_key: "zcash",
-        symbol: "ZEC",
-        name: "Zcash",
-        decimals: 8,
-    },
-];
-
 pub(crate) async fn fetch_portfolio_assets(
     addresses: &HashMap<String, String>,
     cached_assets: &[Asset],
@@ -71,7 +30,9 @@ pub(crate) async fn fetch_portfolio_assets(
     let mut assets = vec![];
 
     if let Some(evm_address) = addresses.get("evm") {
-        assets.extend(fetch_evm_assets(DEFAULT_EVM_CONFIG, evm_address, cached_assets).await);
+        for config in evm_networks() {
+            assets.extend(fetch_evm_assets(config, evm_address, cached_assets).await);
+        }
     }
 
     if let Some(solana_address) = addresses.get("solana") {
@@ -82,18 +43,19 @@ pub(crate) async fn fetch_portfolio_assets(
         assets.extend(fetch_tron_assets(tron_address, cached_assets).await);
     }
 
-    for config in BASIC_NATIVE_ASSETS {
-        if config.network_id == "solana" {
+    for config in &registry().networks {
+        if matches!(config.kind.as_str(), "evm" | "svm" | "tron") {
             continue;
         }
-        let Some(address) = addresses.get(config.address_key) else {
+        let Some(address) = addresses.get(&config.address_key) else {
             continue;
         };
 
         match fetch_non_evm_native_asset(config, address).await {
             Ok(asset) => assets.push(asset),
             Err(_) => {
-                if let Some(cached) = cached_asset(cached_assets, config.network_id, config.symbol)
+                if let Some(cached) =
+                    cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
                 {
                     assets.push(cached);
                 }
@@ -105,22 +67,27 @@ pub(crate) async fn fetch_portfolio_assets(
 }
 
 async fn fetch_non_evm_native_asset(
-    config: &NativeAssetConfig,
+    config: &NetworkConfig,
     address: &str,
 ) -> Result<Asset, String> {
-    let balance = match config.symbol {
-        "BTC" => fetch_bitcoin_balance(address).await?,
-        _ => return Err(format!("{} provider is not implemented yet", config.symbol)),
+    let balance = match config.id.as_str() {
+        "bitcoin" => fetch_bitcoin_balance(address).await?,
+        _ => {
+            return Err(format!(
+                "{} provider is not implemented yet",
+                config.native_asset.symbol
+            ));
+        }
     };
 
     Ok(Asset {
-        symbol: config.symbol.to_string(),
-        name: config.name.to_string(),
+        symbol: config.native_asset.symbol.clone(),
+        name: config.native_asset.name.clone(),
         balance,
-        decimals: config.decimals,
+        decimals: config.native_asset.decimals,
         price_usd: 0.0,
         change_24h: 0.0,
-        network: config.network_id.to_string(),
+        network: config.id.clone(),
         token_address: None,
     })
 }

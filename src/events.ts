@@ -97,7 +97,7 @@ export function bindEvents() {
     }
 
     if (target.matches("[data-send-asset]")) {
-      updateRecipientPlaceholder(target.value.split(":")[1] ?? target.value);
+      updateRecipientPlaceholder(target.selectedOptions[0]?.dataset.symbol ?? "");
     }
   });
 

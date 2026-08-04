@@ -1,9 +1,17 @@
 use crate::assets::cached_asset;
 use crate::dto::Asset;
 use crate::providers::http::rpc_post;
+use crate::registry::{NetworkConfig, network_by_id};
 
-const TRON_RPC_URL: &str = "https://tron-rpc.publicnode.com";
 pub(crate) const TRON_NATIVE_FEE_SUN: u64 = 1_000_000;
+
+fn tron_config() -> Result<&'static NetworkConfig, String> {
+    network_by_id("tron").ok_or_else(|| "Tron is missing from the network registry".to_string())
+}
+
+fn tron_rpc_url() -> Result<&'static str, String> {
+    tron_config()?.rpc_url()
+}
 
 pub(crate) fn tron_address_to_hex(address: &str) -> Result<String, String> {
     let bytes = bs58::decode(address)
@@ -23,32 +31,34 @@ pub(crate) async fn fetch_tron_native_balance(address: &str) -> Result<u128, Str
         "visible": false
     });
 
-    let json = rpc_post(&format!("{TRON_RPC_URL}/wallet/getaccount"), &body).await?;
+    let json = rpc_post(&format!("{}/wallet/getaccount", tron_rpc_url()?), &body).await?;
     Ok(json["balance"].as_u64().unwrap_or(0) as u128)
 }
 
 pub(crate) async fn fetch_tron_assets(address: &str, cached_assets: &[Asset]) -> Vec<Asset> {
+    let config = tron_config().expect("Tron must exist in the generated network registry");
     let native = match fetch_tron_native_balance(address).await {
         Ok(sun) => Asset {
-            symbol: "TRX".to_string(),
-            name: "Tron".to_string(),
+            symbol: config.native_asset.symbol.clone(),
+            name: config.native_asset.name.clone(),
             balance: sun.to_string(),
-            decimals: 6,
+            decimals: config.native_asset.decimals,
             price_usd: 0.0,
             change_24h: 0.0,
             network: "tron".to_string(),
             token_address: None,
         },
-        Err(_) => cached_asset(cached_assets, "tron", "TRX").unwrap_or_else(|| Asset {
-            symbol: "TRX".to_string(),
-            name: "Tron".to_string(),
-            balance: "0".to_string(),
-            decimals: 6,
-            price_usd: 0.0,
-            change_24h: 0.0,
-            network: "tron".to_string(),
-            token_address: None,
-        }),
+        Err(_) => cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
+            .unwrap_or_else(|| Asset {
+                symbol: config.native_asset.symbol.clone(),
+                name: config.native_asset.name.clone(),
+                balance: "0".to_string(),
+                decimals: config.native_asset.decimals,
+                price_usd: 0.0,
+                change_24h: 0.0,
+                network: "tron".to_string(),
+                token_address: None,
+            }),
     };
 
     vec![native]
@@ -68,7 +78,11 @@ pub(crate) async fn create_tron_transfer(
         "visible": false
     });
 
-    let json = rpc_post(&format!("{TRON_RPC_URL}/wallet/createtransaction"), &body).await?;
+    let json = rpc_post(
+        &format!("{}/wallet/createtransaction", tron_rpc_url()?),
+        &body,
+    )
+    .await?;
     if let Some(error) = json["Error"].as_str().or_else(|| json["error"].as_str()) {
         return Err(error.to_string());
     }
@@ -79,7 +93,11 @@ pub(crate) async fn create_tron_transfer(
 }
 
 pub(crate) async fn broadcast_tron_transaction(tx: &serde_json::Value) -> Result<String, String> {
-    let json = rpc_post(&format!("{TRON_RPC_URL}/wallet/broadcasttransaction"), tx).await?;
+    let json = rpc_post(
+        &format!("{}/wallet/broadcasttransaction", tron_rpc_url()?),
+        tx,
+    )
+    .await?;
     if json["result"].as_bool() == Some(true) {
         return json["txid"]
             .as_str()
@@ -95,7 +113,7 @@ pub(crate) async fn broadcast_tron_transaction(tx: &serde_json::Value) -> Result
 
 pub(crate) async fn fetch_tron_tx_status(txid: &str) -> Result<Option<String>, String> {
     let json = rpc_post(
-        &format!("{TRON_RPC_URL}/wallet/gettransactioninfobyid"),
+        &format!("{}/wallet/gettransactioninfobyid", tron_rpc_url()?),
         &serde_json::json!({ "value": txid }),
     )
     .await?;

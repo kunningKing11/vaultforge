@@ -1,9 +1,18 @@
-use crate::assets::cached_asset;
+use crate::assets::{cached_asset, cached_asset_by_token_address};
 use crate::dto::Asset;
 use crate::providers::http::rpc_post;
+use crate::providers::prices::fetch_token_metadata;
+use crate::registry::{NetworkConfig, network_by_id};
 
-const SOLANA_RPC_URL: &str = "https://solana-rpc.publicnode.com";
 const SOLANA_TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+
+fn solana_config() -> Result<&'static NetworkConfig, String> {
+    network_by_id("solana").ok_or_else(|| "Solana is missing from the network registry".to_string())
+}
+
+fn solana_rpc_url() -> Result<&'static str, String> {
+    solana_config()?.rpc_url()
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SolanaTokenAccount {
@@ -19,7 +28,7 @@ pub(crate) async fn fetch_solana_native_balance(address: &str) -> Result<u128, S
         "params": [address],
         "id": 1,
     });
-    let json = rpc_post(SOLANA_RPC_URL, &body).await?;
+    let json = rpc_post(solana_rpc_url()?, &body).await?;
     parse_solana_balance(&json)
 }
 
@@ -32,32 +41,34 @@ pub(crate) async fn fetch_solana_token_accounts(
         "params": [address, {"programId": SOLANA_TOKEN_PROGRAM_ID}, {"encoding": "jsonParsed"}],
         "id": 1,
     });
-    let json = rpc_post(SOLANA_RPC_URL, &body).await?;
+    let json = rpc_post(solana_rpc_url()?, &body).await?;
     parse_solana_token_accounts(&json)
 }
 
 pub(crate) async fn fetch_solana_assets(address: &str, cached_assets: &[Asset]) -> Vec<Asset> {
+    let config = solana_config().expect("Solana must exist in the generated network registry");
     let native = match fetch_solana_native_balance(address).await {
         Ok(lamports) => Asset {
-            symbol: "SOL".to_string(),
-            name: "Solana".to_string(),
+            symbol: config.native_asset.symbol.clone(),
+            name: config.native_asset.name.clone(),
             balance: lamports.to_string(),
-            decimals: 9,
+            decimals: config.native_asset.decimals,
             price_usd: 0.0,
             change_24h: 0.0,
             network: "solana".to_string(),
             token_address: None,
         },
-        Err(_) => cached_asset(cached_assets, "solana", "SOL").unwrap_or_else(|| Asset {
-            symbol: "SOL".to_string(),
-            name: "Solana".to_string(),
-            balance: "0".to_string(),
-            decimals: 9,
-            price_usd: 0.0,
-            change_24h: 0.0,
-            network: "solana".to_string(),
-            token_address: None,
-        }),
+        Err(_) => cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
+            .unwrap_or_else(|| Asset {
+                symbol: config.native_asset.symbol.clone(),
+                name: config.native_asset.name.clone(),
+                balance: "0".to_string(),
+                decimals: config.native_asset.decimals,
+                price_usd: 0.0,
+                change_24h: 0.0,
+                network: "solana".to_string(),
+                token_address: None,
+            }),
     };
 
     let mut assets = vec![native];
@@ -74,15 +85,32 @@ pub(crate) async fn fetch_solana_assets(address: &str, cached_assets: &[Asset]) 
         if account.amount == "0" {
             continue;
         }
-        let symbol = solana_token_symbol(cached_assets, &account.mint);
+        let cached = cached_asset_by_token_address(cached_assets, "solana", &account.mint);
+        let metadata = fetch_token_metadata("solana", &account.mint).await.ok();
+        let symbol = metadata
+            .as_ref()
+            .map(|value| value.symbol.clone())
+            .or_else(|| cached.as_ref().map(|asset| asset.symbol.clone()))
+            .unwrap_or_else(|| fallback_solana_token_symbol(&account.mint));
+        let name = metadata
+            .as_ref()
+            .map(|value| value.name.clone())
+            .or_else(|| cached.as_ref().map(|asset| asset.name.clone()))
+            .unwrap_or_else(|| format!("SPL Token {}", short_mint(&account.mint)));
+        let price_usd = metadata
+            .as_ref()
+            .and_then(|value| value.price_usd)
+            .or_else(|| cached.as_ref().map(|asset| asset.price_usd))
+            .unwrap_or(0.0);
+        let change_24h = cached.as_ref().map(|asset| asset.change_24h).unwrap_or(0.0);
 
         assets.push(Asset {
             symbol,
-            name: account.mint.clone(), // TODO: add proper human-readable name
+            name,
             balance: account.amount,
             decimals: account.decimals,
-            price_usd: 0.0,
-            change_24h: 0.0,
+            price_usd,
+            change_24h,
             network: "solana".to_string(),
             token_address: Some(account.mint),
         });
@@ -93,24 +121,8 @@ pub(crate) async fn fetch_solana_assets(address: &str, cached_assets: &[Asset]) 
 fn cached_solana_token_assets(cached_assets: &[Asset]) -> impl Iterator<Item = Asset> + '_ {
     cached_assets
         .iter()
-        .filter(|asset| asset.network == "solana" && asset.symbol != "SOL")
+        .filter(|asset| asset.network == "solana" && asset.token_address.is_some())
         .cloned()
-}
-
-fn solana_token_symbol(cached_assets: &[Asset], mint: &str) -> String {
-    let fallback_symbol = fallback_solana_token_symbol(mint);
-    let fallback_name = format!("SPL Token {}", short_mint(mint));
-    let cached = cached_assets.iter().find(|asset| {
-        asset.network == "solana"
-            && asset.symbol != "SOL"
-            && (asset.name == mint
-                || asset.name == fallback_name
-                || asset.symbol == fallback_symbol)
-    });
-
-    cached
-        .map(|asset| asset.symbol.clone())
-        .unwrap_or(fallback_symbol)
 }
 
 fn fallback_solana_token_symbol(mint: &str) -> String {
@@ -163,7 +175,7 @@ pub(crate) async fn broadcast_solana_transaction(raw_tx_base64: &str) -> Result<
         "params": [raw_tx_base64, {"encoding": "base64"}],
         "id": 1,
     });
-    let json = rpc_post(SOLANA_RPC_URL, &body).await?;
+    let json = rpc_post(solana_rpc_url()?, &body).await?;
     json["result"]
         .as_str()
         .map(|s| s.to_string())
@@ -182,7 +194,7 @@ pub(crate) async fn fetch_solana_tx_status(signature: &str) -> Result<Option<Str
         "params": [[signature], {"searchTransactionHistory": true}],
         "id": 1,
     });
-    let json = rpc_post(SOLANA_RPC_URL, &body).await?;
+    let json = rpc_post(solana_rpc_url()?, &body).await?;
     parse_solana_tx_status(&json)
 }
 
@@ -197,7 +209,7 @@ pub(crate) async fn fetch_solana_token_account_state(
         "params": [ata_address, {"encoding": "jsonParsed"}],
         "id": 1,
     });
-    let json = rpc_post(SOLANA_RPC_URL, &body).await?;
+    let json = rpc_post(solana_rpc_url()?, &body).await?;
     parse_solana_token_account_state(&json, expected_owner, expected_mint)
 }
 
@@ -248,7 +260,7 @@ pub(crate) async fn fetch_solana_token_account_rent() -> Result<u64, String> {
         "params": [165],
         "id": 1,
     });
-    let json = rpc_post(SOLANA_RPC_URL, &body).await?;
+    let json = rpc_post(solana_rpc_url()?, &body).await?;
     parse_solana_rent_exemption(&json)
 }
 
@@ -269,7 +281,7 @@ pub(crate) async fn fetch_latest_solana_blockhash() -> Result<String, String> {
         "params": [{"commitment": "finalized"}],
         "id": 1,
     });
-    let json = rpc_post(SOLANA_RPC_URL, &body).await?;
+    let json = rpc_post(solana_rpc_url()?, &body).await?;
     parse_latest_solana_blockhash(&json)
 }
 
@@ -311,7 +323,7 @@ pub(crate) async fn fetch_solana_fee_for_message(message_base64: &str) -> Result
         "params": [message_base64],
         "id": 1,
     });
-    let json = rpc_post(SOLANA_RPC_URL, &body).await?;
+    let json = rpc_post(solana_rpc_url()?, &body).await?;
     parse_solana_fee_for_message(&json)
 }
 

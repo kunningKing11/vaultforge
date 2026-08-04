@@ -44,31 +44,43 @@ export async function unlockWallet(form: HTMLFormElement) {
 
 export async function signTransaction(form: HTMLFormElement) {
   const formData = new FormData(form);
-  const [networkValue, symbol] = String(formData.get("asset") || "ethereum:ETH").split(":");
+  const [networkValue, tokenValue] = String(formData.get("asset") || "ethereum:native").split(":");
   const network = networkById(networkValue)?.id;
   if (!network) {
     pushToast("Please select a supported network.", "error");
     return;
   }
 
+  const tokenAddress = tokenValue === "native" ? null : tokenValue;
+  const asset = appState.session?.assets.find(
+    (candidate) =>
+      candidate.network === network &&
+      (tokenAddress === null
+        ? candidate.token_address == null
+        : candidate.token_address?.toLowerCase() === tokenAddress.toLowerCase()),
+  );
+  if (!asset) {
+    pushToast("The selected asset is no longer available.", "error");
+    return;
+  }
+
   appState.sendDraft = {
     to: String(formData.get("to") || ""),
-    symbol: symbol || "ETH",
+    symbol: asset.symbol,
     network,
+    token_address: asset.token_address ?? null,
     amount: String(formData.get("amount") || ""),
     note: String(formData.get("note") || ""),
   };
   appState.busy = true;
   render();
   try {
-    const asset = appState.session?.assets.find(
-      (a) => a.symbol === appState.sendDraft.symbol && a.network === appState.sendDraft.network,
-    );
-    const decimals = asset?.decimals ?? 18;
+    const decimals = asset.decimals;
     appState.signedTransaction = await walletApi.signTransaction({
       to: appState.sendDraft.to,
       symbol: appState.sendDraft.symbol,
       network: appState.sendDraft.network,
+      tokenAddress: appState.sendDraft.token_address,
       amount: toWei(appState.sendDraft.amount || "0", decimals),
       note: appState.sendDraft.note,
     });
@@ -90,7 +102,14 @@ export async function broadcastSignedTransaction() {
   );
   if (ok) {
     appState.signedTransaction = null;
-    appState.sendDraft = { to: "", symbol: "ETH", network: "ethereum", amount: "", note: "" };
+    appState.sendDraft = {
+      to: "",
+      symbol: "ETH",
+      network: "ethereum",
+      token_address: null,
+      amount: "",
+      note: "",
+    };
     startPendingTxPolling();
   }
 }
@@ -190,7 +209,14 @@ async function deleteStoredWallet() {
     stopPendingTxPolling();
     appState.currentView = "dashboard";
     appState.signedTransaction = null;
-    appState.sendDraft = { to: "", symbol: "ETH", network: "ethereum", amount: "", note: "" };
+    appState.sendDraft = {
+      to: "",
+      symbol: "ETH",
+      network: "ethereum",
+      token_address: null,
+      amount: "",
+      note: "",
+    };
   }
 }
 

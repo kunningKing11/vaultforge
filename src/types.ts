@@ -61,6 +61,7 @@ export type SendDraft = {
   to: string;
   symbol: string;
   network: NetworkId;
+  token_address: string | null;
   amount: string;
   note: string;
 };
@@ -121,6 +122,23 @@ export interface NetworkConfig {
   isL2: boolean;
   isTestNet: boolean;
   rpcUrl?: string;
+  apiUrl?: string;
+  addressKey: string;
+  coinGeckoNetworkId?: string;
+  nativeAsset: NetworkAssetConfig;
+  tokens: NetworkTokenConfig[];
+}
+
+export interface NetworkAssetConfig {
+  symbol: string;
+  name: string;
+  decimals: number;
+  coinGeckoId: string;
+}
+
+export interface NetworkTokenConfig extends NetworkAssetConfig {
+  standard: "erc20";
+  tokenAddress: string;
 }
 
 export interface NetworkInstance {
@@ -135,9 +153,4 @@ export interface NetworkInstance {
   vm_type?: ChainVM;
 }
 
-export type Network = NetworkConfig & NetworkInstance; // TODO: does it matter in which order they are put in?
-
-export interface NetworkData {
-  network_types: Record<string, NetworkConfig>;
-  networks: NetworkInstance[];
-}
+export type Network = NetworkConfig & NetworkInstance;

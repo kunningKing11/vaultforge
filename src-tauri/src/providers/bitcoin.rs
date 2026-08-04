@@ -1,5 +1,6 @@
 use crate::derivation::{BITCOIN_DERIVATION_PATH, secp256k1_private_key_from_mnemonic};
 use crate::providers::http::{http_get_json, http_post_text};
+use crate::registry::network_by_id;
 use crate::tx::bitcoin::{BitcoinSignedTransfer, bitcoin_signed_transfer};
 
 #[derive(Clone, Debug)]
@@ -10,8 +11,14 @@ pub(crate) struct BitcoinUtxo {
     pub(crate) confirmed: bool,
 }
 
+fn bitcoin_api_url() -> Result<&'static str, String> {
+    network_by_id("bitcoin")
+        .ok_or_else(|| "Bitcoin is missing from the network registry".to_string())?
+        .api_url()
+}
+
 pub(crate) async fn fetch_bitcoin_balance(address: &str) -> Result<String, String> {
-    let url = format!("https://blockstream.info/api/address/{address}");
+    let url = format!("{}/address/{address}", bitcoin_api_url()?);
     let json = http_get_json(&url).await?;
     parse_bitcoin_balance(&json).map(|sats| sats.to_string())
 }
@@ -30,7 +37,7 @@ pub(crate) fn parse_bitcoin_balance(json: &serde_json::Value) -> Result<u128, St
 }
 
 pub(crate) async fn fetch_bitcoin_utxos(address: &str) -> Result<Vec<BitcoinUtxo>, String> {
-    let url = format!("https://blockstream.info/api/address/{address}/utxo");
+    let url = format!("{}/address/{address}/utxo", bitcoin_api_url()?);
     let json = http_get_json(&url).await?;
     parse_bitcoin_utxos(&json)
 }
@@ -70,7 +77,7 @@ pub(crate) fn parse_bitcoin_utxos(json: &serde_json::Value) -> Result<Vec<Bitcoi
 }
 
 pub(crate) async fn fetch_bitcoin_fee_rate() -> Result<u64, String> {
-    let json = http_get_json("https://blockstream.info/api/fee-estimates").await?;
+    let json = http_get_json(&format!("{}/fee-estimates", bitcoin_api_url()?)).await?;
     parse_bitcoin_fee_rate(&json)
 }
 
@@ -87,13 +94,13 @@ pub(crate) fn parse_bitcoin_fee_rate(json: &serde_json::Value) -> Result<u64, St
 }
 
 pub(crate) async fn broadcast_bitcoin_transaction(raw_tx_hex: &str) -> Result<String, String> {
-    http_post_text("https://blockstream.info/api/tx", raw_tx_hex)
+    http_post_text(&format!("{}/tx", bitcoin_api_url()?), raw_tx_hex)
         .await
         .map(|txid| txid.trim().to_string())
 }
 
 pub(crate) async fn fetch_bitcoin_tx_status(txid: &str) -> Result<Option<String>, String> {
-    let url = format!("https://blockstream.info/api/tx/{txid}/status");
+    let url = format!("{}/tx/{txid}/status", bitcoin_api_url()?);
     let json = http_get_json(&url).await?;
     if json["confirmed"].as_bool().unwrap_or(false) {
         Ok(Some("confirmed".to_string()))

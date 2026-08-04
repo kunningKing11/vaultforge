@@ -83,8 +83,8 @@ export function sendAssetSelect(selectedAssetId: string) {
   return `<select class="field" name="asset" data-send-asset>${
     appState.session?.assets
       .map((asset) => {
-        const assetId = `${asset.network}:${asset.symbol}`;
-        return `<option value="${escapeHtml(assetId)}" ${assetId === selectedAssetId ? "selected" : ""}>${asset.symbol} - ${asset.name} (${networkDisplayName(asset.network)})</option>`;
+        const assetId = `${asset.network}:${asset.token_address ?? "native"}`;
+        return `<option value="${escapeHtml(assetId)}" data-symbol="${escapeHtml(asset.symbol)}" ${assetId === selectedAssetId ? "selected" : ""}>${asset.symbol} - ${asset.name} (${networkDisplayName(asset.network)})</option>`;
       })
       .join("") ?? ""
   }</select>`;

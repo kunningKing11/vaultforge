@@ -1,174 +1,25 @@
 use crate::assets::cached_asset;
 use crate::dto::Asset;
 use crate::providers::http::rpc_post;
+use crate::registry::{AssetConfig, NetworkConfig, network_by_id};
 
-#[derive(Clone, Copy)]
-pub(crate) struct EvmNetworkConfig {
-    pub(crate) id: &'static str,
-    pub(crate) display_name: &'static str,
-    pub(crate) chain_id: u64,
-    pub(crate) native_symbol: &'static str,
-    pub(crate) rpc_url: &'static str,
-}
+pub(crate) type EvmNetworkConfig = NetworkConfig;
+pub(crate) type EvmTokenConfig = AssetConfig;
 
 pub(crate) struct EvmFeeEstimate {
     pub(crate) max_priority_fee_per_gas: u128,
     pub(crate) max_fee_per_gas: u128,
 }
 
-pub(crate) const DEFAULT_EVM_CONFIG: &EvmNetworkConfig = &EVM_NETWORKS[0];
-
-pub(crate) const EVM_NETWORKS: &[EvmNetworkConfig] = &[
-    EvmNetworkConfig {
-        id: "ethereum",
-        display_name: "Ethereum",
-        chain_id: 1,
-        native_symbol: "ETH",
-        rpc_url: "https://ethereum-rpc.publicnode.com",
-    },
-    EvmNetworkConfig {
-        id: "monad",
-        display_name: "Monad",
-        chain_id: 167004,
-        native_symbol: "MON",
-        rpc_url: "https://rpc.monad.xyz",
-    },
-    EvmNetworkConfig {
-        id: "polygon",
-        display_name: "Polygon",
-        chain_id: 137,
-        native_symbol: "MATIC",
-        rpc_url: "https://polygon-bor-rpc.publicnode.com",
-    },
-    EvmNetworkConfig {
-        id: "arbitrum_one",
-        display_name: "Arbitrum One",
-        chain_id: 42161,
-        native_symbol: "ETH",
-        rpc_url: "https://arbitrum-one-rpc.publicnode.com",
-    },
-    EvmNetworkConfig {
-        id: "base",
-        display_name: "Base",
-        chain_id: 8453,
-        native_symbol: "ETH",
-        rpc_url: "https://base-rpc.publicnode.com",
-    },
-    EvmNetworkConfig {
-        id: "optimism",
-        display_name: "Optimism",
-        chain_id: 10,
-        native_symbol: "ETH",
-        rpc_url: "https://optimism-rpc.publicnode.com",
-    },
-    EvmNetworkConfig {
-        id: "avalanche_c",
-        display_name: "Avalanche C-Chain",
-        chain_id: 43114,
-        native_symbol: "AVAX",
-        rpc_url: "https://avalanche-c-chain-rpc.publicnode.com",
-    },
-];
-
-#[derive(Clone, Copy)]
-pub(crate) struct EvmTokenConfig {
-    pub(crate) symbol: &'static str,
-    pub(crate) name: &'static str,
-    pub(crate) contract: &'static str,
-    pub(crate) decimals: u32,
-}
-
-const EVM_TOKENS: &[(&str, &[EvmTokenConfig])] = &[
-    (
-        "ethereum",
-        &[
-            EvmTokenConfig {
-                symbol: "USDC",
-                name: "USD Coin",
-                contract: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-                decimals: 6,
-            },
-            EvmTokenConfig {
-                symbol: "USDT",
-                name: "Tether USD",
-                contract: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-                decimals: 6,
-            },
-        ],
-    ),
-    (
-        "polygon",
-        &[
-            EvmTokenConfig {
-                symbol: "USDC",
-                name: "USD Coin",
-                contract: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
-                decimals: 6,
-            },
-            EvmTokenConfig {
-                symbol: "USDT",
-                name: "Tether USD",
-                contract: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
-                decimals: 6,
-            },
-        ],
-    ),
-    (
-        "arbitrum_one",
-        &[EvmTokenConfig {
-            symbol: "USDC",
-            name: "USD Coin",
-            contract: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-            decimals: 6,
-        }],
-    ),
-    (
-        "base",
-        &[EvmTokenConfig {
-            symbol: "USDC",
-            name: "USD Coin",
-            contract: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-            decimals: 6,
-        }],
-    ),
-    (
-        "optimism",
-        &[EvmTokenConfig {
-            symbol: "USDC",
-            name: "USD Coin",
-            contract: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-            decimals: 6,
-        }],
-    ),
-    (
-        "avalanche_c",
-        &[EvmTokenConfig {
-            symbol: "USDC",
-            name: "USD Coin",
-            contract: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
-            decimals: 6,
-        }],
-    ),
-];
-
 pub(crate) fn evm_tokens_for_network(network_id: &str) -> &[EvmTokenConfig] {
-    EVM_TOKENS
-        .iter()
-        .find(|(id, _)| *id == network_id)
-        .map(|(_, tokens)| *tokens)
+    network_by_id(network_id)
+        .filter(|network| network.kind == "evm")
+        .map(|network| network.tokens.as_slice())
         .unwrap_or(&[])
 }
 
 pub(crate) fn evm_config_by_id(network_id: &str) -> Option<&'static EvmNetworkConfig> {
-    EVM_NETWORKS.iter().find(|c| c.id == network_id)
-}
-
-#[allow(dead_code)]
-pub(crate) fn evm_network_id_for_token(symbol: &str) -> Option<&'static str> {
-    EVM_TOKENS
-        .iter()
-        .find(|(_, tokens)| tokens.iter().any(|t| t.symbol == symbol))
-        .map(|(id, _)| *id)
+    network_by_id(network_id).filter(|network| network.kind == "evm")
 }
 
 pub(crate) async fn fetch_evm_native_balance(
@@ -182,7 +33,7 @@ pub(crate) async fn fetch_evm_native_balance(
         "id": 1,
     });
 
-    let json = rpc_post(config.rpc_url, &body).await?;
+    let json = rpc_post(config.rpc_url()?, &body).await?;
     let balance_hex = json["result"]
         .as_str()
         .ok_or_else(|| "RPC response missing result field".to_string())?;
@@ -208,13 +59,13 @@ pub(crate) async fn fetch_evm_token_balance(
         "jsonrpc": "2.0",
         "method": "eth_call",
         "params": [{
-            "to": token.contract,
+            "to": token.token_address.as_deref().ok_or_else(|| "ERC-20 token contract is missing".to_string())?,
             "data": format!("0x{}", hex::encode(&data))
         }, "latest"],
         "id": 1,
     });
 
-    let json = rpc_post(config.rpc_url, &body).await?;
+    let json = rpc_post(config.rpc_url()?, &body).await?;
     let hex_str = json["result"]
         .as_str()
         .ok_or_else(|| "Token balance RPC missing result".to_string())?;
@@ -230,32 +81,31 @@ pub(crate) async fn fetch_evm_assets(
 ) -> Vec<Asset> {
     let native = match fetch_evm_native_balance(config, address).await {
         Ok(wei) => Asset {
-            symbol: config.native_symbol.to_string(),
-            name: config.display_name.to_string(),
+            symbol: config.native_asset.symbol.clone(),
+            name: config.native_asset.name.clone(),
             balance: wei.to_string(),
-            decimals: 18,
+            decimals: config.native_asset.decimals,
             price_usd: 0.0,
             change_24h: 0.0,
             network: config.id.to_string(),
             token_address: None,
         },
-        Err(_) => {
-            cached_asset(cached_assets, config.id, config.native_symbol).unwrap_or_else(|| Asset {
-                symbol: config.native_symbol.to_string(),
-                name: config.display_name.to_string(),
+        Err(_) => cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
+            .unwrap_or_else(|| Asset {
+                symbol: config.native_asset.symbol.clone(),
+                name: config.native_asset.name.clone(),
                 balance: "0".to_string(),
-                decimals: 18,
+                decimals: config.native_asset.decimals,
                 price_usd: 0.0,
                 change_24h: 0.0,
                 network: config.id.to_string(),
                 token_address: None,
-            })
-        }
+            }),
     };
 
     let mut assets = vec![native];
 
-    for token in evm_tokens_for_network(config.id) {
+    for token in evm_tokens_for_network(&config.id) {
         match fetch_evm_token_balance(config, token, address).await {
             Ok(balance) => {
                 assets.push(Asset {
@@ -266,11 +116,11 @@ pub(crate) async fn fetch_evm_assets(
                     price_usd: 0.0,
                     change_24h: 0.0,
                     network: config.id.to_string(),
-                    token_address: Some(token.contract.to_string()),
+                    token_address: token.token_address.clone(),
                 });
             }
             Err(_) => {
-                if let Some(cached) = cached_asset(cached_assets, config.id, token.symbol) {
+                if let Some(cached) = cached_asset(cached_assets, &config.id, &token.symbol) {
                     assets.push(cached);
                 }
             }
@@ -290,7 +140,7 @@ pub(crate) async fn fetch_evm_nonce(
         "params": [address, "pending"],
         "id": 1,
     });
-    let json = rpc_post(config.rpc_url, &body).await?;
+    let json = rpc_post(config.rpc_url()?, &body).await?;
     let hex_str = json["result"]
         .as_str()
         .ok_or_else(|| "Nonce RPC missing result".to_string())?;
@@ -306,7 +156,7 @@ pub(crate) async fn fetch_evm_gas_price(config: &EvmNetworkConfig) -> Result<u12
         "params": [],
         "id": 1,
     });
-    let json = rpc_post(config.rpc_url, &body).await?;
+    let json = rpc_post(config.rpc_url()?, &body).await?;
     let hex_str = json["result"]
         .as_str()
         .ok_or_else(|| "Gas price RPC missing result".to_string())?;
@@ -324,7 +174,7 @@ pub(crate) async fn fetch_evm_fee_estimate(
         "id": 1,
     });
 
-    match rpc_post(config.rpc_url, &body).await {
+    match rpc_post(config.rpc_url()?, &body).await {
         Ok(json) => parse_evm_fee_history(&json),
         Err(_) => {
             let gas_price = fetch_evm_gas_price(config).await?;
@@ -394,7 +244,7 @@ pub(crate) async fn fetch_evm_estimated_gas(
         "params": [params],
         "id": 1,
     });
-    let json = rpc_post(config.rpc_url, &body).await?;
+    let json = rpc_post(config.rpc_url()?, &body).await?;
     let hex_str = json["result"]
         .as_str()
         .ok_or_else(|| "Estimate gas RPC missing result".to_string())?;
@@ -412,7 +262,7 @@ pub(crate) async fn broadcast_evm_tx(
         "params": [raw_tx_hex],
         "id": 1,
     });
-    let json = rpc_post(config.rpc_url, &body).await?;
+    let json = rpc_post(config.rpc_url()?, &body).await?;
     json["result"]
         .as_str()
         .map(|s| s.to_string())
@@ -434,7 +284,7 @@ pub(crate) async fn fetch_evm_tx_status(
         "params": [tx_hash],
         "id": 1,
     });
-    let json = rpc_post(config.rpc_url, &body).await?;
+    let json = rpc_post(config.rpc_url()?, &body).await?;
 
     if json["result"].is_null() {
         return Ok(None);

@@ -86,7 +86,7 @@ function dashboardView() {
 function sendView() {
   if (appState.signedTransaction) return signedTransactionView(appState.signedTransaction);
   const selectedSymbol = appState.sendDraft.symbol || "ETH";
-  const selectedAssetId = `${appState.sendDraft.network || "ethereum"}:${selectedSymbol}`;
+  const selectedAssetId = `${appState.sendDraft.network || "ethereum"}:${appState.sendDraft.token_address ?? "native"}`;
 
   return `
     <section class="glass max-w-3xl rounded-[2rem] p-6">

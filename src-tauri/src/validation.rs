@@ -25,6 +25,7 @@ pub(crate) fn validate_transfer(
     to: &str,
     symbol: &str,
     network: &str,
+    token_address: Option<&str>,
     amount_wei: &str,
 ) -> Result<(), String> {
     let to = to.trim();
@@ -32,7 +33,15 @@ pub(crate) fn validate_transfer(
     let asset = wallet
         .assets
         .iter()
-        .find(|asset| asset.symbol == symbol && asset.network == network)
+        .find(|asset| {
+            asset.symbol == symbol
+                && asset.network == network
+                && match (token_address, asset.token_address.as_deref()) {
+                    (None, None) => true,
+                    (Some(expected), Some(actual)) => actual.eq_ignore_ascii_case(expected),
+                    _ => false,
+                }
+        })
         .ok_or_else(|| "Asset not found".to_string())?;
 
     let amount: u128 = amount_wei

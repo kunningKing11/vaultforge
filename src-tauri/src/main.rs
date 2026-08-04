@@ -7,6 +7,7 @@ mod commands;
 mod derivation;
 mod dto;
 mod providers;
+mod registry;
 mod state;
 mod storage;
 #[cfg(test)]

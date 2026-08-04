@@ -1,57 +1,55 @@
 {
+  "schemaVersion": 1,
   "network_types": {
-    "bitcoin": {
-      "vm_type": null,
-      "ticker": "BTC",
-      "isL2": false,
-      "isTestNet": false
-    },
-    "evm": {
-      "vm_type": "EVM",
-      "ticker": "ETH",
-      "isL2": false,
-      "isTestNet": false
-    },
-    "filecoin": {
-      "vm_type": "FVM",
-      "ticker": "FIL",
-      "isL2": false,
-      "isTestNet": false
-    },
-    "injective": {
-      "vm_type": "Multi-VM",
-      "ticker": "INJ",
-      "isL2": false,
-      "isTestNet": false
-    },
-    "svm": {
-      "vm_type": "SVM",
-      "ticker": "SOL",
-      "isL2": false,
-      "isTestNet": false
-    },
-    "tron": {
-      "vm_type": "TrVM",
-      "ticker": "TRX",
-      "isL2": false,
-      "isTestNet": false
-    },
-    "zcash": {
-      "vm_type": null,
-      "ticker": "ZEC",
-      "isL2": false,
-      "isTestNet": false
-    }
+    "bitcoin": { "vm_type": null, "isL2": false, "isTestNet": false },
+    "evm": { "vm_type": "EVM", "isL2": false, "isTestNet": false },
+    "filecoin": { "vm_type": "FVM", "isL2": false, "isTestNet": false },
+    "injective": { "vm_type": "Multi-VM", "isL2": false, "isTestNet": false },
+    "svm": { "vm_type": "SVM", "isL2": false, "isTestNet": false },
+    "tron": { "vm_type": "TrVM", "isL2": false, "isTestNet": false },
+    "zcash": { "vm_type": null, "isL2": false, "isTestNet": false }
   },
   "networks": [
-    { "kind": "bitcoin", "id": "bitcoin", "name": "Bitcoin" },
+    {
+      "kind": "bitcoin",
+      "id": "bitcoin",
+      "name": "Bitcoin",
+      "addressKey": "bitcoin",
+      "apiUrl": "https://blockstream.info/api",
+      "nativeAsset": { "symbol": "BTC", "name": "Bitcoin", "decimals": 8, "coinGeckoId": "bitcoin" }
+    },
     {
       "kind": "evm",
       "id": "avalanche_c",
       "name": "Avalanche C-Chain",
       "nickname": "Avalanche",
       "chainId": 43114,
-      "ticker": "AVAX"
+      "addressKey": "evm",
+      "rpcUrl": "https://avalanche-c-chain-rpc.publicnode.com",
+      "nativeAsset": {
+        "symbol": "AVAX",
+        "name": "Avalanche",
+        "decimals": 18,
+        "coinGeckoId": "avalanche-2"
+      },
+      "tokens": [
+        {
+          "standard": "erc20",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "tokenAddress": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+          "coinGeckoId": "usd-coin"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "USDT",
+          "name": "Tether USD",
+          "decimals": 6,
+          "tokenAddress": "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7",
+          "coinGeckoId": "tether"
+        }
+      ]
     },
     {
       "kind": "evm",
@@ -59,32 +57,231 @@
       "name": "BNB Smart Chain",
       "nickname": "BSC",
       "chainId": 56,
-      "ticker": "BNB"
+      "addressKey": "evm",
+      "rpcUrl": "https://bsc-rpc.publicnode.com",
+      "nativeAsset": {
+        "symbol": "BNB",
+        "name": "BNB",
+        "decimals": 18,
+        "coinGeckoId": "binancecoin"
+      }
     },
-    { "kind": "evm", "id": "ethereum", "name": "Ethereum", "chainId": 1 },
-    { "kind": "evm", "id": "monad", "name": "Monad", "chainId": 167004, "ticker": "MON" },
+    {
+      "kind": "evm",
+      "id": "ethereum",
+      "name": "Ethereum",
+      "chainId": 1,
+      "addressKey": "evm",
+      "rpcUrl": "https://ethereum-rpc.publicnode.com",
+      "nativeAsset": {
+        "symbol": "ETH",
+        "name": "Ether",
+        "decimals": 18,
+        "coinGeckoId": "ethereum"
+      },
+      "tokens": [
+        {
+          "standard": "erc20",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "tokenAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "coinGeckoId": "usd-coin"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "USDT",
+          "name": "Tether USD",
+          "decimals": 6,
+          "tokenAddress": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "coinGeckoId": "tether"
+        }
+      ]
+    },
+    {
+      "kind": "evm",
+      "id": "monad",
+      "name": "Monad",
+      "chainId": 143,
+      "addressKey": "evm",
+      "rpcUrl": "https://rpc.monad.xyz",
+      "nativeAsset": { "symbol": "MON", "name": "Monad", "decimals": 18, "coinGeckoId": "monad" },
+      "tokens": [
+        {
+          "standard": "erc20",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "tokenAddress": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+          "coinGeckoId": "usd-coin"
+        }
+      ]
+    },
     {
       "kind": "evm",
       "id": "arbitrum_one",
       "name": "Arbitrum One",
       "nickname": "Arbitrum",
       "chainId": 42161,
-      "isL2": true
+      "isL2": true,
+      "addressKey": "evm",
+      "rpcUrl": "https://arbitrum-one-rpc.publicnode.com",
+      "nativeAsset": {
+        "symbol": "ETH",
+        "name": "Ether",
+        "decimals": 18,
+        "coinGeckoId": "ethereum"
+      },
+      "tokens": [
+        {
+          "standard": "erc20",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "tokenAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+          "coinGeckoId": "usd-coin"
+        }
+      ]
     },
-    { "kind": "evm", "id": "base", "name": "Base", "chainId": 8453, "isL2": true },
-    { "kind": "evm", "id": "optimism", "name": "Optimism", "chainId": 10, "isL2": true },
+    {
+      "kind": "evm",
+      "id": "base",
+      "name": "Base",
+      "chainId": 8453,
+      "isL2": true,
+      "addressKey": "evm",
+      "rpcUrl": "https://base-rpc.publicnode.com",
+      "nativeAsset": {
+        "symbol": "ETH",
+        "name": "Ether",
+        "decimals": 18,
+        "coinGeckoId": "ethereum"
+      },
+      "tokens": [
+        {
+          "standard": "erc20",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "coinGeckoId": "usd-coin"
+        }
+      ]
+    },
+    {
+      "kind": "evm",
+      "id": "optimism",
+      "name": "Optimism",
+      "chainId": 10,
+      "isL2": true,
+      "addressKey": "evm",
+      "rpcUrl": "https://optimism-rpc.publicnode.com",
+      "nativeAsset": {
+        "symbol": "ETH",
+        "name": "Ether",
+        "decimals": 18,
+        "coinGeckoId": "ethereum"
+      },
+      "tokens": [
+        {
+          "standard": "erc20",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "tokenAddress": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+          "coinGeckoId": "usd-coin"
+        }
+      ]
+    },
     {
       "kind": "evm",
       "id": "polygon",
       "name": "Polygon",
       "chainId": 137,
-      "ticker": "POL",
-      "isL2": true
+      "isL2": true,
+      "addressKey": "evm",
+      "rpcUrl": "https://polygon-bor-rpc.publicnode.com",
+      "nativeAsset": {
+        "symbol": "POL",
+        "name": "POL",
+        "decimals": 18,
+        "coinGeckoId": "polygon-ecosystem-token"
+      },
+      "tokens": [
+        {
+          "standard": "erc20",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "tokenAddress": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+          "coinGeckoId": "usd-coin"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "USDC.e",
+          "name": "Bridged USD Coin",
+          "decimals": 6,
+          "tokenAddress": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+          "coinGeckoId": "bridged-usdc-polygon-pos-bridge"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "USDT",
+          "name": "Tether USD",
+          "decimals": 6,
+          "tokenAddress": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+          "coinGeckoId": "tether"
+        }
+      ]
     },
-    { "kind": "filecoin", "id": "filecoin", "name": "Filecoin" },
-    { "kind": "injective", "id": "injective", "name": "Injective" },
-    { "kind": "svm", "id": "solana", "name": "Solana" },
-    { "kind": "tron", "id": "tron", "name": "Tron" },
-    { "kind": "zcash", "id": "zcash", "name": "Zcash" }
+    {
+      "kind": "filecoin",
+      "id": "filecoin",
+      "name": "Filecoin",
+      "addressKey": "filecoin",
+      "nativeAsset": {
+        "symbol": "FIL",
+        "name": "Filecoin",
+        "decimals": 18,
+        "coinGeckoId": "filecoin"
+      }
+    },
+    {
+      "kind": "injective",
+      "id": "injective",
+      "name": "Injective",
+      "addressKey": "injective",
+      "rpcUrl": "https://injective-rpc.publicnode.com:443",
+      "nativeAsset": {
+        "symbol": "INJ",
+        "name": "Injective",
+        "decimals": 18,
+        "coinGeckoId": "injective-protocol"
+      }
+    },
+    {
+      "kind": "svm",
+      "id": "solana",
+      "name": "Solana",
+      "addressKey": "solana",
+      "rpcUrl": "https://solana-rpc.publicnode.com",
+      "coinGeckoNetworkId": "solana",
+      "nativeAsset": { "symbol": "SOL", "name": "Solana", "decimals": 9, "coinGeckoId": "solana" }
+    },
+    {
+      "kind": "tron",
+      "id": "tron",
+      "name": "Tron",
+      "addressKey": "tron",
+      "rpcUrl": "https://tron-rpc.publicnode.com",
+      "nativeAsset": { "symbol": "TRX", "name": "Tron", "decimals": 6, "coinGeckoId": "tron" }
+    },
+    {
+      "kind": "zcash",
+      "id": "zcash",
+      "name": "Zcash",
+      "addressKey": "zcash",
+      "nativeAsset": { "symbol": "ZEC", "name": "Zcash", "decimals": 8, "coinGeckoId": "zcash" }
+    }
   ]
 }

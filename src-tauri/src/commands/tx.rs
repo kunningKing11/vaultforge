@@ -9,16 +9,14 @@ use crate::providers::bitcoin::{
     broadcast_bitcoin_transaction, fetch_bitcoin_tx_status, sign_bitcoin_transfer,
 };
 use crate::providers::evm::{
-    EVM_NETWORKS, broadcast_evm_tx, evm_config_by_id, fetch_evm_estimated_gas,
-    fetch_evm_fee_estimate, fetch_evm_nonce, fetch_evm_tx_status,
+    broadcast_evm_tx, evm_config_by_id, fetch_evm_estimated_gas, fetch_evm_fee_estimate,
+    fetch_evm_nonce, fetch_evm_tx_status,
 };
 use crate::providers::solana::{
     broadcast_solana_transaction, fetch_solana_token_account_rent,
     fetch_solana_token_account_state, fetch_solana_tx_status,
 };
-use crate::providers::tron::{
-    broadcast_tron_transaction, fetch_tron_tx_status,
-};
+use crate::providers::tron::{broadcast_tron_transaction, fetch_tron_tx_status};
 use crate::state::{AppState, session_from_state, validate_unlocked};
 use crate::storage::persist_state_wallet;
 use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
@@ -71,6 +69,7 @@ pub(crate) async fn sign_transaction(
     to: String,
     symbol: String,
     network: String,
+    token_address: Option<String>,
     amount: String,
     note: String,
 ) -> Result<SignedTransaction, String> {
@@ -82,7 +81,14 @@ pub(crate) async fn sign_transaction(
             .wallet
             .as_ref()
             .ok_or_else(|| "No wallet exists yet".to_string())?;
-        validate_transfer(wallet, &to, &symbol, &network, &amount)?;
+        validate_transfer(
+            wallet,
+            &to,
+            &symbol,
+            &network,
+            token_address.as_deref(),
+            &amount,
+        )?;
         (
             wallet.mnemonic.clone(),
             wallet.address.clone(),
@@ -96,7 +102,15 @@ pub(crate) async fn sign_transaction(
 
     let asset = assets
         .iter()
-        .find(|a| a.symbol == symbol && a.network == network)
+        .find(|asset| {
+            asset.symbol == symbol
+                && asset.network == network
+                && match (token_address.as_deref(), asset.token_address.as_deref()) {
+                    (None, None) => true,
+                    (Some(expected), Some(actual)) => actual.eq_ignore_ascii_case(expected),
+                    _ => false,
+                }
+        })
         .ok_or_else(|| format!("Asset {symbol} on {network} not found in wallet"))?;
     let network_id = asset.network.as_str();
     let decimals = asset.decimals;
@@ -277,7 +291,8 @@ pub(crate) async fn sign_transaction(
             let config = evm_config_by_id(network_id)
                 .ok_or_else(|| format!("No EVM chain configured for network {network_id}"))?;
 
-            let is_native = symbol == config.native_symbol;
+            let native_symbol = config.native_asset.symbol.as_str();
+            let is_native = symbol == native_symbol;
 
             let (tx_to, tx_data, display_to) = if is_native {
                 (to.clone(), Vec::new(), to.clone())
@@ -308,20 +323,20 @@ pub(crate) async fn sign_transaction(
 
             let native_asset = assets
                 .iter()
-                .find(|a| a.network == config.id && a.symbol == config.native_symbol)
-                .ok_or_else(|| format!("{} balance is not available", config.native_symbol))?;
+                .find(|a| a.network == config.id && a.symbol == native_symbol)
+                .ok_or_else(|| format!("{native_symbol} balance is not available"))?;
 
             let native_balance: u128 = native_asset
                 .balance
                 .parse()
-                .map_err(|_| format!("Invalid {} balance", config.native_symbol))?;
+                .map_err(|_| format!("Invalid {native_symbol} balance"))?;
 
             let required_native =
-                required_native_debit(is_native, value, total_fee_wei, config.native_symbol)?;
+                required_native_debit(is_native, value, total_fee_wei, native_symbol)?;
             ensure_native_balance_covers_debit(
                 native_balance,
                 required_native,
-                config.native_symbol,
+                native_symbol,
                 is_native,
                 "transaction fee",
             )?;
@@ -329,7 +344,7 @@ pub(crate) async fn sign_transaction(
             let signing_key = signing_key_from_mnemonic(&mnemonic)?;
             let (_, tx_hash, raw_tx_hex, r_hex, s_hex) = sign_eip1559_transfer(&Eip1559TxDraft {
                 signing_key: &signing_key,
-                chain_id: config.chain_id,
+                chain_id: config.chain_id()?,
                 nonce,
                 max_priority_fee_per_gas,
                 max_fee_per_gas,
@@ -366,7 +381,7 @@ pub(crate) async fn sign_transaction(
                 payload_hash: tx_hash.clone(),
                 signature: signature_str,
                 fee_amount: fee_str,
-                fee_symbol: config.native_symbol.to_string(),
+                fee_symbol: native_symbol.to_string(),
                 total_debit: total_debit_str,
                 post_balance,
                 decimals,
@@ -532,9 +547,7 @@ pub(crate) async fn check_transaction_status(
         "solana" => fetch_solana_tx_status(&tx_hash).await,
         "tron" => fetch_tron_tx_status(&tx_hash).await,
         network_id if evm_config_by_id(network_id).is_some() => {
-            let config = EVM_NETWORKS
-                .iter()
-                .find(|c| c.id == network_id)
+            let config = evm_config_by_id(network_id)
                 .ok_or_else(|| format!("Unknown network: {}", network))?;
             fetch_evm_tx_status(config, &tx_hash).await
         }

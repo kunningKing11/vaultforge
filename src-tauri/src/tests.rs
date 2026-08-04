@@ -12,8 +12,9 @@ use crate::dto::{Asset, Wallet};
 use crate::providers::bitcoin::{
     BitcoinUtxo, parse_bitcoin_balance, parse_bitcoin_fee_rate, parse_bitcoin_utxos,
 };
-use crate::providers::evm::{EVM_NETWORKS, parse_evm_fee_history};
+use crate::providers::evm::{evm_config_by_id, parse_evm_fee_history};
 use crate::providers::get_provider;
+use crate::providers::prices::parse_token_metadata;
 use crate::providers::solana::{
     parse_latest_solana_blockhash, parse_solana_balance, parse_solana_fee_for_message,
     parse_solana_rent_exemption, parse_solana_token_account_state, parse_solana_token_accounts,
@@ -131,9 +132,69 @@ fn validates_solana_token_transfer_recipient_as_solana_address() {
             "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
             "SPL-So1111",
             "solana",
+            Some("So11111111111111111111111111111111111111112"),
             "1",
         )
         .is_ok()
+    );
+}
+
+#[test]
+fn token_transfer_validation_uses_contract_or_mint_identity() {
+    let wallet = Wallet {
+        name: "Test".to_string(),
+        mnemonic: "test mnemonic".to_string(),
+        created_at: Utc::now().to_rfc3339(),
+        address: address_from_seed("test seed"),
+        addresses: HashMap::new(),
+        passphrase_hash: "deadbeef".to_string(),
+        assets: vec![
+            Asset {
+                symbol: "DUP".to_string(),
+                name: "First".to_string(),
+                balance: "0".to_string(),
+                decimals: 6,
+                price_usd: 0.0,
+                change_24h: 0.0,
+                network: "solana".to_string(),
+                token_address: Some("So11111111111111111111111111111111111111112".to_string()),
+            },
+            Asset {
+                symbol: "DUP".to_string(),
+                name: "Second".to_string(),
+                balance: "10".to_string(),
+                decimals: 6,
+                price_usd: 0.0,
+                change_24h: 0.0,
+                network: "solana".to_string(),
+                token_address: Some("7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ".to_string()),
+            },
+        ],
+        activity: vec![],
+    };
+
+    assert!(
+        validate_transfer(
+            &wallet,
+            "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
+            "DUP",
+            "solana",
+            Some("7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ"),
+            "1",
+        )
+        .is_ok()
+    );
+    assert_eq!(
+        validate_transfer(
+            &wallet,
+            "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
+            "DUP",
+            "solana",
+            Some("So11111111111111111111111111111111111111112"),
+            "1",
+        )
+        .unwrap_err(),
+        "Insufficient DUP balance"
     );
 }
 
@@ -722,13 +783,36 @@ fn encrypts_and_decrypts_wallet_payload() {
 
 #[test]
 fn looks_up_evm_network_configs() {
-    let ethereum = EVM_NETWORKS.iter().find(|c| c.id == "ethereum").unwrap();
-    assert_eq!(ethereum.display_name, "Ethereum");
-    assert_eq!(ethereum.chain_id, 1);
-    assert_eq!(ethereum.native_symbol, "ETH");
-    assert_eq!(ethereum.rpc_url, "https://ethereum-rpc.publicnode.com");
+    let ethereum = evm_config_by_id("ethereum").unwrap();
+    assert_eq!(ethereum.name, "Ethereum");
+    assert_eq!(ethereum.chain_id().unwrap(), 1);
+    assert_eq!(ethereum.native_asset.symbol, "ETH");
+    assert_eq!(
+        ethereum.rpc_url().unwrap(),
+        "https://ethereum-rpc.publicnode.com"
+    );
 
-    let avalanche = EVM_NETWORKS.iter().find(|c| c.id == "avalanche_c").unwrap();
-    assert_eq!(avalanche.chain_id, 43114);
-    assert_eq!(avalanche.native_symbol, "AVAX");
+    let avalanche = evm_config_by_id("avalanche_c").unwrap();
+    assert_eq!(avalanche.chain_id().unwrap(), 43114);
+    assert_eq!(avalanche.native_asset.symbol, "AVAX");
+}
+
+#[test]
+fn parses_discovered_token_metadata_without_float_amounts() {
+    let metadata = parse_token_metadata(&serde_json::json!({
+        "data": {
+            "attributes": {
+                "name": "USD Coin",
+                "symbol": "USDC",
+                "decimals": 6,
+                "price_usd": "0.9998"
+            }
+        }
+    }))
+    .unwrap();
+
+    assert_eq!(metadata.name, "USD Coin");
+    assert_eq!(metadata.symbol, "USDC");
+    assert_eq!(metadata.decimals, Some(6));
+    assert_eq!(metadata.price_usd, Some(0.9998));
 }

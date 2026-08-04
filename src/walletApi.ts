@@ -15,6 +15,7 @@ export const walletApi = {
     to: string;
     symbol: string;
     network: NetworkId;
+    tokenAddress: string | null;
     amount: string;
     note: string;
   }) => invoke<SignedTransaction>("sign_transaction", args),
