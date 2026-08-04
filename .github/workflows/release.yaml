@@ -259,7 +259,7 @@ jobs:
           fi
 
           {
-            printf '**Release %s**\n\n' "${RELEASE_TAG}"
+            printf '### Release %s\n\n' "${RELEASE_TAG}"
 
             printf '%s\n\n' "${RELEASE_COMMENT}"
 
