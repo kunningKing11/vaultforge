@@ -5,6 +5,7 @@ use tauri::State;
 use zeroize::Zeroize;
 
 use crate::activity::{activity, hash_secret};
+use crate::commands::market::{refresh_asset_prices};
 use crate::derivation::{address_from_seed, derive_addresses_from_mnemonic, generate_mnemonic};
 use crate::dto::{Wallet, WalletSession};
 use crate::providers::fetch_portfolio_assets;
@@ -34,7 +35,8 @@ pub(crate) async fn create_wallet(
         .cloned()
         .unwrap_or_else(|| address_from_seed(&mnemonic));
 
-    let assets = fetch_portfolio_assets(&addresses, &[]).await;
+    let mut assets = fetch_portfolio_assets(&addresses, &[]).await;
+    let _ = refresh_asset_prices(&mut assets).await;
 
     let wallet = Wallet {
         name: clean_name(name),
@@ -81,7 +83,8 @@ pub(crate) async fn import_wallet(
         .cloned()
         .unwrap_or_else(|| address_from_seed(&mnemonic));
 
-    let assets = fetch_portfolio_assets(&addresses, &[]).await;
+    let mut assets = fetch_portfolio_assets(&addresses, &[]).await;
+    let _ = refresh_asset_prices(&mut assets).await;
 
     let wallet = Wallet {
         name: "Imported Wallet".to_string(),
@@ -163,7 +166,8 @@ pub(crate) async fn unlock_wallet(
     refresh_addresses
         .entry("evm".to_string())
         .or_insert(address);
-    let fresh_assets = fetch_portfolio_assets(&refresh_addresses, &cached_assets).await;
+    let mut fresh_assets = fetch_portfolio_assets(&refresh_addresses, &cached_assets).await;
+    let _ = refresh_asset_prices(&mut fresh_assets).await;
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
     if let Some(wallet) = state.wallet.as_mut() {
