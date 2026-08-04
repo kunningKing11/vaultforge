@@ -7,21 +7,26 @@ export function walletShell() {
   if (!appState.session) return "";
   return `
     <div class="mx-auto grid max-w-[1500px] gap-5 pb-24 lg:grid-cols-[280px_1fr] lg:pb-0">
-      <aside class="glass hidden rounded-[2rem] p-5 lg:sticky lg:top-5 lg:block lg:h-[calc(100vh-2.5rem)]">
-        <div class="mb-8 flex items-center gap-3">
+      <aside class="glass hidden rounded-[2rem] p-5 lg:sticky lg:top-5 lg:h-[calc(100vh-2.5rem)] lg:flex lg:min-h-0 lg:flex-col">
+        <div class="mb-8 flex shrink-0 items-center gap-3">
           <img class="h-12 w-12 rounded-2xl" src="${vaultForgeLogoUrl}" alt="VaultForge" />
           <div><p class="font-black">${escapeHtml(appState.session.wallet_name ?? "VaultForge")}</p></div>
         </div>
-        <nav class="space-y-2">
-          ${navButton("dashboard", "Dashboard")}
-          ${navButton("send", "Send")}
-          ${navButton("receive", "Receive")}
-          ${navButton("swap", "Swap")}
-          ${navButton("assets", "Assets")}
-          ${navButton("activity", "Activity")}
-          ${navButton("settings", "Settings")}
-        </nav>
-        <div class="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <div class="sidebar-nav-shell min-h-0 flex-1">
+          <nav id="sidebar-nav" class="sidebar-nav min-h-0 flex-1 space-y-2" data-sidebar-scroll tabindex="0" aria-label="Wallet sections">
+            ${navButton("dashboard", "Dashboard")}
+            ${navButton("send", "Send")}
+            ${navButton("receive", "Receive")}
+            ${navButton("swap", "Swap")}
+            ${navButton("assets", "Assets")}
+            ${navButton("activity", "Activity")}
+            ${navButton("settings", "Settings")}
+          </nav>
+          <div class="sidebar-scrollbar" data-sidebar-scrollbar role="scrollbar" tabindex="0" aria-controls="sidebar-nav" aria-label="Scroll wallet sections vertically" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+            <div class="sidebar-scrollbar-thumb" data-sidebar-scrollbar-thumb></div>
+          </div>
+        </div>
+        <div class="mt-8 shrink-0 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <p class="text-xs uppercase tracking-[0.25em] text-slate-500">Address</p>
           <p class="mt-2 break-all font-mono text-sm text-slate-300">${escapeHtml(shortAddress(appState.session.address))}</p>
           <button class="btn-secondary mt-4 w-full text-sm" data-action="copy-address" type="button">Copy</button>

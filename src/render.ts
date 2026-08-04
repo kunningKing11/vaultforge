@@ -14,7 +14,7 @@ export function render() {
       ${renderBody()}
       ${lockedDeleteWalletModal()}
     </main>
-    <div class="app-scrollbar" data-vertical-scrollbar role="scrollbar" tabindex="0" aria-label="Scroll page vertically" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+    <div class="app-scrollbar" data-vertical-scrollbar="page" role="scrollbar" tabindex="0" aria-label="Scroll page vertically" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
       <div class="app-scrollbar-thumb" data-vertical-scrollbar-thumb></div>
     </div>
   `;

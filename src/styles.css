@@ -316,6 +316,46 @@ select.field option:checked {
   will-change: transform;
 }
 
+.sidebar-nav-shell {
+  display: flex;
+  gap: 0.65rem;
+}
+
+.sidebar-nav {
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.sidebar-scrollbar {
+  position: relative;
+  flex: 0 0 0.65rem;
+  width: 0.65rem;
+  height: 100%;
+  border-radius: 999px;
+  background: ButtonText;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.sidebar-scrollbar:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 3px;
+}
+
+.sidebar-scrollbar-thumb {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  border-radius: 999px;
+  background: ButtonFace;
+  opacity: 0.65;
+  will-change: transform;
+}
+
 .app-scrollbar {
   position: fixed;
   top: 0.75rem;
