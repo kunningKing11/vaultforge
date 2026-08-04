@@ -220,11 +220,37 @@ jobs:
         run: |
           set -euo pipefail
           previous_tag="$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)"
+          current_lines="$(git ls-files -- . ':(exclude)package-lock.json' ':(exclude)src-tauri/Cargo.lock' | xargs wc -l | tail -n 1 | awk '{print $1}')"
+
+          count_lines_at_ref() {
+            git ls-tree -r --name-only "$1" \
+              | grep -Ev '^(package-lock\.json|src-tauri/Cargo\.lock)$' \
+              | while IFS= read -r path; do
+                  git cat-file blob "$1:$path"
+                done \
+              | wc -l
+          }
+
+          if [ -n "${previous_tag}" ]; then
+            previous_lines="$(count_lines_at_ref "${previous_tag}")"
+            line_delta=$((current_lines - previous_lines))
+            if [ "${line_delta}" -gt 0 ]; then
+              line_change="an increase of ${line_delta} lines"
+            elif [ "${line_delta}" -lt 0 ]; then
+              line_change="a decrease of $((-line_delta)) lines"
+            else
+              line_change="no change"
+            fi
+          else
+            line_change="the first release"
+          fi
 
           {
             printf '**Release %s**\n\n' "${RELEASE_TAG}"
 
             printf '%s\n\n' "${RELEASE_COMMENT}"
+
+            printf 'Current total lines of code: %s (%s since the previous release)\n\n' "${current_lines}" "${line_change}"
 
             printf '### Release Highlights:\n\n%s\n\n' "${RELEASE_HIGHLIGHTS}"
 
