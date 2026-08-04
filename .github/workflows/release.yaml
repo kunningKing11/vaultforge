@@ -2,6 +2,15 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_comment:
+        description: "Release comment"
+        required: true
+        type: string
+      release_highlights:
+        description: "Release highlights"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -205,13 +214,19 @@ jobs:
       - name: Generate release notes
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMENT: ${{ inputs.release_comment }}
+          RELEASE_HIGHLIGHTS: ${{ inputs.release_highlights }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
           previous_tag="$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)"
 
           {
-            printf 'Release %s\n\n' "${RELEASE_TAG}"
+            printf '**Release %s**\n\n' "${RELEASE_TAG}"
+
+            printf '%s\n\n' "${RELEASE_COMMENT}"
+
+            printf '### Release Highlights:\n\n%s\n\n' "${RELEASE_HIGHLIGHTS}"
 
             if [ -n "${previous_tag}" ]; then
               range="${previous_tag}..HEAD"
