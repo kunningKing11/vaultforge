@@ -1,14 +1,14 @@
-pre-commit:
-  jobs:
-    - name: install dependencies and run fast checks
-      run: npm run hooks:check -- commit
-      fail_text: "Commit blocked: one or more quality checks failed. See the summary above."
-
 commit-msg:
-  jobs:
-    - name: enforce commit-message line length
+  parallel: false
+  commands:
+    enforce-commit-message-line-length:
       run: bash scripts/check-commit-message.sh {1}
+      priority: 1
       fail_text: "Commit blocked: keep every commit-message line to 72 characters or fewer."
+    run-fast-checks:
+      run: npm run hooks:check -- commit
+      priority: 2
+      fail_text: "Commit blocked: one or more quality checks failed. See the summary above."
 
 pre-push:
   jobs:
