@@ -19,6 +19,19 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  release-inputs:
+    name: Print release comment and highlights
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Print release comment and highlights
+        env:
+          RELEASE_COMMENT: ${{ inputs.release_comment }}
+          RELEASE_HIGHLIGHTS: ${{ inputs.release_highlights }}
+        run: |
+          printf 'Release comment:\n%s\n\n' "${RELEASE_COMMENT}"
+          printf 'Release highlights:\n%s\n' "${RELEASE_HIGHLIGHTS}"
+
   build:
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
