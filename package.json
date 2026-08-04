@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "npm run check && vite --host 127.0.0.1 --port 1420",
     "generate-icon": "tauri icon src-tauri/icons/icon.svg -o src-tauri/icons",
-    "prepare-tauri": "npm run sync-package-lock && npm run sync-cargo-version && npm run generate-icon",
     "build": "npm run check && vite build",
     "lint": "oxlint . && oxfmt --check .",
     "lint:oxlint": "oxlint .",
@@ -18,7 +17,6 @@
     "preview": "vite preview",
     "prepare": "lefthook install",
     "hooks:check": "bash scripts/pre-commit-checks.sh",
-    "sync-package-lock": "npm install --package-lock-only --ignore-scripts --no-audit --no-fund",
     "sync-cargo-version": "node scripts/sync-cargo-version.mjs",
     "tauri": "tauri"
   },
