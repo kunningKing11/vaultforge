@@ -29,8 +29,8 @@ export type Activity = {
 export type WalletSession = {
   has_wallet: boolean;
   locked: boolean;
-  wallet_name: string | null;
-  address: string | null;
+  wallet_name: string;
+  address: string | null; // TODO: why is this here? see below
   addresses?: Record<string, string> | null;
   assets: Asset[];
   activity: Activity[];
