@@ -76,7 +76,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Generate Tauri icons
-        run: bun run generate-icon
+        run: bun run prepare-tauri
 
       - name: Install Linux dependencies
         run: |
