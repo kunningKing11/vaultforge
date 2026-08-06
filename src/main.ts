@@ -1,3 +1,7 @@
+import "@fontsource-variable/manrope/wght.css";
+import "@fontsource-variable/tektur/wght.css";
+import "@fontsource/ubuntu-mono/latin-400.css";
+import "@fontsource/ubuntu-mono/latin-700.css";
 import { applyTheme } from "./theme";
 import "./styles.css";
 import { boot } from "./events";
