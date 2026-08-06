@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.vaultforge.wallet</id>
+  <name>VaultForge Wallet</name>
+  <summary>A local-first multichain self-custody wallet</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <description>
+    <p>
+      VaultForge Wallet is a desktop self-custody wallet for creating or
+      importing a wallet, viewing chain-backed balances, and signing and
+      broadcasting supported transactions locally.
+    </p>
+  </description>
+  <developer id="com.vaultforge">
+    <name>VaultForge</name>
+  </developer>
+  <url type="homepage">https://github.com/kunningKing11/vaultforge</url>
+  <url type="bugtracker">https://github.com/kunningKing11/vaultforge/issues</url>
+  <url type="vcs-browser">https://github.com/kunningKing11/vaultforge</url>
+  <launchable type="desktop-id">VaultForge Wallet.desktop</launchable>
+  <icon type="stock">vaultforge-wallet</icon>
+  <pkgname>vaultforge-wallet</pkgname>
+  <provides>
+    <binary>vaultforge-wallet</binary>
+  </provides>
+  <categories>
+    <category>Finance</category>
+  </categories>
+  <content_rating type="oars-1.1" />
+</component>
