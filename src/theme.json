@@ -1,8 +1,8 @@
 {
   "fonts": {
-    "body": "Inter, ui-sans-serif, system-ui, sans-serif",
-    "display": "Inter, ui-sans-serif, system-ui, sans-serif",
-    "mono": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace"
+    "body": "Manrope, SF Pro Text, Segoe UI, ui-sans-serif, system-ui, sans-serif",
+    "display": "Tektur, Arial Narrow, Roboto Condensed, ui-sans-serif, sans-serif",
+    "mono": "Ubuntu Mono, JetBrains Mono, Cascadia Mono, SFMono-Regular, Consolas, monospace"
   },
   "colors": {
     "background": "#030712",
