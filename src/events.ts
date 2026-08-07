@@ -3,8 +3,7 @@ import { render } from "./render";
 import { normalizeNetworkId } from "./networks";
 import type { View } from "./types";
 import {
-  createWallet,
-  importWallet,
+  setupWallet,
   unlockWallet,
   signTransaction,
   broadcastSignedTransaction,
@@ -72,8 +71,7 @@ export function bindEvents() {
     const form = event.target as HTMLFormElement;
     const action = form.dataset.action;
 
-    if (action === "create-wallet") void createWallet(form);
-    if (action === "import-wallet") void importWallet(form);
+    if (action === "wallet-setup") void setupWallet(form);
     if (action === "unlock-wallet") void unlockWallet(form);
     if (action === "sign-transaction") void signTransaction(form);
     if (action === "swap-tokens") void swapTokens(form);
