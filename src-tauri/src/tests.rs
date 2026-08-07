@@ -11,7 +11,8 @@ use crate::assets::{cached_asset, token_addresses_match};
 use crate::commands::tx::{ensure_native_balance_covers_debit, required_native_debit};
 use crate::commands::wallet::refresh_filecoin_address;
 use crate::derivation::{
-    BIP39_WORD_COUNTS, address_from_seed, bitcoin_bech32_address, derive_addresses_from_mnemonic,
+    ALL_NETWORKS, BIP39_WORD_COUNTS, address_from_seed, bitcoin_bech32_address,
+    derive_addresses_from_mnemonic, derive_addresses_from_mnemonic_filtered,
     validate_recovery_phrase_word_count,
 };
 use crate::dto::{Asset, Wallet};
@@ -233,6 +234,8 @@ fn validates_solana_token_transfer_recipient_as_solana_address() {
             token_address: Some("So11111111111111111111111111111111111111112".to_string()),
         }],
         activity: vec![],
+        enabled_networks: vec!["solana".to_string()],
+        auto_lock_timeout_secs: None,
     };
 
     assert!(
@@ -280,6 +283,8 @@ fn token_transfer_validation_uses_contract_or_mint_identity() {
             },
         ],
         activity: vec![],
+        enabled_networks: vec!["solana".to_string()],
+        auto_lock_timeout_secs: None,
     };
 
     assert!(
@@ -699,7 +704,7 @@ fn parses_latest_solana_blockhash() {
 #[test]
 fn signs_solana_native_transfer() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-    let addresses = derive_addresses_from_mnemonic(mnemonic).unwrap();
+    let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, ALL_NETWORKS).unwrap();
     let from = addresses.get("solana").unwrap();
     let signed = sign_solana_transfer_with_blockhash(
         mnemonic,
@@ -723,7 +728,7 @@ fn signs_solana_native_transfer() {
 #[test]
 fn signs_solana_spl_token_transfer() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-    let addresses = derive_addresses_from_mnemonic(mnemonic).unwrap();
+    let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, ALL_NETWORKS).unwrap();
     let from = addresses.get("solana").unwrap();
     let source = SolanaTokenSource {
         address: solana_associated_token_address(
@@ -874,7 +879,7 @@ fn solana_token_requires_sol_for_fee() {
 #[test]
 fn derives_documented_wallet_paths_deterministically() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-    let addresses = derive_addresses_from_mnemonic(mnemonic).unwrap();
+    let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, ALL_NETWORKS).unwrap();
     assert_eq!(addresses.len(), 7);
     assert_eq!(
         addresses.get("bitcoin").unwrap(),
@@ -918,6 +923,8 @@ fn locked_session_does_not_expose_secrets() {
         passphrase_hash: "deadbeef".to_string(),
         assets: vec![],
         activity: vec![],
+        enabled_networks: vec![],
+        auto_lock_timeout_secs: None,
     };
     state.wallet = Some(wallet);
     state.locked = true;
@@ -1064,6 +1071,8 @@ fn encrypts_and_decrypts_wallet_payload() {
         passphrase_hash: hash_secret(passphrase),
         assets: starter_assets("ethereum"),
         activity: vec![activity("system", "Created", "Local", "1")],
+        enabled_networks: vec!["evm".to_string()],
+        auto_lock_timeout_secs: None,
     };
     let (key, salt) = derive_storage_key(passphrase, None).unwrap();
     let stored = encrypt_wallet(&wallet, &key, &salt).unwrap();

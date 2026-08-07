@@ -3,7 +3,7 @@ import { render } from "./render";
 import { normalizeNetworkId } from "./networks";
 import type { View } from "./types";
 import {
-  setupWallet,
+  setupWizard,
   unlockWallet,
   signTransaction,
   broadcastSignedTransaction,
@@ -64,6 +64,19 @@ export function bindEvents() {
       const value = target.closest<HTMLElement>("[data-copy-value]")?.dataset.copyValue;
       if (value) void copyText(value, "Value copied.");
     }
+
+    if (action === "setup-next") wizardNext();
+    if (action === "setup-prev") wizardPrev();
+    if (action === "setup-create") {
+      appState.setupWizard.flow = "create";
+      appState.setupWizard.step = 2;
+      render();
+    }
+    if (action === "setup-import") {
+      appState.setupWizard.flow = "import";
+      appState.setupWizard.step = 2;
+      render();
+    }
   });
 
   document.addEventListener("submit", (event) => {
@@ -71,7 +84,7 @@ export function bindEvents() {
     const form = event.target as HTMLFormElement;
     const action = form.dataset.action;
 
-    if (action === "wallet-setup") void setupWallet(form);
+    if (action === "wallet-setup") void setupWizard();
     if (action === "unlock-wallet") void unlockWallet(form);
     if (action === "sign-transaction") void signTransaction(form);
     if (action === "swap-tokens") void swapTokens(form);
@@ -102,7 +115,86 @@ export function bindEvents() {
   document.addEventListener("input", (event) => {
     const target = event.target as HTMLInputElement;
     if (target.matches("[data-passphrase-input]")) updatePassphraseStrength(target);
+
+    if (target.matches("[data-wizard-field]")) {
+      const field = target.dataset.wizardField;
+      if (field === "name") appState.setupWizard.name = target.value;
+      if (field === "passphrase") appState.setupWizard.passphrase = target.value;
+      if (field === "confirmPassphrase") appState.setupWizard.confirmPassphrase = target.value;
+      if (field === "mnemonic") appState.setupWizard.mnemonic = target.value;
+    }
   });
+
+  document.addEventListener("change", (event) => {
+    const target = event.target as HTMLInputElement;
+
+    if (target.matches("[data-wizard-network]")) {
+      const id = target.dataset.wizardNetwork!;
+      if (target.checked) {
+        if (!appState.setupWizard.enabledNetworks.includes(id)) {
+          appState.setupWizard.enabledNetworks.push(id);
+        }
+      } else {
+        appState.setupWizard.enabledNetworks = appState.setupWizard.enabledNetworks.filter(
+          (n) => n !== id,
+        );
+      }
+    }
+
+    if (target.matches("[data-wizard-autolock]")) {
+      const val = target.value;
+      appState.setupWizard.autoLockTimeoutSecs = val === "0" ? null : Number(val);
+    }
+  });
+}
+
+function wizardNext() {
+  const w = appState.setupWizard;
+  if (w.step === 2) {
+    if (!w.passphrase || w.passphrase.length < 8) {
+      pushToast("Passphrase must be at least 8 characters.", "error");
+      return;
+    }
+    if (w.passphrase !== w.confirmPassphrase) {
+      pushToast("Passphrases do not match.", "error");
+      return;
+    }
+  }
+  if (w.step === 3 && w.enabledNetworks.length === 0) {
+    pushToast("Enable at least one network.", "error");
+    return;
+  }
+  if (w.step < 4) {
+    w.step++;
+    render();
+  } else {
+    void setupWizard();
+  }
+}
+
+function wizardPrev() {
+  if (appState.setupWizard.step > 1) {
+    appState.setupWizard.step--;
+    render();
+  }
+}
+
+function startAutoLockTimer() {
+  stopAutoLockTimer();
+  const timeout = appState.session?.auto_lock_timeout_secs;
+  if (!timeout) return;
+  appState.autoLockTimer = window.setInterval(() => {
+    if (Date.now() - appState.lastActivity > timeout * 1000) {
+      void lockWallet();
+    }
+  }, 30_000);
+}
+
+function stopAutoLockTimer() {
+  if (appState.autoLockTimer !== null) {
+    window.clearInterval(appState.autoLockTimer);
+    appState.autoLockTimer = null;
+  }
 }
 
 async function loadSession() {
@@ -122,6 +214,14 @@ export async function boot() {
   await loadSession();
   bindEvents();
   installScrollbarBehavior();
+  startAutoLockTimer();
+
+  document.addEventListener("click", () => {
+    appState.lastActivity = Date.now();
+  });
+  document.addEventListener("keydown", () => {
+    appState.lastActivity = Date.now();
+  });
 }
 
 import type { QrResilience } from "./types";

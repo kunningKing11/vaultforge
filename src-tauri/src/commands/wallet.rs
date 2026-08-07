@@ -7,7 +7,8 @@ use zeroize::Zeroize;
 use crate::activity::{activity, hash_secret};
 use crate::commands::market::refresh_asset_prices;
 use crate::derivation::{
-    address_from_seed, derive_addresses_from_mnemonic, generate_mnemonic,
+    address_from_seed, derive_addresses_from_mnemonic, derive_addresses_from_mnemonic_filtered,
+    generate_mnemonic,
     validate_recovery_phrase_word_count,
 };
 use crate::dto::{Wallet, WalletSession};
@@ -41,10 +42,13 @@ pub(crate) async fn create_wallet(
     state: State<'_, Mutex<AppState>>,
     name: String,
     passphrase: String,
+    enabled_networks: Vec<String>,
+    auto_lock_timeout_secs: Option<u64>,
 ) -> Result<WalletSession, String> {
     validate_passphrase(&passphrase)?;
     let mnemonic = generate_mnemonic()?;
-    let addresses = derive_addresses_from_mnemonic(&mnemonic)?;
+    let network_refs: Vec<&str> = enabled_networks.iter().map(|s| s.as_str()).collect();
+    let addresses = derive_addresses_from_mnemonic_filtered(&mnemonic, &network_refs)?;
     let primary_address = addresses
         .get("evm")
         .cloned()
@@ -67,6 +71,8 @@ pub(crate) async fn create_wallet(
             "Recovery phrase generated locally",
             "12 words",
         )],
+        enabled_networks,
+        auto_lock_timeout_secs,
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
@@ -82,14 +88,18 @@ pub(crate) async fn create_wallet(
 #[tauri::command]
 pub(crate) async fn import_wallet(
     state: State<'_, Mutex<AppState>>,
+    name: Option<String>,
     mnemonic: String,
     passphrase: String,
+    enabled_networks: Vec<String>,
+    auto_lock_timeout_secs: Option<u64>,
 ) -> Result<WalletSession, String> {
     let mnemonic = mnemonic.trim().to_string();
     validate_recovery_phrase_word_count(&mnemonic)?;
     validate_passphrase(&passphrase)?;
 
-    let addresses = derive_addresses_from_mnemonic(&mnemonic)?;
+    let network_refs: Vec<&str> = enabled_networks.iter().map(|s| s.as_str()).collect();
+    let addresses = derive_addresses_from_mnemonic_filtered(&mnemonic, &network_refs)?;
     let primary_address = addresses
         .get("evm")
         .cloned()
@@ -99,7 +109,7 @@ pub(crate) async fn import_wallet(
     let _ = refresh_asset_prices(&mut assets).await;
 
     let wallet = Wallet {
-        name: "Imported Wallet".to_string(),
+        name: clean_name(name.unwrap_or_else(|| "Imported Wallet".to_string())),
         mnemonic,
         created_at: Utc::now().to_rfc3339(),
         address: primary_address,
@@ -112,6 +122,8 @@ pub(crate) async fn import_wallet(
             "Recovery phrase verified locally",
             "Imported",
         )],
+        enabled_networks,
+        auto_lock_timeout_secs,
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;

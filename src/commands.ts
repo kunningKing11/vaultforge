@@ -8,21 +8,31 @@ import type { SessionCommand, WalletSession } from "./types";
 
 const BIP39_WORD_COUNTS = new Set([12, 15, 18, 21, 24]);
 
-export async function setupWallet(form: HTMLFormElement) {
-  const formData = new FormData(form);
-  const passphrase = String(formData.get("passphrase") || "");
-  const mnemonic = String(formData.get("mnemonic") || "").trim();
+export async function setupWizard() {
+  const wizard = appState.setupWizard;
+  const passphrase = wizard.passphrase;
+  const mnemonic = wizard.mnemonic.trim();
 
-  if (!validatePassphraseConfirmation(form, passphrase)) return;
+  if (!validatePassphraseConfirmation(passphrase, wizard.confirmPassphrase)) return;
 
   if (mnemonic) {
     if (!validateRecoveryPhraseWordCount(mnemonic)) return;
-    await runCommand("import_wallet", () => walletApi.importWallet({ mnemonic, passphrase }));
+    await runCommand("import_wallet", () =>
+      walletApi.importWallet({
+        name: wizard.name || undefined,
+        mnemonic,
+        passphrase,
+        enabledNetworks: wizard.enabledNetworks,
+        autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
+      }),
+    );
   } else {
     await runCommand("create_wallet", () =>
       walletApi.createWallet({
-        name: String(formData.get("name") || "Primary Vault"),
+        name: wizard.name || "Primary Wallet",
         passphrase,
+        enabledNetworks: wizard.enabledNetworks,
+        autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
       }),
     );
   }
@@ -307,8 +317,7 @@ export async function copyText(value: string, message: string) {
   pushToast(message, "success");
 }
 
-function validatePassphraseConfirmation(form: HTMLFormElement, passphrase: string) {
-  const confirm = String(new FormData(form).get("confirmPassphrase") || "");
+function validatePassphraseConfirmation(passphrase: string, confirm: string) {
   if (passphrase !== confirm) {
     pushToast("Passphrases do not match.", "error");
     return false;

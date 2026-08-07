@@ -4,10 +4,19 @@ import type { NetworkId, SignedTransaction, WalletSession } from "./types";
 export const walletApi = {
   getWallet: () => invoke<WalletSession>("get_wallet"),
   refreshPrices: () => invoke<WalletSession>("refresh_prices"),
-  createWallet: (args: { name: string; passphrase: string }) =>
-    invoke<WalletSession>("create_wallet", args),
-  importWallet: (args: { mnemonic: string; passphrase: string }) =>
-    invoke<WalletSession>("import_wallet", args),
+  createWallet: (args: {
+    name: string;
+    passphrase: string;
+    enabledNetworks: string[];
+    autoLockTimeoutSecs: number | null;
+  }) => invoke<WalletSession>("create_wallet", args),
+  importWallet: (args: {
+    name?: string;
+    mnemonic: string;
+    passphrase: string;
+    enabledNetworks: string[];
+    autoLockTimeoutSecs: number | null;
+  }) => invoke<WalletSession>("import_wallet", args),
   unlockWallet: (args: { passphrase: string }) => invoke<WalletSession>("unlock_wallet", args),
   lockWallet: () => invoke<null>("lock_wallet"),
   clearWallet: () => invoke<WalletSession>("clear_wallet"),

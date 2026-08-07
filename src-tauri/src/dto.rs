@@ -11,6 +11,10 @@ pub(crate) struct Wallet {
     pub(crate) passphrase_hash: String,
     pub(crate) assets: Vec<Asset>,
     pub(crate) activity: Vec<Activity>,
+    #[serde(default = "default_enabled_networks")]
+    pub(crate) enabled_networks: Vec<String>,
+    #[serde(default)]
+    pub(crate) auto_lock_timeout_secs: Option<u64>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -23,6 +27,29 @@ pub(crate) struct WalletPayload {
     pub(crate) passphrase_hash: String,
     pub(crate) assets: Vec<Asset>,
     pub(crate) activity: Vec<Activity>,
+    #[serde(default = "default_enabled_networks")]
+    pub(crate) enabled_networks: Vec<String>,
+    #[serde(default)]
+    pub(crate) auto_lock_timeout_secs: Option<u64>,
+}
+
+fn default_enabled_networks() -> Vec<String> {
+    vec![
+        "bitcoin".into(),
+        "ethereum".into(),
+        "avalanche_c".into(),
+        "bnb".into(),
+        "monad".into(),
+        "arbitrum_one".into(),
+        "base".into(),
+        "optimism".into(),
+        "polygon".into(),
+        "filecoin".into(),
+        "injective".into(),
+        "solana".into(),
+        "tron".into(),
+        "zcash".into(),
+    ]
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -65,6 +92,10 @@ pub(crate) struct WalletSession {
     pub(crate) addresses: Option<HashMap<String, String>>,
     pub(crate) assets: Vec<Asset>,
     pub(crate) activity: Vec<Activity>,
+    #[serde(default)]
+    pub(crate) enabled_networks: Vec<String>,
+    #[serde(default)]
+    pub(crate) auto_lock_timeout_secs: Option<u64>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]

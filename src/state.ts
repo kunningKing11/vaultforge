@@ -33,6 +33,18 @@ export const appState = {
   lockedDeleteRemaining: 10,
   lockedDeleteTimer: null as number | null,
   pendingTxTimer: null as number | null,
+  setupWizard: {
+    step: 1,
+    flow: "create" as "create" | "import",
+    name: "",
+    passphrase: "",
+    confirmPassphrase: "",
+    mnemonic: "",
+    enabledNetworks: networks.map((n) => n.id) as string[],
+    autoLockTimeoutSecs: null as number | null,
+  },
+  lastActivity: Date.now(),
+  autoLockTimer: null as number | null,
 };
 
 export function selectedNetwork(): Network {

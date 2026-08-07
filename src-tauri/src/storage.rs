@@ -69,6 +69,8 @@ pub(crate) fn encrypt_wallet(
         passphrase_hash: wallet.passphrase_hash.clone(),
         assets: wallet.assets.clone(),
         activity: wallet.activity.clone(),
+        enabled_networks: wallet.enabled_networks.clone(),
+        auto_lock_timeout_secs: wallet.auto_lock_timeout_secs,
     };
     let plaintext = serde_json::to_vec(&payload).map_err(|_| "Failed to encode wallet")?;
     let nonce = Nonce::try_from(nonce_bytes.as_slice()).map_err(|_| "Failed to create nonce")?;
@@ -77,7 +79,7 @@ pub(crate) fn encrypt_wallet(
         .map_err(|_| "Failed to encrypt wallet")?;
 
     Ok(StoredWalletFile {
-        version: 2,
+        version: 3,
         wallet_name: wallet.name.clone(),
         network: "ethereum".to_string(),
         salt: BASE64.encode(salt),
@@ -90,7 +92,7 @@ pub(crate) fn decrypt_wallet(
     stored: &StoredWalletFile,
     passphrase: &str,
 ) -> Result<Wallet, String> {
-    if stored.version != 2 {
+    if stored.version != 2 && stored.version != 3 {
         return Err("Unsupported wallet version".to_string());
     }
     let salt = BASE64
@@ -119,6 +121,8 @@ pub(crate) fn decrypt_wallet(
         passphrase_hash: payload.passphrase_hash,
         assets: payload.assets,
         activity: payload.activity,
+        enabled_networks: payload.enabled_networks,
+        auto_lock_timeout_secs: payload.auto_lock_timeout_secs,
     })
 }
 
