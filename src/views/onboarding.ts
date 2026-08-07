@@ -1,5 +1,5 @@
 import { networks } from "../networks";
-import { appState, generateRecoveryPhrase } from "../state";
+import { appState } from "../state";
 import { escapeHtml } from "../format";
 import { featureCard, passphraseMeter } from "./shared";
 
@@ -22,6 +22,14 @@ export function onboardingView() {
       <span class="text-sm font-bold">${label}</span>
     </div>`;
 
+  const titles: Record<number, string> = {
+    1: "Get started",
+    2: wizard.flow === "import" ? "Import wallet" : "Create wallet",
+    3: "Recovery phrase",
+    4: "Settings",
+    5: "Confirm",
+  };
+
   return `
     <section class="mx-auto grid min-h-[88vh] max-w-7xl items-center gap-8 lg:grid-cols-[1fr_0.95fr]">
       <div class="space-y-8">
@@ -41,21 +49,23 @@ export function onboardingView() {
         <div class="mb-6 flex items-center justify-between">
           <div>
             <p class="text-sm font-bold uppercase tracking-[0.3em] text-slate-500">Wallet Setup</p>
-            <h2 class="text-2xl font-black">${wizard.step === 1 ? "Get started" : wizard.step === 2 ? (wizard.flow === "import" ? "Import wallet" : "Create wallet") : wizard.step === 3 ? "Settings" : "Confirm"}</h2>
+            <h2 class="text-2xl font-black">${titles[wizard.step]}</h2>
           </div>
         </div>
 
-        <div class="mb-6 flex gap-4">
+        <div class="mb-6 flex gap-3 overflow-x-auto">
           ${stepIndicator(1, "Flow")}
           ${stepIndicator(2, "Identity")}
-          ${stepIndicator(3, "Settings")}
-          ${stepIndicator(4, "Backup")}
+          ${stepIndicator(3, "Seed")}
+          ${stepIndicator(4, "Networks")}
+          ${stepIndicator(5, "Backup")}
         </div>
 
         ${wizard.step === 1 ? step1() : ""}
         ${wizard.step === 2 ? step2() : ""}
         ${wizard.step === 3 ? step3() : ""}
         ${wizard.step === 4 ? step4() : ""}
+        ${wizard.step === 5 ? step5() : ""}
       </div>
     </section>
   `;
@@ -115,6 +125,54 @@ function step2() {
 
 function step3() {
   const wizard = appState.setupWizard;
+  const isImport = wizard.flow === "import";
+
+  if (isImport) return step4();
+
+  const counts = [12, 15, 18, 21, 24] as const;
+  const labels: Record<number, { title: string; desc: string }> = {
+    12: { title: "12 words", desc: "Most common. Good balance of security and simplicity." },
+    24: { title: "24 words", desc: "Maximum entropy. Most secure option available." },
+  };
+  const customCounts = [15, 18, 21];
+
+  return `
+    <div class="space-y-4">
+      <p class="text-sm text-slate-300">Choose how long your recovery phrase should be. Longer phrases are harder to brute-force.</p>
+      <div class="grid grid-cols-2 gap-3">
+        ${counts
+          .filter((c) => c === 12 || c === 24)
+          .map(
+            (c) => `
+          <button type="button" data-action="setup-wordcount" data-wordcount="${c}"
+            class="rounded-xl border px-4 py-4 text-left transition ${wizard.wordCount === c ? "border-white/40 bg-white/10" : "border-white/10 hover:bg-white/5"}">
+            <p class="font-black text-lg">${labels[c].title}</p>
+            <p class="mt-1 text-xs text-slate-400">${labels[c].desc}</p>
+          </button>
+        `,
+          )
+          .join("")}
+      </div>
+      <div class="rounded-xl border ${customCounts.includes(wizard.wordCount) ? "border-white/40 bg-white/10" : "border-white/10"} px-4 py-4">
+        <p class="font-black text-lg">Custom length</p>
+        <p class="mt-1 text-xs text-slate-400">Choose a non-standard word count.</p>
+        <select class="field mt-3" data-wizard-field="customWordCount">
+          <option value="0" ${!customCounts.includes(wizard.wordCount) ? "selected" : ""}>Select word count...</option>
+          <option value="15" ${wizard.wordCount === 15 ? "selected" : ""}>15 words</option>
+          <option value="18" ${wizard.wordCount === 18 ? "selected" : ""}>18 words</option>
+          <option value="21" ${wizard.wordCount === 21 ? "selected" : ""}>21 words</option>
+        </select>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button class="btn-secondary flex-1" type="button" data-action="setup-prev">Back</button>
+        <button class="btn-primary flex-1" type="button" data-action="setup-next">Next</button>
+      </div>
+    </div>
+  `;
+}
+
+function step4() {
+  const wizard = appState.setupWizard;
   const autoLockOptions = [
     { label: "Off", value: "0" },
     { label: "5 minutes", value: "300" },
@@ -157,12 +215,9 @@ function step3() {
   `;
 }
 
-function step4() {
+function step5() {
   const wizard = appState.setupWizard;
   const isImport = wizard.flow === "import";
-  if (!isImport && !wizard.generatedMnemonic) {
-    wizard.generatedMnemonic = generateRecoveryPhrase();
-  }
 
   return `
     <form class="space-y-4" data-action="wallet-setup">
@@ -174,8 +229,8 @@ function step4() {
           <p class="text-sm text-slate-300">Your wallet will be imported with the recovery phrase you provided. Make sure it is correct.</p>
         `
             : `
-          <p class="text-sm text-slate-300">Write down your 12-word recovery phrase and store it securely. It is the only way to recover your wallet.</p>
-          <p class="mt-2 rounded-lg bg-white/5 p-3 font-mono text-sm text-white break-words">${escapeHtml(wizard.generatedMnemonic || "Generated on confirm — phrase will appear here")}</p>
+          <p class="text-sm text-slate-300">Write down your ${wizard.wordCount}-word recovery phrase and store it securely. It is the only way to recover your wallet.</p>
+          <p class="mt-2 rounded-lg bg-white/5 p-3 font-mono text-sm text-white break-words">${escapeHtml(wizard.generatedMnemonic || "")}</p>
           <label class="mt-3 flex items-start gap-2 rounded-lg border border-white/10 bg-black/10 p-3 text-sm text-slate-300">
             <input class="mt-1 accent-white" type="checkbox" data-wizard-field="acknowledgedBackup" ${wizard.acknowledgedBackup ? "checked" : ""} />
             <span>I have written down this recovery phrase and understand it is required to recover the wallet.</span>
@@ -184,6 +239,7 @@ function step4() {
         }
       </div>
       <div class="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+        <p><span class="font-bold text-white">Recovery phrase:</span> ${wizard.wordCount} words</p>
         <p><span class="font-bold text-white">Networks:</span> ${wizard.enabledNetworks.length} enabled</p>
         <p><span class="font-bold text-white">Auto-lock:</span> ${wizard.autoLockTimeoutSecs ? `${wizard.autoLockTimeoutSecs / 60} min` : "Off"}</p>
       </div>

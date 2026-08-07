@@ -50,10 +50,18 @@ pub(crate) fn tron_private_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32],
     secp256k1_private_key_from_mnemonic(mnemonic, TRON_DERIVATION_PATH)
 }
 
-pub(crate) fn generate_mnemonic() -> Result<String, String> {
-    let mut entropy = [0u8; 16];
+pub(crate) fn generate_mnemonic(word_count: u32) -> Result<String, String> {
+    let entropy_bytes = match word_count {
+        12 => 16,
+        15 => 20,
+        18 => 24,
+        21 => 28,
+        24 => 32,
+        _ => return Err("Word count must be 12, 15, 18, 21, or 24".to_string()),
+    };
+    let mut entropy = vec![0u8; entropy_bytes as usize];
     let mut rng = rand::rng();
-    rng.fill(&mut entropy);
+    rng.fill(entropy.as_mut_slice());
     Mnemonic::from_entropy_in(Language::English, &entropy)
         .map(|mnemonic| mnemonic.to_string())
         .map_err(|_| "Failed to generate recovery phrase".to_string())

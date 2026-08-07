@@ -42,16 +42,13 @@ export const appState = {
     mnemonic: "",
     generatedMnemonic: "",
     acknowledgedBackup: false,
+    wordCount: 12 as 12 | 15 | 18 | 21 | 24,
     enabledNetworks: networks.map((n) => n.id) as string[],
     autoLockTimeoutSecs: null as number | null,
   },
   lastActivity: Date.now(),
   autoLockTimer: null as number | null,
 };
-
-export function generateRecoveryPhrase() {
-  return "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-}
 
 export function selectedNetwork(): Network {
   return networks.find((n) => n.id === appState.receiveNetworkId) ?? networks[0];

@@ -77,6 +77,13 @@ export function bindEvents() {
       appState.setupWizard.step = 2;
       render();
     }
+    if (action === "setup-wordcount") {
+      const wc = Number(target.closest<HTMLElement>("[data-wordcount]")?.dataset.wordcount);
+      if (wc) {
+        appState.setupWizard.wordCount = wc as 12 | 15 | 18 | 21 | 24;
+        render();
+      }
+    }
   });
 
   document.addEventListener("submit", (event) => {
@@ -146,10 +153,18 @@ export function bindEvents() {
       const val = target.value;
       appState.setupWizard.autoLockTimeoutSecs = val === "0" ? null : Number(val);
     }
+
+    if (target.matches("[data-wizard-field='customWordCount']")) {
+      const val = Number(target.value);
+      if (val) {
+        appState.setupWizard.wordCount = val as 12 | 15 | 18 | 21 | 24;
+        render();
+      }
+    }
   });
 }
 
-function wizardNext() {
+async function wizardNext() {
   const wizard = appState.setupWizard;
   if (wizard.step === 2) {
     if (!wizard.passphrase || wizard.passphrase.length < 8) {
@@ -161,12 +176,21 @@ function wizardNext() {
       return;
     }
   }
-  if (wizard.step === 3 && wizard.enabledNetworks.length === 0) {
+  if (wizard.step === 4 && wizard.enabledNetworks.length === 0) {
     pushToast("Enable at least one network.", "error");
     return;
   }
-  if (wizard.step < 4) {
+  if (wizard.step < 5) {
     wizard.step++;
+    if (wizard.step === 5 && wizard.flow === "create" && !wizard.generatedMnemonic) {
+      try {
+        wizard.generatedMnemonic = await walletApi.generateMnemonic(wizard.wordCount);
+      } catch {
+        pushToast("Failed to generate recovery phrase.", "error");
+        wizard.step--;
+        return;
+      }
+    }
     render();
   } else {
     void setupWizard();

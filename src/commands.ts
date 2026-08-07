@@ -2,7 +2,7 @@ import { pushToast } from "./toasts";
 import { formatError, toWei } from "./format";
 import { walletApi } from "./walletApi";
 import { networkById } from "./networks";
-import { appState, addressForNetwork, generateRecoveryPhrase, selectedNetwork } from "./state";
+import { appState, addressForNetwork, selectedNetwork } from "./state";
 import { render } from "./render";
 import type { SessionCommand, WalletSession } from "./types";
 
@@ -39,7 +39,7 @@ export async function setupWizard() {
       return;
     }
     if (!wizard.generatedMnemonic) {
-      wizard.generatedMnemonic = generateRecoveryPhrase();
+      wizard.generatedMnemonic = await walletApi.generateMnemonic(wizard.wordCount);
     }
     wizard.mnemonic = "";
     await runCommand("create_wallet", () =>
@@ -48,6 +48,7 @@ export async function setupWizard() {
         passphrase,
         enabledNetworks: wizard.enabledNetworks,
         autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
+        mnemonic: wizard.generatedMnemonic,
       }),
     );
   }
@@ -208,12 +209,12 @@ export async function lockWallet() {
     await walletApi.lockWallet();
     stopPendingTxPolling();
     appState.session = await walletApi.getWallet();
-    syncAutoLockTimerWithSession();
     appState.currentView = "dashboard";
     pushToast(successMessage("lock_wallet"), "success");
   } catch (error) {
     pushToast(formatError(error), "error");
   } finally {
+    syncAutoLockTimerWithSession();
     appState.busy = false;
     render();
   }
@@ -291,7 +292,7 @@ function stopLockedDeleteTimer() {
 
 function stopAutoLockTimer() {
   if (appState.autoLockTimer !== null) {
-    window.clearInterval(appState.autoLockTimer);
+    window.clearTimeout(appState.autoLockTimer);
     appState.autoLockTimer = null;
   }
 }
@@ -300,11 +301,15 @@ function startAutoLockTimer() {
   stopAutoLockTimer();
   const timeout = appState.session?.auto_lock_timeout_secs;
   if (!timeout) return;
-  appState.autoLockTimer = window.setInterval(() => {
-    if (Date.now() - appState.lastActivity > timeout * 1000) {
+  const check = () => {
+    const remaining = timeout * 1000 - (Date.now() - appState.lastActivity);
+    if (remaining <= 0) {
       void lockWallet();
+      return;
     }
-  }, 30_000);
+    appState.autoLockTimer = window.setTimeout(check, remaining);
+  };
+  check();
 }
 
 function syncAutoLockTimerWithSession() {
@@ -387,7 +392,9 @@ function validateRecoveryPhraseWordCount(mnemonic: string) {
 }
 
 export function updatePassphraseStrength(input: HTMLInputElement) {
-  const meter = input.closest("form")?.querySelector<HTMLElement>("[data-passphrase-meter]");
+  const meter = (input.closest("form") ?? input.closest(".space-y-4"))?.querySelector<HTMLElement>(
+    "[data-passphrase-meter]",
+  );
   if (!meter) return;
   const score = passphraseScore(input.value);
   const labels = ["Too weak", "Weak", "Fair", "Strong", "Excellent"];

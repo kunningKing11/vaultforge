@@ -4,11 +4,14 @@ import type { NetworkId, SignedTransaction, WalletSession } from "./types";
 export const walletApi = {
   getWallet: () => invoke<WalletSession>("get_wallet"),
   refreshPrices: () => invoke<WalletSession>("refresh_prices"),
+  generateMnemonic: (wordCount?: number) =>
+    invoke<string>("generate_mnemonic_cmd", { wordCount: wordCount ?? null }),
   createWallet: (args: {
     name: string;
     passphrase: string;
     enabledNetworks: string[];
     autoLockTimeoutSecs: number | null;
+    mnemonic?: string;
   }) => invoke<WalletSession>("create_wallet", args),
   importWallet: (args: {
     name?: string;
