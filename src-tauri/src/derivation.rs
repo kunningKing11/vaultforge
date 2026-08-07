@@ -16,6 +16,11 @@ use crate::address::filecoin::filecoin_mainnet_secp256k1_address;
 
 pub(crate) const BIP39_WORD_COUNTS: [usize; 5] = [12, 15, 18, 21, 24];
 
+#[cfg(test)]
+pub(crate) const ALL_NETWORKS: &[&str] = &[
+    "bitcoin", "evm", "filecoin", "injective", "solana", "tron", "zcash",
+];
+
 // TODO: why some are pub(crate) and some are not? Should we make them all pub(crate)?
 pub(crate) const BITCOIN_DERIVATION_PATH: &str = "m/84'/0'/0'/0/0";
 const EVM_DERIVATION_PATH: &str = "m/44'/60'/0'/0/0";
@@ -130,27 +135,56 @@ fn derive_wallet_keys(mnemonic: &str) -> Result<DerivedWalletKeys, String> {
     })
 }
 
-pub(crate) fn derive_addresses_from_mnemonic(
+pub(crate) fn derive_addresses_from_mnemonic_filtered(
     mnemonic: &str,
+    enabled: &[&str],
 ) -> Result<HashMap<String, String>, String> {
     let keys = derive_wallet_keys(mnemonic)?;
-
-    let bitcoin_address = bitcoin_bech32_address(&keys.bitcoin, false)?;
-    let evm_address = ethereum_address_from_private_key(&keys.evm)?;
-    let filecoin_address = filecoin_address_from_private_key(&keys.filecoin)?;
-    let injective_address = bech32_account_address(&keys.injective, "inj")?;
-    let solana_address = solana_address_from_secret_key(&keys.solana)?;
-    let tron_address = tron_address_from_private_key(&keys.tron)?;
-    let zcash_address = zcash_transparent_address(&keys.zcash, false)?;
-
     let mut addresses = HashMap::new();
-    addresses.insert("bitcoin".to_string(), bitcoin_address);
-    addresses.insert("evm".to_string(), evm_address);
-    addresses.insert("filecoin".to_string(), filecoin_address);
-    addresses.insert("injective".to_string(), injective_address);
-    addresses.insert("solana".to_string(), solana_address);
-    addresses.insert("tron".to_string(), tron_address);
-    addresses.insert("zcash".to_string(), zcash_address);
+
+    if enabled.contains(&"bitcoin") {
+        addresses.insert(
+            "bitcoin".to_string(),
+            bitcoin_bech32_address(&keys.bitcoin, false)?,
+        );
+    }
+    if enabled.contains(&"evm") {
+        addresses.insert(
+            "evm".to_string(),
+            ethereum_address_from_private_key(&keys.evm)?,
+        );
+    }
+    if enabled.contains(&"filecoin") {
+        addresses.insert(
+            "filecoin".to_string(),
+            filecoin_address_from_private_key(&keys.filecoin)?,
+        );
+    }
+    if enabled.contains(&"injective") {
+        addresses.insert(
+            "injective".to_string(),
+            bech32_account_address(&keys.injective, "inj")?,
+        );
+    }
+    if enabled.contains(&"solana") {
+        addresses.insert(
+            "solana".to_string(),
+            solana_address_from_secret_key(&keys.solana)?,
+        );
+    }
+    if enabled.contains(&"tron") {
+        addresses.insert(
+            "tron".to_string(),
+            tron_address_from_private_key(&keys.tron)?,
+        );
+    }
+    if enabled.contains(&"zcash") {
+        addresses.insert(
+            "zcash".to_string(),
+            zcash_transparent_address(&keys.zcash, false)?,
+        );
+    }
+
     Ok(addresses)
 }
 
