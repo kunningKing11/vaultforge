@@ -122,6 +122,7 @@ export function bindEvents() {
       if (field === "passphrase") appState.setupWizard.passphrase = target.value;
       if (field === "confirmPassphrase") appState.setupWizard.confirmPassphrase = target.value;
       if (field === "mnemonic") appState.setupWizard.mnemonic = target.value;
+      if (field === "acknowledgedBackup") appState.setupWizard.acknowledgedBackup = target.checked;
     }
   });
 
@@ -149,23 +150,23 @@ export function bindEvents() {
 }
 
 function wizardNext() {
-  const w = appState.setupWizard;
-  if (w.step === 2) {
-    if (!w.passphrase || w.passphrase.length < 8) {
+  const wizard = appState.setupWizard;
+  if (wizard.step === 2) {
+    if (!wizard.passphrase || wizard.passphrase.length < 8) {
       pushToast("Passphrase must be at least 8 characters.", "error");
       return;
     }
-    if (w.passphrase !== w.confirmPassphrase) {
+    if (wizard.passphrase !== wizard.confirmPassphrase) {
       pushToast("Passphrases do not match.", "error");
       return;
     }
   }
-  if (w.step === 3 && w.enabledNetworks.length === 0) {
+  if (wizard.step === 3 && wizard.enabledNetworks.length === 0) {
     pushToast("Enable at least one network.", "error");
     return;
   }
-  if (w.step < 4) {
-    w.step++;
+  if (wizard.step < 4) {
+    wizard.step++;
     render();
   } else {
     void setupWizard();
@@ -190,6 +191,14 @@ function startAutoLockTimer() {
   }, 30_000);
 }
 
+function syncAutoLockTimerWithSession() {
+  if (!appState.session || appState.session.locked) {
+    stopAutoLockTimer();
+    return;
+  }
+  startAutoLockTimer();
+}
+
 function stopAutoLockTimer() {
   if (appState.autoLockTimer !== null) {
     window.clearInterval(appState.autoLockTimer);
@@ -202,6 +211,7 @@ async function loadSession() {
   render();
   try {
     appState.session = await walletApi.getWallet();
+    syncAutoLockTimerWithSession();
   } catch (error) {
     pushToast(formatError(error), "error");
   } finally {
@@ -214,7 +224,7 @@ export async function boot() {
   await loadSession();
   bindEvents();
   installScrollbarBehavior();
-  startAutoLockTimer();
+  syncAutoLockTimerWithSession();
 
   document.addEventListener("click", () => {
     appState.lastActivity = Date.now();

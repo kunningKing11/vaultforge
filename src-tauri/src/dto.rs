@@ -36,20 +36,28 @@ pub(crate) struct WalletPayload {
 fn default_enabled_networks() -> Vec<String> {
     vec![
         "bitcoin".into(),
-        "ethereum".into(),
-        "avalanche_c".into(),
-        "bnb".into(),
-        "monad".into(),
-        "arbitrum_one".into(),
-        "base".into(),
-        "optimism".into(),
-        "polygon".into(),
+        "evm".into(),
         "filecoin".into(),
         "injective".into(),
         "solana".into(),
         "tron".into(),
         "zcash".into(),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::default_enabled_networks;
+    use crate::derivation::derive_addresses_from_mnemonic_filtered;
+
+    #[test]
+    fn default_enabled_networks_derives_evm_address() {
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let enabled: Vec<&str> = default_enabled_networks().iter().map(String::as_str).collect();
+        let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, &enabled).unwrap();
+
+        assert!(addresses.contains_key("evm"));
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize)]

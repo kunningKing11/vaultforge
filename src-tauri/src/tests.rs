@@ -1071,17 +1071,20 @@ fn encrypts_and_decrypts_wallet_payload() {
         passphrase_hash: hash_secret(passphrase),
         assets: starter_assets("ethereum"),
         activity: vec![activity("system", "Created", "Local", "1")],
-        enabled_networks: vec!["evm".to_string()],
-        auto_lock_timeout_secs: None,
+        enabled_networks: vec!["evm".to_string(), "bitcoin".to_string()],
+        auto_lock_timeout_secs: Some(300),
     };
     let (key, salt) = derive_storage_key(passphrase, None).unwrap();
     let stored = encrypt_wallet(&wallet, &key, &salt).unwrap();
+    assert_eq!(stored.version, 3);
     assert!(!stored.ciphertext.contains(&wallet.address));
 
     let decrypted = decrypt_wallet(&stored, passphrase).unwrap();
     assert_eq!(decrypted.name, wallet.name);
     assert_eq!(decrypted.mnemonic, wallet.mnemonic);
     assert_eq!(decrypted.created_at, wallet.created_at);
+    assert_eq!(decrypted.enabled_networks, wallet.enabled_networks);
+    assert_eq!(decrypted.auto_lock_timeout_secs, wallet.auto_lock_timeout_secs);
 }
 
 #[test]

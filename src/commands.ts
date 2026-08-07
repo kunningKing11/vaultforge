@@ -2,7 +2,7 @@ import { pushToast } from "./toasts";
 import { formatError, toWei } from "./format";
 import { walletApi } from "./walletApi";
 import { networkById } from "./networks";
-import { appState, addressForNetwork, selectedNetwork } from "./state";
+import { appState, addressForNetwork, generateRecoveryPhrase, selectedNetwork } from "./state";
 import { render } from "./render";
 import type { SessionCommand, WalletSession } from "./types";
 
@@ -15,7 +15,11 @@ export async function setupWizard() {
 
   if (!validatePassphraseConfirmation(passphrase, wizard.confirmPassphrase)) return;
 
-  if (mnemonic) {
+  if (wizard.flow === "import") {
+    if (!mnemonic) {
+      pushToast("Please enter a recovery phrase to import a wallet.", "error");
+      return;
+    }
     if (!validateRecoveryPhraseWordCount(mnemonic)) return;
     await runCommand("import_wallet", () =>
       walletApi.importWallet({
@@ -27,6 +31,17 @@ export async function setupWizard() {
       }),
     );
   } else {
+    if (!wizard.acknowledgedBackup) {
+      pushToast(
+        "Please confirm that you wrote down the recovery phrase before creating the wallet.",
+        "error",
+      );
+      return;
+    }
+    if (!wizard.generatedMnemonic) {
+      wizard.generatedMnemonic = generateRecoveryPhrase();
+    }
+    wizard.mnemonic = "";
     await runCommand("create_wallet", () =>
       walletApi.createWallet({
         name: wizard.name || "Primary Wallet",
@@ -189,9 +204,11 @@ export async function lockWallet() {
   appState.busy = true;
   render();
   try {
+    stopAutoLockTimer();
     await walletApi.lockWallet();
     stopPendingTxPolling();
     appState.session = await walletApi.getWallet();
+    syncAutoLockTimerWithSession();
     appState.currentView = "dashboard";
     pushToast(successMessage("lock_wallet"), "success");
   } catch (error) {
@@ -272,6 +289,32 @@ function stopLockedDeleteTimer() {
   }
 }
 
+function stopAutoLockTimer() {
+  if (appState.autoLockTimer !== null) {
+    window.clearInterval(appState.autoLockTimer);
+    appState.autoLockTimer = null;
+  }
+}
+
+function startAutoLockTimer() {
+  stopAutoLockTimer();
+  const timeout = appState.session?.auto_lock_timeout_secs;
+  if (!timeout) return;
+  appState.autoLockTimer = window.setInterval(() => {
+    if (Date.now() - appState.lastActivity > timeout * 1000) {
+      void lockWallet();
+    }
+  }, 30_000);
+}
+
+function syncAutoLockTimerWithSession() {
+  if (!appState.session || appState.session.locked) {
+    stopAutoLockTimer();
+    return;
+  }
+  startAutoLockTimer();
+}
+
 export async function refreshPrices() {
   await runCommand("refresh_prices", () => walletApi.refreshPrices());
 }
@@ -281,7 +324,13 @@ async function runCommand(command: SessionCommand, action: () => Promise<WalletS
   render();
   try {
     const result = await action();
-    if (result) appState.session = result;
+    if (result) {
+      appState.session = result;
+      if (command === "unlock_wallet") {
+        appState.lastActivity = Date.now();
+      }
+      syncAutoLockTimerWithSession();
+    }
     pushToast(successMessage(command), "success");
     return true;
   } catch (error) {
