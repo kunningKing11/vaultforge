@@ -1,5 +1,6 @@
 import { networks } from "../networks";
-import { appState } from "../state";
+import { appState, generateRecoveryPhrase } from "../state";
+import { escapeHtml } from "../format";
 import { featureCard, passphraseMeter } from "./shared";
 
 export function splashView() {
@@ -14,10 +15,10 @@ export function splashView() {
 }
 
 export function onboardingView() {
-  const w = appState.setupWizard;
+  const wizard = appState.setupWizard;
   const stepIndicator = (n: number, label: string) =>
-    `<div class="flex items-center gap-2 ${w.step === n ? "text-white" : "text-slate-500"}">
-      <span class="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${w.step === n ? "bg-white/20" : "bg-white/5"}">${n}</span>
+    `<div class="flex items-center gap-2 ${wizard.step === n ? "text-white" : "text-slate-500"}">
+      <span class="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${wizard.step === n ? "bg-white/20" : "bg-white/5"}">${n}</span>
       <span class="text-sm font-bold">${label}</span>
     </div>`;
 
@@ -40,7 +41,7 @@ export function onboardingView() {
         <div class="mb-6 flex items-center justify-between">
           <div>
             <p class="text-sm font-bold uppercase tracking-[0.3em] text-slate-500">Wallet Setup</p>
-            <h2 class="text-2xl font-black">${w.step === 1 ? "Get started" : w.step === 2 ? (w.flow === "import" ? "Import wallet" : "Create wallet") : w.step === 3 ? "Settings" : "Confirm"}</h2>
+            <h2 class="text-2xl font-black">${wizard.step === 1 ? "Get started" : wizard.step === 2 ? (wizard.flow === "import" ? "Import wallet" : "Create wallet") : wizard.step === 3 ? "Settings" : "Confirm"}</h2>
           </div>
         </div>
 
@@ -51,10 +52,10 @@ export function onboardingView() {
           ${stepIndicator(4, "Backup")}
         </div>
 
-        ${w.step === 1 ? step1() : ""}
-        ${w.step === 2 ? step2() : ""}
-        ${w.step === 3 ? step3() : ""}
-        ${w.step === 4 ? step4() : ""}
+        ${wizard.step === 1 ? step1() : ""}
+        ${wizard.step === 2 ? step2() : ""}
+        ${wizard.step === 3 ? step3() : ""}
+        ${wizard.step === 4 ? step4() : ""}
       </div>
     </section>
   `;
@@ -71,8 +72,8 @@ function step1() {
 }
 
 function step2() {
-  const w = appState.setupWizard;
-  const isImport = w.flow === "import";
+  const wizard = appState.setupWizard;
+  const isImport = wizard.flow === "import";
   return `
     <div class="space-y-4">
       ${
@@ -80,26 +81,26 @@ function step2() {
           ? `
         <label class="block space-y-2">
           <span class="text-sm font-bold text-slate-300">Wallet name</span>
-          <input class="field" data-wizard-field="name" value="${w.name}" placeholder="Primary Vault" />
+          <input class="field" data-wizard-field="name" value="${escapeHtml(wizard.name)}" placeholder="Primary Vault" />
         </label>
       `
           : ""
       }
       <label class="block space-y-2">
         <span class="text-sm font-bold text-slate-300">Passphrase</span>
-        <input class="field" data-wizard-field="passphrase" type="password" minlength="8" placeholder="Minimum 8 characters" data-passphrase-input value="${w.passphrase}" />
+        <input class="field" data-wizard-field="passphrase" type="password" minlength="8" placeholder="Minimum 8 characters" data-passphrase-input value="${escapeHtml(wizard.passphrase)}" />
       </label>
       ${passphraseMeter()}
       <label class="block space-y-2">
         <span class="text-sm font-bold text-slate-300">Confirm passphrase</span>
-        <input class="field" data-wizard-field="confirmPassphrase" type="password" minlength="8" value="${w.confirmPassphrase}" />
+        <input class="field" data-wizard-field="confirmPassphrase" type="password" minlength="8" value="${escapeHtml(wizard.confirmPassphrase)}" />
       </label>
       ${
         isImport
           ? `
         <label class="block space-y-2">
           <span class="text-sm font-bold text-slate-300">Recovery phrase</span>
-          <textarea class="field min-h-28" data-wizard-field="mnemonic" placeholder="12 or 24 word phrase">${w.mnemonic}</textarea>
+          <textarea class="field min-h-28" data-wizard-field="mnemonic" placeholder="12 or 24 word phrase">${escapeHtml(wizard.mnemonic)}</textarea>
         </label>
       `
           : ""
@@ -113,15 +114,17 @@ function step2() {
 }
 
 function step3() {
-  const w = appState.setupWizard;
+  const wizard = appState.setupWizard;
   const autoLockOptions = [
     { label: "Off", value: "0" },
     { label: "5 minutes", value: "300" },
+    { label: "10 minutes", value: "600" },
     { label: "15 minutes", value: "900" },
     { label: "30 minutes", value: "1800" },
     { label: "1 hour", value: "3600" },
   ];
-  const currentAutoLock = w.autoLockTimeoutSecs === null ? "0" : String(w.autoLockTimeoutSecs);
+  const currentAutoLock =
+    wizard.autoLockTimeoutSecs === null ? "0" : String(wizard.autoLockTimeoutSecs);
 
   return `
     <div class="space-y-5">
@@ -132,7 +135,7 @@ function step3() {
             .map(
               (n) => `
             <label class="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm transition hover:bg-white/5 cursor-pointer">
-              <input type="checkbox" data-wizard-network="${n.id}" ${w.enabledNetworks.includes(n.id) ? "checked" : ""} class="accent-white" />
+              <input type="checkbox" data-wizard-network="${n.id}" ${wizard.enabledNetworks.includes(n.id) ? "checked" : ""} class="accent-white" />
               <span class="font-bold">${n.nickname ?? n.name}</span>
             </label>
           `,
@@ -155,11 +158,14 @@ function step3() {
 }
 
 function step4() {
-  const w = appState.setupWizard;
-  const isImport = w.flow === "import";
+  const wizard = appState.setupWizard;
+  const isImport = wizard.flow === "import";
+  if (!isImport && !wizard.generatedMnemonic) {
+    wizard.generatedMnemonic = generateRecoveryPhrase();
+  }
 
   return `
-    <div class="space-y-4">
+    <form class="space-y-4" data-action="wallet-setup">
       <div class="rounded-xl border border-white/10 bg-white/5 p-4">
         <h3 class="mb-2 font-black">${isImport ? "Import summary" : "Backup your recovery phrase"}</h3>
         ${
@@ -169,18 +175,22 @@ function step4() {
         `
             : `
           <p class="text-sm text-slate-300">Write down your 12-word recovery phrase and store it securely. It is the only way to recover your wallet.</p>
-          <p class="mt-2 rounded-lg bg-white/5 p-3 font-mono text-sm text-white break-words">${w.mnemonic || "Generated on confirm — phrase will appear here"}</p>
+          <p class="mt-2 rounded-lg bg-white/5 p-3 font-mono text-sm text-white break-words">${escapeHtml(wizard.generatedMnemonic || "Generated on confirm — phrase will appear here")}</p>
+          <label class="mt-3 flex items-start gap-2 rounded-lg border border-white/10 bg-black/10 p-3 text-sm text-slate-300">
+            <input class="mt-1 accent-white" type="checkbox" data-wizard-field="acknowledgedBackup" ${wizard.acknowledgedBackup ? "checked" : ""} />
+            <span>I have written down this recovery phrase and understand it is required to recover the wallet.</span>
+          </label>
         `
         }
       </div>
       <div class="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-        <p><span class="font-bold text-white">Networks:</span> ${w.enabledNetworks.length} enabled</p>
-        <p><span class="font-bold text-white">Auto-lock:</span> ${w.autoLockTimeoutSecs ? `${w.autoLockTimeoutSecs / 60} min` : "Off"}</p>
+        <p><span class="font-bold text-white">Networks:</span> ${wizard.enabledNetworks.length} enabled</p>
+        <p><span class="font-bold text-white">Auto-lock:</span> ${wizard.autoLockTimeoutSecs ? `${wizard.autoLockTimeoutSecs / 60} min` : "Off"}</p>
       </div>
       <div class="flex gap-3 pt-2">
         <button class="btn-secondary flex-1" type="button" data-action="setup-prev">Back</button>
         <button class="btn-primary flex-1" type="submit" data-action="wallet-setup">${isImport ? "Import wallet" : "Generate wallet"}</button>
       </div>
-    </div>
+    </form>
   `;
 }

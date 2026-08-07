@@ -10,7 +10,7 @@ export function walletShell() {
       <aside class="glass hidden rounded-[2rem] p-5 lg:sticky lg:top-5 lg:h-[calc(100vh-2.5rem)] lg:flex lg:min-h-0 lg:flex-col">
         <div class="mb-8 flex shrink-0 items-center gap-3">
           <img class="h-12 w-12 rounded-2xl" src="${appLogoUrl}" alt="VaultForge App Logo" />
-          <div><p class="font-black">${escapeHtml(appState.session.wallet_name)}</p></div>
+          <div><p class="font-black">${escapeHtml(appState.session.wallet_name ?? "")}</p></div>
         </div>
         <div class="sidebar-nav-shell min-h-0 flex-1">
           <nav id="sidebar-nav" class="sidebar-nav min-h-0 flex-1 space-y-2" data-sidebar-scroll tabindex="0" aria-label="Wallet sections">
@@ -46,7 +46,7 @@ function topBar() {
   return `
     <header class="glass flex flex-col gap-4 rounded-[2rem] p-5 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h1 class="mt-1 text-4xl font-black">${escapeHtml(appState.session.wallet_name)}</h1>
+        <h1 class="mt-1 text-4xl font-black">${escapeHtml(appState.session.wallet_name ?? "")}</h1>
       </div>
       <div class="flex flex-wrap gap-3">
         <button class="btn-secondary" data-action="refresh" type="button">Refresh</button>

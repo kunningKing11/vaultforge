@@ -135,6 +135,19 @@ fn derive_wallet_keys(mnemonic: &str) -> Result<DerivedWalletKeys, String> {
     })
 }
 
+pub(crate) fn derivation_family(network_id: &str) -> Option<&'static str> {
+    match network_id {
+        "bitcoin" => Some("bitcoin"),
+        "evm" | "ethereum" | "avalanche_c" | "bnb" | "monad" | "arbitrum_one" | "base" | "optimism" | "polygon" => Some("evm"),
+        "filecoin" => Some("filecoin"),
+        "injective" => Some("injective"),
+        "solana" => Some("solana"),
+        "tron" => Some("tron"),
+        "zcash" => Some("zcash"),
+        _ => None,
+    }
+}
+
 pub(crate) fn derive_addresses_from_mnemonic_filtered(
     mnemonic: &str,
     enabled: &[&str],
@@ -142,47 +155,54 @@ pub(crate) fn derive_addresses_from_mnemonic_filtered(
     let keys = derive_wallet_keys(mnemonic)?;
     let mut addresses = HashMap::new();
 
-    if enabled.contains(&"bitcoin") {
-        addresses.insert(
-            "bitcoin".to_string(),
-            bitcoin_bech32_address(&keys.bitcoin, false)?,
-        );
-    }
-    if enabled.contains(&"evm") {
-        addresses.insert(
-            "evm".to_string(),
-            ethereum_address_from_private_key(&keys.evm)?,
-        );
-    }
-    if enabled.contains(&"filecoin") {
-        addresses.insert(
-            "filecoin".to_string(),
-            filecoin_address_from_private_key(&keys.filecoin)?,
-        );
-    }
-    if enabled.contains(&"injective") {
-        addresses.insert(
-            "injective".to_string(),
-            bech32_account_address(&keys.injective, "inj")?,
-        );
-    }
-    if enabled.contains(&"solana") {
-        addresses.insert(
-            "solana".to_string(),
-            solana_address_from_secret_key(&keys.solana)?,
-        );
-    }
-    if enabled.contains(&"tron") {
-        addresses.insert(
-            "tron".to_string(),
-            tron_address_from_private_key(&keys.tron)?,
-        );
-    }
-    if enabled.contains(&"zcash") {
-        addresses.insert(
-            "zcash".to_string(),
-            zcash_transparent_address(&keys.zcash, false)?,
-        );
+    for network_id in enabled {
+        if let Some(family) = derivation_family(network_id) {
+            match family {
+                "bitcoin" => {
+                    addresses.insert(
+                        "bitcoin".to_string(),
+                        bitcoin_bech32_address(&keys.bitcoin, false)?,
+                    );
+                }
+                "evm" => {
+                    addresses.insert(
+                        "evm".to_string(),
+                        ethereum_address_from_private_key(&keys.evm)?,
+                    );
+                }
+                "filecoin" => {
+                    addresses.insert(
+                        "filecoin".to_string(),
+                        filecoin_address_from_private_key(&keys.filecoin)?,
+                    );
+                }
+                "injective" => {
+                    addresses.insert(
+                        "injective".to_string(),
+                        bech32_account_address(&keys.injective, "inj")?,
+                    );
+                }
+                "solana" => {
+                    addresses.insert(
+                        "solana".to_string(),
+                        solana_address_from_secret_key(&keys.solana)?,
+                    );
+                }
+                "tron" => {
+                    addresses.insert(
+                        "tron".to_string(),
+                        tron_address_from_private_key(&keys.tron)?,
+                    );
+                }
+                "zcash" => {
+                    addresses.insert(
+                        "zcash".to_string(),
+                        zcash_transparent_address(&keys.zcash, false)?,
+                    );
+                }
+                _ => {}
+            }
+        }
     }
 
     Ok(addresses)

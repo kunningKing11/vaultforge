@@ -1,6 +1,6 @@
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use chrono::Utc;
-use std::{fs, sync::Mutex};
+use std::{collections::HashMap, fs, sync::Mutex};
 use tauri::State;
 use zeroize::Zeroize;
 
@@ -8,7 +8,7 @@ use crate::activity::{activity, hash_secret};
 use crate::commands::market::refresh_asset_prices;
 use crate::derivation::{
     address_from_seed, derive_addresses_from_mnemonic, derive_addresses_from_mnemonic_filtered,
-    generate_mnemonic,
+    derivation_family, generate_mnemonic,
     validate_recovery_phrase_word_count,
 };
 use crate::dto::{Wallet, WalletSession};
@@ -136,6 +136,22 @@ pub(crate) async fn import_wallet(
     Ok(session_from_state(&state))
 }
 
+fn enabled_address_subset(
+    addresses: &HashMap<String, String>,
+    enabled_networks: &[String],
+) -> HashMap<String, String> {
+    let mut filtered = HashMap::new();
+    for network_id in enabled_networks {
+        let Some(family) = derivation_family(network_id.as_str()) else {
+            continue;
+        };
+        if let Some(address) = addresses.get(family) {
+            filtered.insert(family.to_string(), address.clone());
+        }
+    }
+    filtered
+}
+
 #[tauri::command]
 pub(crate) async fn unlock_wallet(
     state: State<'_, Mutex<AppState>>,
@@ -143,7 +159,7 @@ pub(crate) async fn unlock_wallet(
 ) -> Result<WalletSession, String> {
     let passphrase_hash = hash_secret(&passphrase);
 
-    let (address, addresses, cached_assets) = {
+    let (address, addresses, cached_assets, enabled_networks) = {
         let mut state = state.lock().map_err(|_| "State lock failed")?;
 
         let in_memory = state.wallet.as_ref().map(|w| {
@@ -152,15 +168,16 @@ pub(crate) async fn unlock_wallet(
                 w.address.clone(),
                 w.addresses.clone(),
                 w.assets.clone(),
+                w.enabled_networks.clone(),
             )
         });
 
-        if let Some((stored_hash, addr, addresses, assets)) = in_memory {
+        if let Some((stored_hash, addr, addresses, assets, enabled_networks)) = in_memory {
             if stored_hash != passphrase_hash {
                 return Err("Invalid passphrase".to_string());
             }
             state.locked = false;
-            (addr, addresses, assets)
+            (addr, addresses, assets, enabled_networks)
         } else {
             let stored = read_stored_wallet(&state.storage_path)?
                 .ok_or_else(|| "No wallet exists yet".to_string())?;
@@ -181,16 +198,38 @@ pub(crate) async fn unlock_wallet(
             let address = wallet.address.clone();
             let addresses = wallet.addresses.clone();
             let assets = wallet.assets.clone();
+            let enabled_networks = wallet.enabled_networks.clone();
             state.wallet = Some(wallet);
             state.locked = false;
-            (address, addresses, assets)
+            (address, addresses, assets, enabled_networks)
         }
     };
 
-    let mut refresh_addresses = addresses;
-    refresh_addresses
-        .entry("evm".to_string())
-        .or_insert(address);
+    let mut refresh_addresses = enabled_address_subset(&addresses, &enabled_networks);
+    if refresh_addresses.is_empty() {
+        for network_id in &enabled_networks {
+            let Some(family) = derivation_family(network_id.as_str()) else {
+                continue;
+            };
+            if let Some(address_value) = addresses.get(family) {
+                refresh_addresses.insert(family.to_string(), address_value.clone());
+                break;
+            }
+        }
+    }
+    if !refresh_addresses.contains_key("evm")
+        && enabled_networks.iter().any(|n| derivation_family(n.as_str()) == Some("evm"))
+    {
+        if let Some(address_value) = addresses.get("evm") {
+            refresh_addresses.insert("evm".to_string(), address_value.clone());
+        }
+    }
+    let primary_address = refresh_addresses
+        .values()
+        .next()
+        .cloned()
+        .unwrap_or_else(|| address.clone());
+    let _ = primary_address;
     let mut fresh_assets = fetch_portfolio_assets(&refresh_addresses, &cached_assets).await;
     let _ = refresh_asset_prices(&mut fresh_assets).await;
 

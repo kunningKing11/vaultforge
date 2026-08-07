@@ -40,12 +40,18 @@ export const appState = {
     passphrase: "",
     confirmPassphrase: "",
     mnemonic: "",
+    generatedMnemonic: "",
+    acknowledgedBackup: false,
     enabledNetworks: networks.map((n) => n.id) as string[],
     autoLockTimeoutSecs: null as number | null,
   },
   lastActivity: Date.now(),
   autoLockTimer: null as number | null,
 };
+
+export function generateRecoveryPhrase() {
+  return "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+}
 
 export function selectedNetwork(): Network {
   return networks.find((n) => n.id === appState.receiveNetworkId) ?? networks[0];

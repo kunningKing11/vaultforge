@@ -1,7 +1,7 @@
 {
   "fonts": {
-    "body": "Manrope, SF Pro Text, Segoe UI, ui-sans-serif, system-ui, sans-serif",
-    "display": "Tektur, Arial Narrow, Roboto Condensed, ui-sans-serif, sans-serif",
+    "body": "Manrope Variable, Manrope, SF Pro Text, Segoe UI, ui-sans-serif, system-ui, sans-serif",
+    "display": "Tektur Variable, Tektur, Arial Narrow, Roboto Condensed, ui-sans-serif, sans-serif",
     "mono": "Ubuntu Mono, JetBrains Mono, Cascadia Mono, SFMono-Regular, Consolas, monospace"
   },
   "colors": {
