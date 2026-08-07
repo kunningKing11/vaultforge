@@ -54,12 +54,12 @@ function dashboardView() {
         <section class="glass min-w-0 overflow-hidden rounded-[2rem] p-6">
           <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div class="min-w-0">
-              <p class="theme-text-accent text-sm uppercase tracking-[0.3em]">Portfolio</p>
+              <p class="theme-text-accent text-sm font-bold uppercase tracking-[0.3em]">Portfolio</p>
               <h2 class="mt-3 max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">Multi-asset wallet with transaction controls.</h2>
             </div>
             <div class="grid shrink-0 gap-3 sm:grid-cols-1">
               <div class="theme-panel-accent min-w-0 rounded-2xl border p-4 text-right">
-                <p class="text-sm text-slate-400">Weighted 24h</p>
+                <p class="text-sm font-bold text-slate-400">Weighted 24h</p>
                 <p class="max-w-full break-words text-2xl font-black leading-none sm:text-3xl ${change >= 0 ? "text-emerald-300" : "text-rose-300"}">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</p>
               </div>
             </div>
@@ -72,7 +72,7 @@ function dashboardView() {
           </div>
         </section>
         <section class="glass rounded-[2rem] p-6">
-          <div class="mb-5 flex items-center justify-between"><h2 class="text-xl font-black">Recent activity</h2><button class="theme-text-accent text-sm font-bold" data-view="activity">View all</button></div>
+          <div class="mb-5 flex items-center justify-between"><h2 class="text-xl font-black">Recent activity</h2><button class="theme-text-accent text-sm font-bold font-bold" data-view="activity">View all</button></div>
           <div class="space-y-3">${recent}</div>
         </section>
       </div>
@@ -90,16 +90,16 @@ function sendView() {
 
   return `
     <section class="glass max-w-3xl rounded-[2rem] p-6">
-      <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Transfer</p>
+      <p class="text-sm font-bold uppercase tracking-[0.3em] text-slate-500">Transfer</p>
       <h2 class="mt-2 text-3xl font-black">Send crypto</h2>
-      <p class="mt-3 text-sm leading-6 text-slate-400">Transactions are signed locally before broadcast to the chain RPC. Review the signature before funds leave your balance.</p>
+      <p class="mt-3 text-sm font-bold leading-6 text-slate-400">Transactions are signed locally before broadcast to the chain RPC. Review the signature before funds leave your balance.</p>
       <form data-action="sign-transaction" class="mt-6 grid gap-4">
-        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Recipient address</span><input class="field" name="to" data-recipient-address placeholder="${addressPlaceholder(selectedSymbol)}" value="${escapeHtml(appState.sendDraft.to)}" required /></label>
+        <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Recipient address</span><input class="field" name="to" data-recipient-address placeholder="${addressPlaceholder(selectedSymbol)}" value="${escapeHtml(appState.sendDraft.to)}" required /></label>
         <div class="grid gap-4 sm:grid-cols-2">
-          <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Asset</span>${sendAssetSelect(selectedAssetId)}</label>
-          <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" value="${escapeHtml(appState.sendDraft.amount)}" required /></label>
+          <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Asset</span>${sendAssetSelect(selectedAssetId)}</label>
+          <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" value="${escapeHtml(appState.sendDraft.amount)}" required /></label>
         </div>
-        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Note</span><input class="field" name="note" placeholder="Optional transaction memo" value="${escapeHtml(appState.sendDraft.note)}" /></label>
+        <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Note</span><input class="field" name="note" placeholder="Optional transaction memo" value="${escapeHtml(appState.sendDraft.note)}" /></label>
         <button class="btn-primary justify-self-start" type="submit">Sign transaction</button>
       </form>
     </section>
@@ -118,9 +118,9 @@ function signedTransactionView(signed: SignedTransaction) {
     <section class="glass max-w-4xl rounded-[2rem] p-6">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p class="theme-text-accent text-sm uppercase tracking-[0.3em]">Signed transfer</p>
+          <p class="theme-text-accent text-sm font-bold uppercase tracking-[0.3em]">Signed transfer</p>
           <h2 class="mt-2 text-3xl font-black">Review signature</h2>
-          <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-400">The backend signed this chain-specific transaction with the derived key material. Broadcast only if the details match your intent.</p>
+          <p class="mt-3 max-w-2xl text-sm font-bold leading-6 text-slate-400">The backend signed this chain-specific transaction with the derived key material. Broadcast only if the details match your intent.</p>
         </div>
         <span class="theme-pill-accent rounded-full border-0 px-3 py-1 text-xs font-black uppercase tracking-[0.2em]">Ready</span>
       </div>
@@ -153,16 +153,17 @@ function receiveView() {
   const address = addressForNetwork(network);
   const payload = receivePayload();
   const qrContent = payload
-    ? appState.qrSvg || `<span class="text-sm font-bold text-slate-500">Generating QR...</span>`
-    : `<span class="text-sm font-bold text-slate-500">Receive is not available for this network yet.</span>`;
+    ? appState.qrSvg ||
+      `<span class="text-sm font-bold font-bold text-slate-500">Generating QR...</span>`
+    : `<span class="text-sm font-bold font-bold text-slate-500">Receive is not available for this network yet.</span>`;
   const qrActionsDisabled = payload ? "" : "disabled";
   return `
     <section class="glass max-w-3xl rounded-[2rem] p-6">
-      <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Receive</p>
+      <p class="text-sm font-bold uppercase tracking-[0.3em] text-slate-500">Receive</p>
       <h2 class="mt-2 text-3xl font-black">Deposit address</h2>
       <div class="mt-6 grid gap-4 sm:grid-cols-2">
-        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Receive network</span>${receiveNetworkSelect()}</label>
-        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">QR resilience</span>${qrResilienceSelect()}</label>
+        <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Receive network</span>${receiveNetworkSelect()}</label>
+        <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">QR resilience</span>${qrResilienceSelect()}</label>
       </div>
       <div class="theme-panel-accent mt-6 rounded-3xl border border-dashed p-6 text-center">
         <div class="theme-glow qr-code mx-auto flex h-56 w-56 items-center justify-center rounded-2xl bg-white p-4">${qrContent}</div>
@@ -173,11 +174,11 @@ function receiveView() {
         <div class="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-left">
           <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <p class="font-black">${escapeHtml(network.name)} receive payload</p>
-            <span class="text-sm text-slate-400">${escapeHtml(networkDetail(network))}</span>
+            <span class="text-sm font-bold text-slate-400">${escapeHtml(networkDetail(network))}</span>
           </div>
           <p class="mt-3 break-all font-mono text-xs text-slate-400">${escapeHtml(payload)}</p>
         </div>
-        <p class="mt-5 break-all font-mono text-sm text-slate-200">${escapeHtml(address)}</p>
+        <p class="mt-5 break-all font-mono text-sm font-bold text-slate-200">${escapeHtml(address)}</p>
         <button class="btn-primary mt-5" data-action="copy-receive-address" type="button">Copy address</button>
       </div>
     </section>
@@ -187,14 +188,14 @@ function receiveView() {
 function swapView() {
   return `
     <section class="glass max-w-3xl rounded-[2rem] p-6">
-      <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Exchange</p>
+      <p class="text-sm font-bold uppercase tracking-[0.3em] text-slate-500">Exchange</p>
       <h2 class="mt-2 text-3xl font-black">Swap assets</h2>
       <form data-action="swap-tokens" class="mt-6 grid gap-4">
         <div class="grid gap-4 sm:grid-cols-2">
-          <label class="space-y-2"><span class="text-sm font-bold text-slate-300">From</span>${assetSelect("fromSymbol")}</label>
-          <label class="space-y-2"><span class="text-sm font-bold text-slate-300">To</span>${assetSelect("toSymbol", "USDC")}</label>
+          <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">From</span>${assetSelect("fromSymbol")}</label>
+          <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">To</span>${assetSelect("toSymbol", "USDC")}</label>
         </div>
-        <label class="space-y-2"><span class="text-sm font-bold text-slate-300">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" required /></label>
+        <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" required /></label>
         <button class="btn-primary justify-self-start" type="submit">Execute simulated swap</button>
       </form>
     </section>
@@ -205,7 +206,7 @@ function assetsView() {
   const assets = appState.session?.assets ?? [];
   return `
     <section class="glass rounded-[2rem] p-6">
-      <div class="mb-5 flex items-center justify-between"><h2 class="text-2xl font-black">Assets</h2><span class="text-sm text-slate-500">${assets.length} tracked</span></div>
+      <div class="mb-5 flex items-center justify-between"><h2 class="text-2xl font-black">Assets</h2><span class="text-sm font-bold text-slate-500">${assets.length} tracked</span></div>
       <div class="grid gap-4 lg:grid-cols-2">${assets.map(assetCard).join("") || emptyState("No assets tracked", "Unlock or create a wallet to view simulated asset balances.")}</div>
     </section>
   `;
@@ -228,12 +229,12 @@ function settingsView() {
   return `
     <div class="grid gap-5 xl:grid-cols-[0.95fr_1fr]">
       <section class="glass rounded-[2rem] p-6">
-        <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Preferences</p>
+        <p class="text-sm font-bold uppercase tracking-[0.3em] text-slate-500">Preferences</p>
         <h2 class="mt-2 text-3xl font-black">Wallet settings</h2>
-        <div class="mt-6 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm text-amber-100">This build simulates balances and transactions. Connect audited chain clients and hardware-backed signing before using real funds.</div>
+        <div class="mt-6 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm font-bold text-amber-100">This build simulates balances and transactions. Connect audited chain clients and hardware-backed signing before using real funds.</div>
       </section>
       <section class="glass rounded-[2rem] p-6">
-        <p class="theme-text-accent text-sm uppercase tracking-[0.3em]">Security center</p>
+        <p class="theme-text-accent text-sm font-bold uppercase tracking-[0.3em]">Security center</p>
         <h2 class="mt-2 text-3xl font-black">Local protection</h2>
         <div class="mt-6 grid gap-3 sm:grid-cols-2">
           ${securityTile("Storage", "AES-GCM encrypted")}
@@ -243,7 +244,7 @@ function settingsView() {
         </div>
         <div class="mt-6 rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4">
           <h3 class="font-black text-rose-100">Danger zone</h3>
-          <p class="mt-2 text-sm leading-6 text-rose-100/80">Remove the encrypted local wallet file and return this app to onboarding.</p>
+          <p class="mt-2 text-sm font-bold leading-6 text-rose-100/80">Remove the encrypted local wallet file and return this app to onboarding.</p>
           <button class="btn-danger mt-4" data-action="clear-wallet" type="button">Clear local wallet</button>
         </div>
       </section>
@@ -255,7 +256,7 @@ function signedDetail(label: string, value: string, mono = false) {
   return `
     <div class="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
       <p class="text-xs uppercase tracking-[0.22em] text-slate-500">${escapeHtml(label)}</p>
-      <p class="mt-2 ${mono ? "break-all font-mono text-xs" : "text-sm font-bold"} text-slate-200">${escapeHtml(value)}</p>
+      <p class="mt-2 ${mono ? "break-all font-mono text-xs" : "text-sm font-bold font-bold"} text-slate-200">${escapeHtml(value)}</p>
     </div>
   `;
 }
