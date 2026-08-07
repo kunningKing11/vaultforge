@@ -8,32 +8,24 @@ import type { SessionCommand, WalletSession } from "./types";
 
 const BIP39_WORD_COUNTS = new Set([12, 15, 18, 21, 24]);
 
-export async function createWallet(form: HTMLFormElement) {
+export async function setupWallet(form: HTMLFormElement) {
   const formData = new FormData(form);
   const passphrase = String(formData.get("passphrase") || "");
+  const mnemonic = String(formData.get("mnemonic") || "").trim();
+
   if (!validatePassphraseConfirmation(form, passphrase)) return;
 
-  await runCommand("create_wallet", () =>
-    walletApi.createWallet({
-      name: String(formData.get("name") || "Primary Wallet"),
-      passphrase,
-    }),
-  );
-}
-
-export async function importWallet(form: HTMLFormElement) {
-  const formData = new FormData(form);
-  const mnemonic = String(formData.get("mnemonic") || "");
-  const passphrase = String(formData.get("passphrase") || "");
-  if (!validateRecoveryPhraseWordCount(mnemonic)) return;
-  if (!validatePassphraseConfirmation(form, passphrase)) return;
-
-  await runCommand("import_wallet", () =>
-    walletApi.importWallet({
-      mnemonic,
-      passphrase,
-    }),
-  );
+  if (mnemonic) {
+    if (!validateRecoveryPhraseWordCount(mnemonic)) return;
+    await runCommand("import_wallet", () => walletApi.importWallet({ mnemonic, passphrase }));
+  } else {
+    await runCommand("create_wallet", () =>
+      walletApi.createWallet({
+        name: String(formData.get("name") || "Primary Vault"),
+        passphrase,
+      }),
+    );
+  }
 }
 
 export async function unlockWallet(form: HTMLFormElement) {
