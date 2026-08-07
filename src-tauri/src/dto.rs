@@ -53,7 +53,8 @@ mod tests {
     #[test]
     fn default_enabled_networks_derives_evm_address() {
         let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-        let enabled: Vec<&str> = default_enabled_networks().iter().map(String::as_str).collect();
+        let enabled_networks = default_enabled_networks();
+        let enabled: Vec<&str> = enabled_networks.iter().map(String::as_str).collect();
         let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, &enabled).unwrap();
 
         assert!(addresses.contains_key("evm"));

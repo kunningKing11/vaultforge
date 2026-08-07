@@ -38,15 +38,24 @@ pub(crate) fn get_wallet(state: State<'_, Mutex<AppState>>) -> Result<WalletSess
 }
 
 #[tauri::command]
+pub(crate) fn generate_mnemonic_cmd(word_count: Option<u32>) -> Result<String, String> {
+    generate_mnemonic(word_count.unwrap_or(24))
+}
+
+#[tauri::command]
 pub(crate) async fn create_wallet(
     state: State<'_, Mutex<AppState>>,
     name: String,
     passphrase: String,
     enabled_networks: Vec<String>,
     auto_lock_timeout_secs: Option<u64>,
+    mnemonic: Option<String>,
 ) -> Result<WalletSession, String> {
     validate_passphrase(&passphrase)?;
-    let mnemonic = generate_mnemonic()?;
+    let mnemonic = match mnemonic {
+        Some(m) if !m.trim().is_empty() => m.trim().to_string(),
+        _ => generate_mnemonic(12)?,
+    };
     let network_refs: Vec<&str> = enabled_networks.iter().map(|s| s.as_str()).collect();
     let addresses = derive_addresses_from_mnemonic_filtered(&mnemonic, &network_refs)?;
     let primary_address = addresses
