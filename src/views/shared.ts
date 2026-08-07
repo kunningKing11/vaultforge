@@ -20,11 +20,11 @@ export function assetCard(asset: Asset) {
   return `
     <article class="asset-card rounded-3xl border border-white/10 bg-white/[0.04] p-5">
       <div class="flex items-start justify-between gap-4">
-        <div class="asset-card-header"><p class="truncate text-lg font-black">${escapeHtml(asset.symbol)}</p><p class="truncate text-sm text-slate-500">${escapeHtml(asset.name)}</p></div>
+        <div class="asset-card-header"><p class="truncate text-lg font-black">${escapeHtml(asset.symbol)}</p><p class="truncate text-sm font-bold text-slate-500">${escapeHtml(asset.name)}</p></div>
         <span class="asset-change rounded-full ${positive ? "bg-emerald-400/10 text-emerald-300" : "bg-rose-400/10 text-rose-300"} px-3 py-1 text-xs font-bold">${positive ? "+" : ""}${asset.change_24h.toFixed(2)}%</span>
       </div>
       <p class="asset-value mt-5 text-2xl font-black">${money(value)}</p>
-      <p class="mt-1 text-sm text-slate-400">${formatWei(asset.balance, asset.decimals)} ${escapeHtml(asset.symbol)}</p>
+      <p class="mt-1 text-sm font-bold text-slate-400">${formatWei(asset.balance, asset.decimals)} ${escapeHtml(asset.symbol)}</p>
       <div class="mt-4">
         <div class="flex justify-between text-xs font-bold text-slate-500"><span>Allocation</span><span>${allocation.toFixed(1)}%</span></div>
         <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-900"><div class="theme-progress-accent h-full rounded-full" style="width: ${Math.max(2, allocation).toFixed(1)}%"></div></div>
@@ -38,13 +38,13 @@ export function assetValue(asset: Asset) {
 }
 
 export function emptyState(title: string, body: string) {
-  return `<div class="rounded-3xl border border-dashed border-white/10 bg-white/[0.025] p-6 text-center"><p class="font-black text-slate-200">${escapeHtml(title)}</p><p class="mt-2 text-sm leading-6 text-slate-500">${escapeHtml(body)}</p></div>`;
+  return `<div class="rounded-3xl border border-dashed border-white/10 bg-white/[0.025] p-6 text-center"><p class="font-black text-slate-200">${escapeHtml(title)}</p><p class="mt-2 text-sm font-bold leading-6 text-slate-500">${escapeHtml(body)}</p></div>`;
 }
 
 export function activityRow(item: Activity) {
   return `
     <article class="flex cursor-pointer flex-col gap-3 rounded-2xl border ${appState.selectedActivityId === item.id ? "theme-activity-selected" : "border-white/10 bg-white/[0.035]"} p-4 sm:flex-row sm:items-center sm:justify-between" data-action="select-activity" data-activity-id="${escapeHtml(item.id)}">
-      <div><p class="font-black">${escapeHtml(item.title)}</p><p class="mt-1 text-sm text-slate-500">${escapeHtml(item.subtitle)} - ${new Date(item.timestamp).toLocaleString()}</p></div>
+      <div><p class="font-black">${escapeHtml(item.title)}</p><p class="mt-1 text-sm font-bold text-slate-500">${escapeHtml(item.subtitle)} - ${new Date(item.timestamp).toLocaleString()}</p></div>
       <div class="text-left sm:text-right"><p class="font-mono font-bold">${escapeHtml(item.amount ?? "")}</p><p class="theme-text-accent text-xs uppercase tracking-[0.2em]">${escapeHtml(item.status)}</p></div>
     </article>
   `;
@@ -52,12 +52,12 @@ export function activityRow(item: Activity) {
 
 export function activityDetails(item: Activity | null) {
   if (!item) {
-    return `<section class="glass rounded-[2rem] p-6"><p class="text-sm text-slate-400">No activity selected.</p></section>`;
+    return `<section class="glass rounded-[2rem] p-6"><p class="text-sm font-bold text-slate-400">No activity selected.</p></section>`;
   }
 
   return `
     <section class="glass rounded-[2rem] p-6">
-      <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Activity details</p>
+      <p class="text-sm font-bold uppercase tracking-[0.3em] text-slate-500">Activity details</p>
       <h2 class="mt-2 text-2xl font-black">${escapeHtml(item.title)}</h2>
       <div class="mt-5 space-y-3">
         ${detailRow("Status", item.status)}
@@ -126,7 +126,7 @@ export function qrResilienceSelect() {
 }
 
 export function detailRow(label: string, value: string) {
-  return `<div class="rounded-2xl border border-white/10 bg-white/[0.035] p-4"><p class="text-xs uppercase tracking-[0.22em] text-slate-500">${escapeHtml(label)}</p><p class="mt-2 break-all text-sm font-bold text-slate-200">${escapeHtml(value)}</p></div>`;
+  return `<div class="rounded-2xl border border-white/10 bg-white/[0.035] p-4"><p class="text-xs uppercase tracking-[0.22em] text-slate-500">${escapeHtml(label)}</p><p class="mt-2 break-all text-sm font-bold font-bold text-slate-200">${escapeHtml(value)}</p></div>`;
 }
 
 export function copyableDetailRow(label: string, value: string) {
@@ -134,7 +134,7 @@ export function copyableDetailRow(label: string, value: string) {
 }
 
 export function featureCard(title: string, body: string) {
-  return `<div class="rounded-2xl border border-white/10 bg-white/[0.04] p-5"><h3 class="font-black">${title}</h3><p class="mt-2 text-sm leading-6 text-slate-400">${body}</p></div>`;
+  return `<div class="rounded-2xl border border-white/10 bg-white/[0.04] p-5"><h3 class="font-black">${title}</h3><p class="mt-2 text-sm font-bold leading-6 text-slate-400">${body}</p></div>`;
 }
 
 export function passphraseMeter() {

@@ -28,8 +28,8 @@ export function walletShell() {
         </div>
         <div class="mt-8 shrink-0 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <p class="text-xs uppercase tracking-[0.25em] text-slate-500">Address</p>
-          <p class="mt-2 break-all font-mono text-sm text-slate-300">${escapeHtml(shortAddress(appState.session.address))}</p>
-          <button class="btn-secondary mt-4 w-full text-sm" data-action="copy-address" type="button">Copy</button>
+          <p class="mt-2 break-all font-mono text-sm font-bold text-slate-300">${escapeHtml(shortAddress(appState.session.address))}</p>
+          <button class="btn-secondary mt-4 w-full text-sm font-bold" data-action="copy-address" type="button">Copy</button>
         </div>
       </aside>
       <section class="space-y-5">
