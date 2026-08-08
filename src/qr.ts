@@ -2,9 +2,11 @@ import QRCode from "qrcode";
 import { pushToast } from "./toasts";
 import { formatError, shortAddress } from "./format";
 import { appState, receivePayload, selectedNetwork } from "./state";
-import { theme } from "./theme";
+import { getSelectedTheme, themes } from "./theme";
 
 export async function ensureReceiveQr(): Promise<boolean> {
+  const theme = themes[getSelectedTheme()];
+
   if (appState.currentView !== "receive" || !appState.session?.address || appState.session?.locked)
     return false;
 
