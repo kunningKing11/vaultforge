@@ -1,7 +1,3 @@
-import { appState } from "./state";
-import { render } from "./render";
-import { normalizeNetworkId } from "./networks";
-import type { View } from "./types";
 import {
   setupWizard,
   unlockWallet,
@@ -20,11 +16,16 @@ import {
   copyText,
   updatePassphraseStrength,
 } from "./commands";
-import { downloadQrSvg } from "./qr";
-import { walletApi } from "./walletApi";
 import { formatError } from "./format";
-import { pushToast } from "./toasts";
+import { normalizeNetworkId } from "./networks";
+import { downloadQrSvg } from "./qr";
+import { render, updateRecipientPlaceholder } from "./render";
 import { installScrollbarBehavior } from "./scrollbars";
+import { appState } from "./state";
+import { applyTheme, ThemeName, themes } from "./theme";
+import { pushToast } from "./toasts";
+import type { QrResilience, View } from "./types";
+import { walletApi } from "./walletApi";
 
 export function bindEvents() {
   document.addEventListener("click", (event) => {
@@ -65,8 +66,8 @@ export function bindEvents() {
       if (value) void copyText(value, "Value copied.");
     }
 
-    if (action === "setup-next") wizardNext();
     if (action === "setup-prev") wizardPrev();
+    if (action === "setup-next") wizardNext();
     if (action === "setup-create") {
       appState.setupWizard.flow = "create";
       appState.setupWizard.step = 2;
@@ -81,6 +82,15 @@ export function bindEvents() {
       const wc = Number(target.closest<HTMLElement>("[data-wordcount]")?.dataset.wordcount);
       if (wc) {
         appState.setupWizard.wordCount = wc as 12 | 15 | 18 | 21 | 24;
+        render();
+      }
+    }
+    if (action === "setup-theme") {
+      const id = target.closest<HTMLElement>("[data-theme]")?.dataset.theme;
+
+      if (id && id in themes) {
+        appState.setupWizard.appearance = id as ThemeName;
+        applyTheme(id as ThemeName);
         render();
       }
     }
@@ -166,23 +176,28 @@ export function bindEvents() {
 
 async function wizardNext() {
   const wizard = appState.setupWizard;
+
   if (wizard.step === 2) {
     if (!wizard.passphrase || wizard.passphrase.length < 8) {
       pushToast("Passphrase must be at least 8 characters.", "error");
       return;
     }
+
     if (wizard.passphrase !== wizard.confirmPassphrase) {
       pushToast("Passphrases do not match.", "error");
       return;
     }
   }
-  if (wizard.step === 4 && wizard.enabledNetworks.length === 0) {
+
+  if (wizard.step === 5 && wizard.enabledNetworks.length === 0) {
     pushToast("Enable at least one network.", "error");
     return;
   }
-  if (wizard.step < 5) {
+
+  if (wizard.step < 6) {
     wizard.step++;
-    if (wizard.step === 5 && wizard.flow === "create" && !wizard.generatedMnemonic) {
+
+    if (wizard.step === 6 && wizard.flow === "create" && !wizard.generatedMnemonic) {
       try {
         wizard.generatedMnemonic = await walletApi.generateMnemonic(wizard.wordCount);
       } catch {
@@ -191,6 +206,7 @@ async function wizardNext() {
         return;
       }
     }
+
     render();
   } else {
     void setupWizard();
@@ -257,6 +273,3 @@ export async function boot() {
     appState.lastActivity = Date.now();
   });
 }
-
-import type { QrResilience } from "./types";
-import { updateRecipientPlaceholder } from "./render";
