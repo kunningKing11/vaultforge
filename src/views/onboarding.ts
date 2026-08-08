@@ -1,7 +1,8 @@
-import { networks } from "../networks";
-import { appState } from "../state";
 import { escapeHtml } from "../format";
+import { networks } from "../networks";
 import { featureCard, passphraseMeter } from "./shared";
+import { appState } from "../state";
+import { themes } from "../theme";
 
 export function splashView() {
   return `
@@ -26,8 +27,9 @@ export function onboardingView() {
     1: "Get started",
     2: wizard.flow === "import" ? "Import wallet" : "Create wallet",
     3: "Recovery phrase",
-    4: "Settings",
-    5: "Confirm",
+    4: "Appearance",
+    5: "Settings",
+    6: "Confirm",
   };
 
   return `
@@ -57,8 +59,9 @@ export function onboardingView() {
           ${stepIndicator(1, "Flow")}
           ${stepIndicator(2, "Identity")}
           ${stepIndicator(3, "Seed")}
-          ${stepIndicator(4, "Networks")}
-          ${stepIndicator(5, "Backup")}
+          ${stepIndicator(4, "Appearance")}
+          ${stepIndicator(5, "Networks")}
+          ${stepIndicator(6, "Backup")}
         </div>
 
         ${wizard.step === 1 ? step1() : ""}
@@ -66,6 +69,7 @@ export function onboardingView() {
         ${wizard.step === 3 ? step3() : ""}
         ${wizard.step === 4 ? step4() : ""}
         ${wizard.step === 5 ? step5() : ""}
+        ${wizard.step === 6 ? step6() : ""}
       </div>
     </section>
   `;
@@ -173,6 +177,32 @@ function step3() {
 
 function step4() {
   const wizard = appState.setupWizard;
+
+  return `
+    <div class="space-y-4">
+      <p class="text-sm text-slate-300">Choose the appearance of the wallet interface.</p>
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        ${Object.entries(themes)
+          .map(
+            ([id, theme]) => `
+            <button type="button" data-action="setup-theme" data-theme="${id}"
+              class="rounded-xl border px-4 py-4 text-left transition ${wizard.appearance === id ? "border-white/40 bg-white/10" : "border-white/10 hover:bg-white/5"}">
+              <p class="font-black text-lg">${theme.name}</p>
+            </button>
+          `,
+          )
+          .join("")}
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button class="btn-secondary flex-1" type="button" data-action="setup-prev">Back</button>
+        <button class="btn-primary flex-1" type="button" data-action="setup-next">Next</button>
+      </div>
+    </div>
+  `;
+}
+
+function step5() {
+  const wizard = appState.setupWizard;
   const autoLockOptions = [
     { label: "Off", value: "0" },
     { label: "5 minutes", value: "300" },
@@ -215,7 +245,7 @@ function step4() {
   `;
 }
 
-function step5() {
+function step6() {
   const wizard = appState.setupWizard;
   const isImport = wizard.flow === "import";
 

@@ -1,3 +1,4 @@
+import type { ThemeName } from "./theme";
 import type {
   Activity,
   Network,
@@ -45,6 +46,7 @@ export const appState = {
     wordCount: 12 as 12 | 15 | 18 | 21 | 24,
     enabledNetworks: networks.map((n) => n.id) as string[],
     autoLockTimeoutSecs: null as number | null,
+    appearance: "default" as ThemeName,
   },
   lastActivity: Date.now(),
   autoLockTimer: null as number | null,
