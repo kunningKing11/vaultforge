@@ -28,7 +28,7 @@ solana-signer = "3"
 solana-system-interface = { version = "3.3", features = ["wincode"] }
 solana-transaction = { version = "4", features = ["wincode"] }
 spl-associated-token-account-interface = "2"
-spl-token-interface = "2"
+spl-token-interface = "3"
 sha2 = "0.11"
 bip39 = "2.2"
 bip32 = "0.5"
