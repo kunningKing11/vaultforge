@@ -52,12 +52,17 @@ export async function signTransaction(form: HTMLFormElement) {
   }
 
   const tokenAddress = tokenValue === "native" ? null : tokenValue;
+  const tokenAddressesMatch = (left: string, right: string) =>
+    networkById(network)?.kind === "evm"
+      ? left.toLowerCase() === right.toLowerCase()
+      : left === right;
   const asset = appState.session?.assets.find(
     (candidate) =>
       candidate.network === network &&
       (tokenAddress === null
         ? candidate.token_address == null
-        : candidate.token_address?.toLowerCase() === tokenAddress.toLowerCase()),
+        : candidate.token_address != null &&
+          tokenAddressesMatch(candidate.token_address, tokenAddress)),
   );
   if (!asset) {
     pushToast("The selected asset is no longer available.", "error");
