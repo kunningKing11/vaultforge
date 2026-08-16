@@ -17,7 +17,7 @@
     "preview": "vite preview",
     "prepare": "lefthook install",
     "hooks:check": "bash scripts/pre-commit-checks.sh",
-    "sync-cargo-version": "node scripts/sync-cargo-version.mjs",
+    "sync-cargo-version": "bun scripts/sync-cargo-version.mts",
     "tauri": "tauri"
   },
   "dependencies": {
