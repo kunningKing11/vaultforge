@@ -1,4 +1,13 @@
 use crate::dto::Asset;
+use crate::registry::network_by_id;
+
+pub(crate) fn token_addresses_match(network_id: &str, left: &str, right: &str) -> bool {
+    if network_by_id(network_id).is_some_and(|network| network.kind == "evm") {
+        left.eq_ignore_ascii_case(right)
+    } else {
+        left == right
+    }
+}
 
 pub(crate) fn cached_asset(
     cached_assets: &[Asset],
@@ -20,10 +29,9 @@ pub(crate) fn cached_asset_by_token_address(
         .iter()
         .find(|asset| {
             asset.network == network_id
-                && asset
-                    .token_address
-                    .as_deref()
-                    .is_some_and(|address| address.eq_ignore_ascii_case(token_address))
+                && asset.token_address.as_deref().is_some_and(|address| {
+                    token_addresses_match(network_id, address, token_address)
+                })
         })
         .cloned()
 }

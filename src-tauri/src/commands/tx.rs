@@ -3,6 +3,8 @@ use std::sync::Mutex;
 use tauri::State;
 
 use crate::activity::{activity, random_hex, short_address};
+use crate::address::evm::validate_address as validate_evm_address;
+use crate::assets::token_addresses_match;
 use crate::derivation::signing_key_from_mnemonic;
 use crate::dto::{Activity, SignedTransaction, WalletSession};
 use crate::providers::bitcoin::{
@@ -13,18 +15,20 @@ use crate::providers::evm::{
     fetch_evm_nonce, fetch_evm_tx_status,
 };
 use crate::providers::solana::{
-    broadcast_solana_transaction, fetch_solana_token_account_rent,
-    fetch_solana_token_account_state, fetch_solana_tx_status,
+    broadcast_solana_transaction, fetch_solana_mint_decimals, fetch_solana_native_balance,
+    fetch_solana_token_account_rent, fetch_solana_token_account_state, fetch_solana_token_accounts,
+    fetch_solana_tx_status, simulate_solana_transaction,
 };
 use crate::providers::tron::{broadcast_tron_transaction, fetch_tron_tx_status};
 use crate::state::{AppState, session_from_state, validate_unlocked};
 use crate::storage::persist_state_wallet;
 use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
 use crate::tx::solana::{
-    sign_solana_token_transfer, sign_solana_transfer, solana_associated_token_address,
+    select_solana_token_sources, sign_solana_token_transfer, sign_solana_transfer,
+    solana_associated_token_address,
 };
 use crate::tx::tron::sign_tron_transfer;
-use crate::validation::{validate_evm_address, validate_transfer};
+use crate::validation::validate_transfer;
 
 pub(crate) fn required_native_debit(
     is_native_transfer: bool,
@@ -107,17 +111,18 @@ pub(crate) async fn sign_transaction(
                 && asset.network == network
                 && match (token_address.as_deref(), asset.token_address.as_deref()) {
                     (None, None) => true,
-                    (Some(expected), Some(actual)) => actual.eq_ignore_ascii_case(expected),
+                    (Some(expected), Some(actual)) => {
+                        token_addresses_match(&network, actual, expected)
+                    }
                     _ => false,
                 }
         })
         .ok_or_else(|| format!("Asset {symbol} on {network} not found in wallet"))?;
     let network_id = asset.network.as_str();
-    let decimals = asset.decimals;
+    let mut decimals = asset.decimals;
 
     match network_id {
         "bitcoin" if symbol == "BTC" => {
-            // Bitcoin signing path
             let from = addresses
                 .get("bitcoin")
                 .ok_or_else(|| "Wallet BTC address is not available".to_string())?
@@ -156,12 +161,9 @@ pub(crate) async fn sign_transaction(
             let amount_u64: u64 = value
                 .try_into()
                 .map_err(|_| format!("{symbol} amount is too large"))?;
-            let sol_balance: u128 = assets
-                .iter()
-                .find(|a| a.network == "solana" && a.symbol == "SOL")
-                .and_then(|a| a.balance.parse().ok())
-                .unwrap_or(0);
+            let sol_balance = fetch_solana_native_balance(&from).await?;
             let mut extra_sol_lamports = 0u64;
+            let mut source_token_balance = None;
 
             let signed_sol = if symbol == "SOL" {
                 sign_solana_transfer(&mnemonic, &from, &to, amount_u64).await?
@@ -170,9 +172,18 @@ pub(crate) async fn sign_transaction(
                     .token_address
                     .as_deref()
                     .ok_or_else(|| format!("{symbol} mint address is not available"))?;
-                let decimals_u8: u8 = decimals
-                    .try_into()
-                    .map_err(|_| "SPL token decimals are too large".to_string())?;
+                let mint_decimals = fetch_solana_mint_decimals(mint).await?;
+                decimals = u32::from(mint_decimals);
+
+                let source_accounts = fetch_solana_token_accounts(&from).await?;
+                let (sources, total_balance) = select_solana_token_sources(
+                    &from,
+                    mint,
+                    mint_decimals,
+                    amount_u64,
+                    &source_accounts,
+                )?;
+                source_token_balance = Some(total_balance);
 
                 let destination_ata = solana_associated_token_address(&to, mint)?;
                 let ata_exists = fetch_solana_token_account_state(&destination_ata, &to, mint)
@@ -182,7 +193,7 @@ pub(crate) async fn sign_transaction(
                     extra_sol_lamports = fetch_solana_token_account_rent().await?;
                 }
 
-                sign_solana_token_transfer(&mnemonic, &from, &to, mint, amount_u64, decimals_u8)
+                sign_solana_token_transfer(&mnemonic, &from, &to, mint, &sources, mint_decimals)
                     .await?
             };
 
@@ -207,6 +218,8 @@ pub(crate) async fn sign_transaction(
                 });
             }
 
+            simulate_solana_transaction(&signed_sol.raw_tx_base64).await?;
+
             let total_debit = if symbol == "SOL" {
                 required_sol.to_string()
             } else {
@@ -216,7 +229,8 @@ pub(crate) async fn sign_transaction(
             let post_balance = if symbol == "SOL" {
                 sol_balance.saturating_sub(required_sol).to_string()
             } else {
-                let balance: u128 = asset.balance.parse().unwrap_or(0);
+                let balance = source_token_balance
+                    .ok_or_else(|| "Solana token balance was not preflighted".to_string())?;
                 balance.saturating_sub(value).to_string()
             };
 

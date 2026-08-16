@@ -27,7 +27,7 @@ A local-first crypto wallet desktop app built with a TypeScript frontend, Tailwi
 - Sign and review chain-specific transactions before broadcasting them
 - Basic real transfer paths for BTC, EVM native/ERC-20, Solana native/classic SPL assets, and Tron native
 - Review provider-derived fees, total debit, USD value, and post-send balance estimates
-- Solana SPL sends account for recipient associated token account (ATA) rent when needed
+- Solana native/classic SPL sends recheck live RPC balances; classic SPL sends validate the mint, draw from live wallet-owned token accounts with ATA priority, account for recipient ATA rent, and simulate the signed transaction before broadcast
 - Encrypted local wallet persistence using the app data directory
 - Activity details with transaction hashes, signatures, payload hashes, and copy actions
 - Security center with storage status, signing status, and local wallet clearing

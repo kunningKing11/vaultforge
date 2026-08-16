@@ -1,3 +1,10 @@
+use crate::address::bitcoin::validate_address as validate_bitcoin_address;
+use crate::address::evm::validate_address as validate_evm_address;
+use crate::address::filecoin::validate_address as validate_filecoin_address;
+use crate::address::injective::validate_address as validate_injective_address;
+use crate::address::solana::validate_address as validate_solana_address;
+use crate::address::tron::validate_address as validate_tron_address;
+use crate::address::zcash::validate_address as validate_zcash_address;
 use crate::assets::cached_asset;
 use crate::derivation::{
     bech32_account_address, bitcoin_bech32_address, ethereum_address_from_private_key,
@@ -9,11 +16,6 @@ use crate::providers::evm::fetch_evm_assets;
 use crate::providers::solana::fetch_solana_assets;
 use crate::providers::tron::fetch_tron_assets;
 use crate::registry::{NetworkConfig, evm_networks, registry};
-use crate::validation::{
-    validate_bitcoin_address, validate_evm_address, validate_filecoin_address,
-    validate_injective_address, validate_solana_address, validate_tron_address,
-    validate_zcash_address,
-};
 use std::collections::HashMap;
 
 pub(crate) mod bitcoin;

@@ -31,7 +31,7 @@ The below items are the priorities for this project and an item will probably ge
     - [x] SPL token transfers
     - [x] recipient ATA rent estimation
     - [ ] Token-2022 support
-    - [ ] pre-sign live balance refresh
+    - [x] pre-sign live balance refresh
   - [ ] Tron (TRX) basic transfers
     - [x] native TRX transfers
     - [ ] Tron token transfers
@@ -60,12 +60,12 @@ The below items are the priorities for this project and an item will probably ge
 - [x] Public GitHub repository
 - [ ] Live pre-sign balance refresh
   - [ ] EVM native and ERC-20
-  - [ ] SOL native and SPL
+  - [x] SOL native and SPL
   - [ ] reconcile stale cached balances after broadcast
 - [ ] Proper fee estimation engine + preflight checks
   - [ ] EVM: `eth_feeHistory` / priority fee strategy
   - [ ] EVM: simulate contract calls before signing where possible
-  - [ ] SOL: simulate transaction before signing/broadcast
+  - [x] SOL: simulate signed transaction before broadcast
   - [ ] BTC: better fee target selection
   - [ ] show all native fee/rent/funding debits clearly in UI
 - [ ] Built-in nonce manager for EVM and EVM-like chains to avoid reliance on potentially inaccurate 3rd-party data and avoiding transaction failures in certain cases - this will need to sync to RPC on sending transactions. The wallet should be trusted if there are any pending transactions but this could be improved by tracking any pending transactions.

@@ -3,6 +3,7 @@ use crate::dto::Asset;
 use crate::providers::http::rpc_post;
 use crate::providers::prices::fetch_token_metadata;
 use crate::registry::{NetworkConfig, network_by_id};
+use std::collections::BTreeMap;
 
 const SOLANA_TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
@@ -16,9 +17,16 @@ fn solana_rpc_url() -> Result<&'static str, String> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SolanaTokenAccount {
+    pub(crate) address: String,
     pub(crate) mint: String,
-    pub(crate) amount: String,
-    pub(crate) decimals: u32,
+    pub(crate) amount: u64,
+    pub(crate) decimals: u8,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SolanaTokenAccountState {
+    pub(crate) amount: u64,
+    pub(crate) decimals: u8,
 }
 
 pub(crate) async fn fetch_solana_native_balance(address: &str) -> Result<u128, String> {
@@ -42,7 +50,7 @@ pub(crate) async fn fetch_solana_token_accounts(
         "id": 1,
     });
     let json = rpc_post(solana_rpc_url()?, &body).await?;
-    parse_solana_token_accounts(&json)
+    parse_solana_token_accounts(&json, address)
 }
 
 pub(crate) async fn fetch_solana_assets(address: &str, cached_assets: &[Asset]) -> Vec<Asset> {
@@ -81,22 +89,32 @@ pub(crate) async fn fetch_solana_assets(address: &str, cached_assets: &[Asset]) 
         }
     };
 
+    let mut token_balances = BTreeMap::<String, (u128, u8)>::new();
     for account in token_accounts {
-        if account.amount == "0" {
+        if account.amount == 0 {
             continue;
         }
-        let cached = cached_asset_by_token_address(cached_assets, "solana", &account.mint);
-        let metadata = fetch_token_metadata("solana", &account.mint).await.ok();
+        let entry = token_balances
+            .entry(account.mint)
+            .or_insert((0, account.decimals));
+        if entry.1 == account.decimals {
+            entry.0 += u128::from(account.amount);
+        }
+    }
+
+    for (mint, (amount, decimals)) in token_balances {
+        let cached = cached_asset_by_token_address(cached_assets, "solana", &mint);
+        let metadata = fetch_token_metadata("solana", &mint).await.ok();
         let symbol = metadata
             .as_ref()
             .map(|value| value.symbol.clone())
             .or_else(|| cached.as_ref().map(|asset| asset.symbol.clone()))
-            .unwrap_or_else(|| fallback_solana_token_symbol(&account.mint));
+            .unwrap_or_else(|| fallback_solana_token_symbol(&mint));
         let name = metadata
             .as_ref()
             .map(|value| value.name.clone())
             .or_else(|| cached.as_ref().map(|asset| asset.name.clone()))
-            .unwrap_or_else(|| format!("SPL Token {}", short_mint(&account.mint)));
+            .unwrap_or_else(|| format!("SPL Token {}", short_mint(&mint)));
         let price_usd = metadata
             .as_ref()
             .and_then(|value| value.price_usd)
@@ -107,12 +125,12 @@ pub(crate) async fn fetch_solana_assets(address: &str, cached_assets: &[Asset]) 
         assets.push(Asset {
             symbol,
             name,
-            balance: account.amount,
-            decimals: account.decimals,
+            balance: amount.to_string(),
+            decimals: u32::from(decimals),
             price_usd,
             change_24h,
             network: "solana".to_string(),
-            token_address: Some(account.mint),
+            token_address: Some(mint),
         });
     }
     assets
@@ -142,6 +160,7 @@ pub(crate) fn parse_solana_balance(json: &serde_json::Value) -> Result<u128, Str
 
 pub(crate) fn parse_solana_token_accounts(
     json: &serde_json::Value,
+    expected_owner: &str,
 ) -> Result<Vec<SolanaTokenAccount>, String> {
     let accounts = json["result"]["value"]
         .as_array()
@@ -149,18 +168,42 @@ pub(crate) fn parse_solana_token_accounts(
     let mut parsed = Vec::new();
 
     for account in accounts {
+        let address = account["pubkey"]
+            .as_str()
+            .ok_or_else(|| "Solana token account is missing its address".to_string())?;
+        if account["account"]["owner"].as_str() != Some(SOLANA_TOKEN_PROGRAM_ID) {
+            return Err(
+                "Solana token account is not owned by the classic SPL Token program".to_string(),
+            );
+        }
+        if account["account"]["data"]["parsed"]["type"].as_str() != Some("account") {
+            return Err("Solana account is not a parsed SPL token account".to_string());
+        }
         let info = &account["account"]["data"]["parsed"]["info"];
-        let Some(mint) = info["mint"].as_str() else {
-            continue;
-        };
+        let mint = info["mint"]
+            .as_str()
+            .ok_or_else(|| "Solana token account is missing its mint".to_string())?;
+        if info["owner"].as_str() != Some(expected_owner) {
+            return Err("Solana token account owner does not match the wallet".to_string());
+        }
+        if info["state"].as_str() != Some("initialized") {
+            return Err("Solana token account is not initialized".to_string());
+        }
         let token_amount = &info["tokenAmount"];
-        let Some(amount) = token_amount["amount"].as_str() else {
-            continue;
-        };
-        let decimals = token_amount["decimals"].as_u64().unwrap_or(0) as u32;
+        let amount = token_amount["amount"]
+            .as_str()
+            .ok_or_else(|| "Solana token account is missing its base-unit balance".to_string())?
+            .parse()
+            .map_err(|_| "Solana token account has an invalid base-unit balance".to_string())?;
+        let decimals = token_amount["decimals"]
+            .as_u64()
+            .ok_or_else(|| "Solana token account is missing decimals".to_string())?
+            .try_into()
+            .map_err(|_| "Solana token account decimals are too large".to_string())?;
         parsed.push(SolanaTokenAccount {
+            address: address.to_string(),
             mint: mint.to_string(),
-            amount: amount.to_string(),
+            amount,
             decimals,
         });
     }
@@ -202,7 +245,7 @@ pub(crate) async fn fetch_solana_token_account_state(
     ata_address: &str,
     expected_owner: &str,
     expected_mint: &str,
-) -> Result<Option<()>, String> {
+) -> Result<Option<SolanaTokenAccountState>, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "getAccountInfo",
@@ -213,11 +256,22 @@ pub(crate) async fn fetch_solana_token_account_state(
     parse_solana_token_account_state(&json, expected_owner, expected_mint)
 }
 
+pub(crate) async fn fetch_solana_mint_decimals(mint: &str) -> Result<u8, String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "getAccountInfo",
+        "params": [mint, {"encoding": "jsonParsed"}],
+        "id": 1,
+    });
+    let json = rpc_post(solana_rpc_url()?, &body).await?;
+    parse_solana_mint_decimals(&json)
+}
+
 pub(crate) fn parse_solana_token_account_state(
     json: &serde_json::Value,
     expected_owner: &str,
     expected_mint: &str,
-) -> Result<Option<()>, String> {
+) -> Result<Option<SolanaTokenAccountState>, String> {
     if let Some(error) = json.get("error") {
         return Err(format!("Solana account info RPC error: {error}"));
     }
@@ -235,6 +289,9 @@ pub(crate) fn parse_solana_token_account_state(
     }
 
     let info = &value["data"]["parsed"]["info"];
+    if value["data"]["parsed"]["type"].as_str() != Some("account") {
+        return Err("Solana account is not a parsed SPL token account".to_string());
+    }
 
     let mint = info["mint"]
         .as_str()
@@ -250,7 +307,77 @@ pub(crate) fn parse_solana_token_account_state(
         return Err("Existing Solana token account owner does not match recipient".to_string());
     }
 
-    Ok(Some(()))
+    if info["state"].as_str() != Some("initialized") {
+        return Err("Solana token account is not initialized".to_string());
+    }
+
+    let amount = info["tokenAmount"]["amount"]
+        .as_str()
+        .ok_or_else(|| "Solana token account missing base-unit balance".to_string())?
+        .parse()
+        .map_err(|_| "Solana token account has an invalid base-unit balance".to_string())?;
+    let decimals = info["tokenAmount"]["decimals"]
+        .as_u64()
+        .ok_or_else(|| "Solana token account missing decimals".to_string())?
+        .try_into()
+        .map_err(|_| "Solana token account decimals are too large".to_string())?;
+
+    Ok(Some(SolanaTokenAccountState { amount, decimals }))
+}
+
+pub(crate) fn parse_solana_mint_decimals(json: &serde_json::Value) -> Result<u8, String> {
+    if let Some(error) = json.get("error") {
+        return Err(format!("Solana mint info RPC error: {error}"));
+    }
+
+    let value = &json["result"]["value"];
+    if value.is_null() {
+        return Err("Solana token mint account does not exist".to_string());
+    }
+    if value["owner"].as_str() != Some(SOLANA_TOKEN_PROGRAM_ID) {
+        return Err("Solana token mint is not owned by the classic SPL Token program".to_string());
+    }
+    if value["data"]["parsed"]["type"].as_str() != Some("mint") {
+        return Err("Solana account is not a parsed SPL token mint".to_string());
+    }
+
+    value["data"]["parsed"]["info"]["decimals"]
+        .as_u64()
+        .ok_or_else(|| "Solana token mint missing decimals".to_string())?
+        .try_into()
+        .map_err(|_| "Solana token mint decimals are too large".to_string())
+}
+
+pub(crate) async fn simulate_solana_transaction(raw_tx_base64: &str) -> Result<(), String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "simulateTransaction",
+        "params": [raw_tx_base64, {
+            "encoding": "base64",
+            "sigVerify": true,
+            "replaceRecentBlockhash": false,
+            "commitment": "processed",
+        }],
+        "id": 1,
+    });
+    let json = rpc_post(solana_rpc_url()?, &body).await?;
+    parse_solana_simulation(&json)
+}
+
+pub(crate) fn parse_solana_simulation(json: &serde_json::Value) -> Result<(), String> {
+    if let Some(error) = json.get("error") {
+        return Err(format!("Solana simulation RPC error: {error}"));
+    }
+    let value = json["result"]
+        .get("value")
+        .ok_or_else(|| "Solana simulation RPC missing result.value".to_string())?;
+    if value["err"].is_null() {
+        return Ok(());
+    }
+    Err(format!(
+        "Solana transaction simulation failed: {}",
+        value["err"]
+    ))
 }
 
 pub(crate) async fn fetch_solana_token_account_rent() -> Result<u64, String> {

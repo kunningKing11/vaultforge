@@ -1,10 +1,14 @@
+use base64::Engine;
+use bech32::{Bech32, Bech32m, Hrp};
 use chrono::Utc;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::activity::{activity, hash_secret};
-use crate::assets::cached_asset;
+use crate::address::evm::validate_address as validate_evm_address;
+use crate::assets::{cached_asset, token_addresses_match};
 use crate::commands::tx::{ensure_native_balance_covers_debit, required_native_debit};
+use crate::commands::wallet::refresh_filecoin_address;
 use crate::derivation::{
     address_from_seed, bitcoin_bech32_address, derive_addresses_from_mnemonic,
 };
@@ -16,8 +20,9 @@ use crate::providers::evm::{evm_config_by_id, parse_evm_fee_history};
 use crate::providers::get_provider;
 use crate::providers::prices::parse_token_metadata;
 use crate::providers::solana::{
-    parse_latest_solana_blockhash, parse_solana_balance, parse_solana_fee_for_message,
-    parse_solana_rent_exemption, parse_solana_token_account_state, parse_solana_token_accounts,
+    SolanaTokenAccount, parse_latest_solana_blockhash, parse_solana_balance,
+    parse_solana_fee_for_message, parse_solana_mint_decimals, parse_solana_rent_exemption,
+    parse_solana_simulation, parse_solana_token_account_state, parse_solana_token_accounts,
     parse_solana_tx_status,
 };
 use crate::state::{AppState, StoredWalletMetadata, session_from_state};
@@ -25,10 +30,10 @@ use crate::storage::{decrypt_wallet, derive_storage_key, encrypt_wallet};
 use crate::tx::bitcoin::{bitcoin_estimated_vbytes, bitcoin_select_coins, bitcoin_signed_transfer};
 use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
 use crate::tx::solana::{
-    sign_solana_token_transfer_with_blockhash, sign_solana_transfer_with_blockhash,
-    solana_associated_token_address,
+    SolanaTokenSource, select_solana_token_sources, sign_solana_token_transfer_with_blockhash,
+    sign_solana_transfer_with_blockhash, solana_associated_token_address,
 };
-use crate::validation::{validate_address_for_symbol, validate_evm_address, validate_transfer};
+use crate::validation::{validate_address_for_network, validate_transfer};
 
 fn starter_assets(network: &str) -> Vec<Asset> {
     vec![
@@ -78,30 +83,112 @@ fn starter_assets(network: &str) -> Vec<Asset> {
 #[test]
 fn validates_asset_address_formats() {
     assert!(
-        validate_address_for_symbol("0xdAC17F958D2ee523a2206206994597C13D831ec7", "ETH").is_ok()
+        validate_address_for_network("0xdAC17F958D2ee523a2206206994597C13D831ec7", "ethereum")
+            .is_ok()
     );
     assert!(
-        validate_address_for_symbol("0xdac17f958d2ee523a2206206994597c13d831ec7", "ETH").is_ok()
+        validate_address_for_network("0xdac17f958d2ee523a2206206994597c13d831ec7", "ethereum")
+            .is_ok()
     );
     assert!(
-        validate_address_for_symbol("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq", "BTC").is_ok()
+        validate_address_for_network("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq", "bitcoin")
+            .is_ok()
     );
-    assert!(validate_address_for_symbol("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "BTC").is_ok());
-    assert!(validate_address_for_symbol("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy", "BTC").is_ok());
+    assert!(validate_address_for_network("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "bitcoin").is_ok());
+    assert!(validate_address_for_network("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy", "bitcoin").is_ok());
     assert!(
-        validate_address_for_symbol("7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ", "SOL").is_ok()
+        validate_address_for_network("7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ", "solana")
+            .is_ok()
     );
-    assert!(validate_address_for_symbol("t1eB29zcZ2v3AQvAEtcNrERsWQPmxyTN4DF", "ZEC").is_ok());
-    assert!(validate_address_for_symbol("f1ke28mVhmmiSdiFRybu3ak3NnEqpx3o3Bk", "FIL").is_ok());
+    assert!(validate_address_for_network("t1eB29zcZ2v3AQvAEtcNrERsWQPmxyTN4DF", "zcash").is_ok());
     assert!(
-        validate_address_for_symbol("inj1m6kmamcpqgpsgpgxquyqjyq3zgf3g9gkzz8lqn", "INJ").is_ok()
+        validate_address_for_network("f17uoq6tp427uzv7fztkbsnn64iwotfrristwpryy", "filecoin")
+            .is_ok()
     );
     assert!(
-        validate_address_for_symbol("0xdAC17F958D2ee523a2206206994597C13D831ec7", "MATIC").is_ok()
+        validate_address_for_network("inj1m6kmamcpqgpsgpgxquyqjyq3zgf3g9gkzz8lqn", "injective")
+            .is_ok()
     );
-    assert!(validate_address_for_symbol("0xinvalid", "ETH").is_err());
-    assert!(validate_address_for_symbol("bc1q", "BTC").is_err());
-    assert!(validate_address_for_symbol("invalid", "SOL").is_err());
+    assert!(
+        validate_address_for_network("0xdAC17F958D2ee523a2206206994597C13D831ec7", "polygon")
+            .is_ok()
+    );
+    assert!(validate_address_for_network("0xinvalid", "ethereum").is_err());
+    assert!(validate_address_for_network("bc1q", "bitcoin").is_err());
+    assert!(validate_address_for_network("invalid", "solana").is_err());
+    assert!(
+        validate_address_for_network(
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "not-a-network"
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn validates_filecoin_protocols_and_checksums() {
+    for address in [
+        "f00",
+        "f0150",
+        "f17uoq6tp427uzv7fztkbsnn64iwotfrristwpryy",
+        "f24vg6ut43yw2h2jqydgbg2xq7x6f4kub3bg6as6i",
+        "f3vvmn62lofvhjd2ugzca6sof2j2ubwok6cj4xxbfzz4yuxfkgobpihhd2thlanmsh3w2ptld2gqkn2jvlss4a",
+        "f410fu7h6rd7gqwhcxip6t2xmc5f6odjy5yvxaih7xey",
+    ] {
+        assert!(
+            validate_address_for_network(address, "filecoin").is_ok(),
+            "{address}"
+        );
+    }
+    assert!(
+        validate_address_for_network("t17uoq6tp427uzv7fztkbsnn64iwotfrristwpryy", "filecoin")
+            .is_err()
+    );
+    assert!(
+        validate_address_for_network("f17uoq6tp427uzv7fztkbsnn64iwotfrristwpryz", "filecoin")
+            .is_err()
+    );
+    assert!(
+        validate_address_for_network("f410fU7h6rd7gqwhcxip6t2xmc5f6odjy5yvxaih7xey", "filecoin")
+            .is_err()
+    );
+}
+
+#[test]
+fn injective_requires_the_standard_bech32_account_encoding() {
+    let wrong_hrp = bech32::encode::<Bech32>(Hrp::parse("cosmos").unwrap(), &[0; 20]).unwrap();
+    let wrong_length = bech32::encode::<Bech32>(Hrp::parse("inj").unwrap(), &[0; 19]).unwrap();
+    let bech32m = bech32::encode::<Bech32m>(Hrp::parse("inj").unwrap(), &[0; 20]).unwrap();
+    assert!(validate_address_for_network(&wrong_hrp, "injective").is_err());
+    assert!(validate_address_for_network(&wrong_length, "injective").is_err());
+    assert!(validate_address_for_network(&bech32m, "injective").is_err());
+    assert!(
+        validate_address_for_network("inj1m6kmamcpqgpsgpgxquyqjyq3zgf3g9gkzz8lqn", "injective")
+            .is_ok()
+    );
+}
+
+#[test]
+fn unlock_migrates_legacy_filecoin_addresses() {
+    let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    let mut wallet = Wallet {
+        name: "Test Wallet".to_string(),
+        mnemonic: mnemonic.to_string(),
+        created_at: "2025-01-01T00:00:00Z".to_string(),
+        address: "unused".to_string(),
+        addresses: HashMap::from([(
+            "filecoin".to_string(),
+            "f1fFXqnEMPFe1NoAajxRKukEBLwshG1LQQC".to_string(),
+        )]),
+        passphrase_hash: "unused".to_string(),
+        assets: vec![],
+        activity: vec![],
+    };
+    refresh_filecoin_address(&mut wallet).unwrap();
+    assert_eq!(
+        wallet.addresses.get("filecoin").unwrap(),
+        "f1qode47ievxlxzk6z2viuovedabmn3tq6t57uqhq"
+    );
 }
 
 #[test]
@@ -184,7 +271,9 @@ fn token_transfer_validation_uses_contract_or_mint_identity() {
         )
         .is_ok()
     );
-    assert_eq!(
+    // Solana token balances are rechecked against the source ATA before signing, so this
+    // static validator must not reject a send solely because a portfolio cache is stale.
+    assert!(
         validate_transfer(
             &wallet,
             "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
@@ -193,9 +282,22 @@ fn token_transfer_validation_uses_contract_or_mint_identity() {
             Some("So11111111111111111111111111111111111111112"),
             "1",
         )
-        .unwrap_err(),
-        "Insufficient DUP balance"
+        .is_ok()
     );
+}
+
+#[test]
+fn token_identifiers_use_network_appropriate_case_rules() {
+    assert!(token_addresses_match(
+        "ethereum",
+        "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "0xdac17f958d2ee523a2206206994597c13d831ec7"
+    ));
+    assert!(!token_addresses_match(
+        "solana",
+        "So11111111111111111111111111111111111111112",
+        "so11111111111111111111111111111111111111112"
+    ));
 }
 
 #[test]
@@ -206,6 +308,49 @@ fn validates_eip55_checksum() {
     assert!(validate_evm_address("0xDbC17F958D2ee523a2206206994597C13D831ec7").is_err());
     assert!(validate_evm_address("0x0000000000000000000000000000000000000000").is_ok());
     assert!(validate_evm_address("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF").is_ok());
+    assert!(validate_evm_address("dAC17F958D2ee523a2206206994597C13D831ec7").is_err());
+}
+
+#[test]
+fn rejects_wrong_network_and_unsupported_bitcoin_recipients() {
+    assert!(
+        validate_address_for_network("tb1qfm5q7m0s5p8fyj5h6q8w9zqv0cq7cx8xg42n94", "bitcoin")
+            .is_err()
+    );
+    assert!(validate_address_for_network("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn", "bitcoin").is_err());
+    assert!(
+        validate_address_for_network("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq", "bitcoin")
+            .is_ok()
+    );
+}
+
+#[test]
+fn transfer_validation_rejects_malformed_amounts_and_mints() {
+    let wallet = Wallet {
+        name: "Test Wallet".to_string(),
+        mnemonic: "test mnemonic".to_string(),
+        created_at: "2025-01-01T00:00:00Z".to_string(),
+        address: "unused".to_string(),
+        addresses: HashMap::new(),
+        passphrase_hash: "unused".to_string(),
+        assets: vec![Asset {
+            symbol: "SPL".to_string(),
+            name: "SPL".to_string(),
+            balance: "10".to_string(),
+            decimals: 6,
+            price_usd: 0.0,
+            change_24h: 0.0,
+            network: "solana".to_string(),
+            token_address: Some("So11111111111111111111111111111111111111112".to_string()),
+        }],
+        activity: vec![],
+    };
+    let recipient = "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ";
+    let mint = "So11111111111111111111111111111111111111112";
+    assert!(validate_transfer(&wallet, recipient, "SPL", "solana", Some(mint), "01").is_ok());
+    assert!(validate_transfer(&wallet, recipient, "SPL", "solana", Some(mint), "+1").is_err());
+    assert!(validate_transfer(&wallet, recipient, "SPL", "solana", Some(mint), "0").is_err());
+    assert!(validate_transfer(&wallet, recipient, "SPL", "solana", Some("invalid"), "1").is_err());
 }
 
 #[test]
@@ -322,15 +467,21 @@ fn parses_solana_balance_lamports() {
 
 #[test]
 fn parses_solana_token_accounts() {
+    let owner = "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ";
     let json = serde_json::json!({
         "jsonrpc": "2.0",
         "result": {
             "value": [{
+                "pubkey": "4vJ9JU1bJJE96FWSJKvHsmmF3qN8oQfZ1ZTHwF3GvH2",
                 "account": {
+                    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
                     "data": {
                         "parsed": {
+                            "type": "account",
                             "info": {
                                 "mint": "So11111111111111111111111111111111111111112",
+                                "owner": owner,
+                                "state": "initialized",
                                 "tokenAmount": {
                                     "amount": "1234500",
                                     "decimals": 6
@@ -343,13 +494,17 @@ fn parses_solana_token_accounts() {
         },
         "id": 1
     });
-    let accounts = parse_solana_token_accounts(&json).unwrap();
+    let accounts = parse_solana_token_accounts(&json, owner).unwrap();
     assert_eq!(accounts.len(), 1);
     assert_eq!(
         accounts[0].mint,
         "So11111111111111111111111111111111111111112"
     );
-    assert_eq!(accounts[0].amount, "1234500");
+    assert_eq!(
+        accounts[0].address,
+        "4vJ9JU1bJJE96FWSJKvHsmmF3qN8oQfZ1ZTHwF3GvH2"
+    );
+    assert_eq!(accounts[0].amount, 1_234_500);
     assert_eq!(accounts[0].decimals, 6);
 }
 
@@ -412,9 +567,15 @@ fn parses_solana_token_account_state() {
                 "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
                 "data": {
                     "parsed": {
+                        "type": "account",
                         "info": {
                             "owner": owner,
-                            "mint": mint
+                            "mint": mint,
+                            "state": "initialized",
+                            "tokenAmount": {
+                                "amount": "1234500",
+                                "decimals": 6
+                            }
                         }
                     }
                 }
@@ -422,11 +583,11 @@ fn parses_solana_token_account_state() {
         },
         "id": 1
     });
-    assert!(
-        parse_solana_token_account_state(&existing, owner, mint)
-            .unwrap()
-            .is_some()
-    );
+    let state = parse_solana_token_account_state(&existing, owner, mint)
+        .unwrap()
+        .unwrap();
+    assert_eq!(state.amount, 1_234_500);
+    assert_eq!(state.decimals, 6);
 
     assert!(
         parse_solana_token_account_state(
@@ -436,6 +597,52 @@ fn parses_solana_token_account_state() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn parses_classic_solana_mint_and_simulation_preflight() {
+    let mint = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": {
+            "value": {
+                "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                "data": {
+                    "parsed": {
+                        "type": "mint",
+                        "info": { "decimals": 6 }
+                    }
+                }
+            }
+        },
+        "id": 1
+    });
+    assert_eq!(parse_solana_mint_decimals(&mint).unwrap(), 6);
+
+    let token_2022_mint = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": {
+            "value": {
+                "owner": "TokenzQdBNbLqP5VEhdkAS6EP1z9kF9t79yDMQH9z",
+                "data": { "parsed": { "type": "mint", "info": { "decimals": 6 } } }
+            }
+        },
+        "id": 1
+    });
+    assert!(parse_solana_mint_decimals(&token_2022_mint).is_err());
+
+    let success = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": { "value": { "err": null } },
+        "id": 1
+    });
+    assert!(parse_solana_simulation(&success).is_ok());
+
+    let failed = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": { "value": { "err": { "InstructionError": [1, "Custom"] } } },
+        "id": 1
+    });
+    assert!(parse_solana_simulation(&failed).is_err());
 }
 
 #[test]
@@ -496,12 +703,20 @@ fn signs_solana_spl_token_transfer() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     let addresses = derive_addresses_from_mnemonic(mnemonic).unwrap();
     let from = addresses.get("solana").unwrap();
+    let source = SolanaTokenSource {
+        address: solana_associated_token_address(
+            from,
+            "So11111111111111111111111111111111111111112",
+        )
+        .unwrap(),
+        amount: 1_000_000,
+    };
     let signed = sign_solana_token_transfer_with_blockhash(
         mnemonic,
         from,
         "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
         "So11111111111111111111111111111111111111112",
-        1_000_000,
+        &[source],
         9,
         "11111111111111111111111111111111",
         5000,
@@ -514,6 +729,63 @@ fn signs_solana_spl_token_transfer() {
         "ASdwuShdy+hvKd+3RP6ckHTP6BAjEGJLuPwevJRja3Zk3Hb4Q7nwjJ/FHaoVAY4f1E8oRVAwDBqdelbMm0ZBagoBAAUI8DYnYkanW53jNJ7UKxXiMvZRj8IPX81PHWToH5vSWPen/90BBnpik/KR8QwNjg/a6SNBG1AeiRuWANppcU+NcKxDUtSdBJ4UBoX1qj6IDJwis9EKDvzorJnUS4uWuFwSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGm4hX/quBhPtof2NGGMA12sQ53BrrO1WYoPAAAAAAAQbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpYGR8XH3pnsc3ZvclN30ERy/4vZkR8IGBi3nzHmp5Ba+MlyWPTiSJ8bs9ECkUjg2DC1oTmdr/EIQEjnvY2+n4WQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgcGAAIGBAMFAQEFBAEEAgAKDEBCDwAAAAAACQ=="
     );
     assert_eq!(signed.fee_lamports, 5000);
+}
+
+#[test]
+fn combines_classic_spl_token_accounts_with_ata_priority() {
+    let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    let addresses = derive_addresses_from_mnemonic(mnemonic).unwrap();
+    let owner = addresses.get("solana").unwrap();
+    let mint = "So11111111111111111111111111111111111111112";
+    let ata = solana_associated_token_address(owner, mint).unwrap();
+    let accounts = vec![
+        SolanaTokenAccount {
+            address: "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ".to_string(),
+            mint: mint.to_string(),
+            amount: 7,
+            decimals: 9,
+        },
+        SolanaTokenAccount {
+            address: ata.clone(),
+            mint: mint.to_string(),
+            amount: 3,
+            decimals: 9,
+        },
+    ];
+
+    let (sources, total) = select_solana_token_sources(owner, mint, 9, 8, &accounts).unwrap();
+    assert_eq!(total, 10);
+    assert_eq!(
+        sources,
+        vec![
+            SolanaTokenSource {
+                address: ata,
+                amount: 3,
+            },
+            SolanaTokenSource {
+                address: "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ".to_string(),
+                amount: 5,
+            },
+        ]
+    );
+    assert!(select_solana_token_sources(owner, mint, 9, 11, &accounts).is_err());
+
+    let signed = sign_solana_token_transfer_with_blockhash(
+        mnemonic,
+        owner,
+        "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
+        mint,
+        &sources,
+        9,
+        "11111111111111111111111111111111",
+        5000,
+    )
+    .unwrap();
+    let raw = base64::engine::general_purpose::STANDARD
+        .decode(signed.raw_tx_base64)
+        .unwrap();
+    let transaction: solana_transaction::Transaction = wincode::deserialize(&raw).unwrap();
+    assert_eq!(transaction.message.instructions.len(), 3);
 }
 
 #[test]
@@ -592,7 +864,7 @@ fn derives_documented_wallet_paths_deterministically() {
     );
     assert_eq!(
         addresses.get("filecoin").unwrap(),
-        "f1fFXqnEMPFe1NoAajxRKukEBLwshG1LQQC"
+        "f1qode47ievxlxzk6z2viuovedabmn3tq6t57uqhq"
     );
     assert_eq!(
         addresses.get("injective").unwrap(),

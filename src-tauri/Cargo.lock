@@ -5340,6 +5340,7 @@ dependencies = [
  "bech32",
  "bip32",
  "bip39",
+ "blake2",
  "bs58",
  "chrono",
  "ed25519-dalek 1.0.1",

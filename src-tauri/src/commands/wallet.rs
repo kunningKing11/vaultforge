@@ -5,7 +5,7 @@ use tauri::State;
 use zeroize::Zeroize;
 
 use crate::activity::{activity, hash_secret};
-use crate::commands::market::{refresh_asset_prices};
+use crate::commands::market::refresh_asset_prices;
 use crate::derivation::{address_from_seed, derive_addresses_from_mnemonic, generate_mnemonic};
 use crate::dto::{Wallet, WalletSession};
 use crate::providers::fetch_portfolio_assets;
@@ -14,6 +14,18 @@ use crate::storage::{
     decrypt_wallet, derive_storage_key, persist_state_wallet, read_stored_wallet,
 };
 use crate::validation::{clean_name, validate_passphrase};
+
+pub(crate) fn refresh_filecoin_address(wallet: &mut Wallet) -> Result<(), String> {
+    let addresses = derive_addresses_from_mnemonic(&wallet.mnemonic)?;
+    let filecoin_address = addresses
+        .get("filecoin")
+        .cloned()
+        .ok_or_else(|| "Filecoin address derivation is unavailable".to_string())?;
+    wallet
+        .addresses
+        .insert("filecoin".to_string(), filecoin_address);
+    Ok(())
+}
 
 #[tauri::command]
 pub(crate) fn get_wallet(state: State<'_, Mutex<AppState>>) -> Result<WalletSession, String> {
@@ -140,10 +152,11 @@ pub(crate) async fn unlock_wallet(
         } else {
             let stored = read_stored_wallet(&state.storage_path)?
                 .ok_or_else(|| "No wallet exists yet".to_string())?;
-            let wallet = decrypt_wallet(&stored, &passphrase)?;
+            let mut wallet = decrypt_wallet(&stored, &passphrase)?;
             if wallet.passphrase_hash != passphrase_hash {
                 return Err("Invalid passphrase".to_string());
             }
+            refresh_filecoin_address(&mut wallet)?;
             state.stored_wallet = Some(StoredWalletMetadata {
                 wallet_name: stored.wallet_name,
             });

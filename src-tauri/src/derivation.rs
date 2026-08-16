@@ -12,6 +12,8 @@ use sha3::Keccak256;
 use sha3::digest::Digest as Sha3Digest;
 use std::collections::HashMap;
 
+use crate::address::filecoin::filecoin_mainnet_secp256k1_address;
+
 // TODO: why some are pub(crate) and some are not? Should we make them all pub(crate)?
 pub(crate) const BITCOIN_DERIVATION_PATH: &str = "m/84'/0'/0'/0/0";
 const EVM_DERIVATION_PATH: &str = "m/44'/60'/0'/0/0";
@@ -207,18 +209,12 @@ pub(crate) fn solana_address_from_secret_key(secret_bytes: &[u8; 32]) -> Result<
     Ok(bs58::encode(public.as_bytes()).into_string())
 }
 
+// TODO: refactor to move imports into here if possible - if no, do opposite for all other chains
 pub(crate) fn filecoin_address_from_private_key(private_key: &[u8; 32]) -> Result<String, String> {
     let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
-    let encoded = verifying_key.to_sec1_point(true);
-    let public_bytes = encoded.as_bytes();
-    let payload = <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_bytes));
-    let mut bytes = vec![0x01];
-    bytes.extend(payload);
-    Ok(format!(
-        "f1{}",
-        bs58::encode(bytes).with_check().into_string()
-    ))
+    let encoded = verifying_key.to_sec1_point(false);
+    filecoin_mainnet_secp256k1_address(encoded.as_bytes())
 }
 
 pub(crate) fn bech32_account_address(private_key: &[u8; 32], hrp: &str) -> Result<String, String> {

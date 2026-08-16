@@ -1,8 +1,13 @@
+use crate::address::bitcoin::validate_address as validate_bitcoin_address;
+use crate::address::evm::validate_address as validate_evm_address;
+use crate::address::filecoin::validate_address as validate_filecoin_address;
+use crate::address::injective::validate_address as validate_injective_address;
+use crate::address::solana::validate_address as validate_solana_address;
+use crate::address::tron::validate_address as validate_tron_address;
+use crate::address::zcash::validate_address as validate_zcash_address;
+use crate::assets::token_addresses_match;
 use crate::dto::Wallet;
-use bech32::segwit;
-use sha2::{Digest as Sha2Digest, Sha256};
-use sha3::Keccak256;
-use sha3::digest::Digest as Sha3Digest;
+use crate::registry::network_by_id;
 
 pub(crate) fn validate_passphrase(passphrase: &str) -> Result<(), String> {
     if passphrase.chars().count() < 8 {
@@ -26,9 +31,17 @@ pub(crate) fn validate_transfer(
     symbol: &str,
     network: &str,
     token_address: Option<&str>,
-    amount_wei: &str,
+    amount: &str,
 ) -> Result<(), String> {
+    let network_config =
+        network_by_id(network).ok_or_else(|| format!("Unsupported network {network}"))?;
     let to = to.trim();
+    if to.is_empty() || to.chars().any(char::is_whitespace) {
+        return Err("Recipient address must not be empty or contain whitespace".to_string());
+    }
+    if amount.is_empty() || !amount.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("Amount must be an unsigned integer in base units".to_string());
+    }
 
     let asset = wallet
         .assets
@@ -38,207 +51,74 @@ pub(crate) fn validate_transfer(
                 && asset.network == network
                 && match (token_address, asset.token_address.as_deref()) {
                     (None, None) => true,
-                    (Some(expected), Some(actual)) => actual.eq_ignore_ascii_case(expected),
+                    (Some(expected), Some(actual)) => {
+                        token_addresses_match(network, actual, expected)
+                    }
                     _ => false,
                 }
         })
-        .ok_or_else(|| "Asset not found".to_string())?;
+        .ok_or_else(|| {
+            "Asset not found for the requested network and token identifier".to_string()
+        })?;
 
-    let amount: u128 = amount_wei
+    match (token_address, asset.token_address.as_deref()) {
+        (None, None) if asset.symbol == network_config.native_asset.symbol => {}
+        (None, None) => return Err("Native asset symbol does not match its network".to_string()),
+        (Some(_), Some(token_address)) => validate_token_identifier(network, token_address)?,
+        _ => return Err("Native and token asset identities do not match".to_string()),
+    }
+
+    let amount: u128 = amount
         .parse()
-        .map_err(|_| "Invalid amount".to_string())?;
-    let balance: u128 = asset
-        .balance
-        .parse()
-        .map_err(|_| "Invalid stored balance".to_string())?;
+        .map_err(|_| "Amount is too large".to_string())?;
     if amount == 0 {
         return Err("Amount must be greater than zero".to_string());
     }
-    if balance < amount {
-        return Err(format!("Insufficient {} balance", symbol));
+    if matches!(network, "bitcoin" | "solana" | "tron") && amount > u64::MAX as u128 {
+        return Err(format!("{symbol} amount is too large"));
     }
-    validate_address_for_transfer(to, symbol, network)?;
+
+    if network != "solana" {
+        let balance: u128 = asset
+            .balance
+            .parse()
+            .map_err(|_| "Invalid stored balance".to_string())?;
+        if balance < amount {
+            return Err(format!("Insufficient {symbol} balance"));
+        }
+    }
+    validate_address_for_network(to, network)?;
 
     Ok(())
 }
 
-// TODO: validate all chains
-fn validate_address_for_transfer(address: &str, symbol: &str, network: &str) -> Result<(), String> {
+fn validate_token_identifier(network: &str, token_address: &str) -> Result<(), String> {
+    if token_address.trim() != token_address || token_address.is_empty() {
+        return Err(
+            "Token identifier must not be empty or contain surrounding whitespace".to_string(),
+        );
+    }
+
     match network {
+        "solana" => crate::address::solana::validate_pubkey(token_address, "token mint"),
+        network if network_by_id(network).is_some_and(|config| config.kind == "evm") => {
+            validate_evm_address(token_address)
+        }
+        "tron" => Err("TRC-20 token transfers are not implemented".to_string()),
+        _ => Err(format!("Token transfers are not implemented on {network}")),
+    }
+}
+
+pub(crate) fn validate_address_for_network(address: &str, network: &str) -> Result<(), String> {
+    let config = network_by_id(network).ok_or_else(|| format!("Unsupported network {network}"))?;
+    match network {
+        "bitcoin" => validate_bitcoin_address(address),
+        "filecoin" => validate_filecoin_address(address),
+        "injective" => validate_injective_address(address),
         "solana" => validate_solana_address(address),
         "tron" => validate_tron_address(address),
-        _ => validate_address_for_symbol(address, symbol),
+        "zcash" => validate_zcash_address(address),
+        _ if config.kind == "evm" => validate_evm_address(address),
+        _ => Err(format!("Unsupported network {network}")),
     }
-}
-
-pub(crate) fn validate_address_for_symbol(address: &str, symbol: &str) -> Result<(), String> {
-    match symbol {
-        "BTC" => validate_bitcoin_address(address),
-        "FIL" => validate_filecoin_address(address),
-        "INJ" => validate_injective_address(address),
-        "SOL" => validate_solana_address(address),
-        "TRX" => validate_tron_address(address),
-        "ZEC" => validate_zcash_address(address),
-        _ => validate_evm_address(address),
-    }
-}
-
-pub(crate) fn validate_bitcoin_address(address: &str) -> Result<(), String> {
-    if address.starts_with("bc1") || address.starts_with("tb1") {
-        segwit::decode(address)
-            .map_err(|_| "Recipient must be a valid Bitcoin bech32 address".to_string())?;
-        return Ok(());
-    }
-    if address.starts_with('1')
-        || address.starts_with('3')
-        || address.starts_with('2')
-        || address.starts_with('m')
-        || address.starts_with('n')
-    {
-        bs58::decode(address)
-            .with_check(None)
-            .into_vec()
-            .map_err(|_| "Recipient must be a valid Bitcoin base58 address".to_string())?;
-        return Ok(());
-    }
-    Err("Recipient must be a valid Bitcoin address (bc1, 1, or 3)".to_string())
-}
-
-pub(crate) fn validate_evm_address(address: &str) -> Result<(), String> {
-    let hex_part = address.strip_prefix("0x").unwrap_or(address);
-    if hex_part.len() != 40 || !hex_part.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("Recipient must be a valid 0x-prefixed 40-hex-char EVM address".to_string());
-    }
-
-    let has_lower = hex_part.chars().any(|c| c.is_ascii_lowercase());
-    let has_upper = hex_part.chars().any(|c| c.is_ascii_uppercase());
-    if has_lower && has_upper {
-        let hex_lower = hex_part.to_lowercase();
-        let hash = <Keccak256 as Sha3Digest>::digest(hex_lower.as_bytes());
-        let hash_hex = hex::encode(hash);
-        for (i, c) in hex_part.chars().enumerate() {
-            if c.is_ascii_digit() {
-                continue;
-            }
-            let nibble = u8::from_str_radix(&hash_hex[i..i + 1], 16).unwrap_or(0);
-            let should_be_upper = nibble >= 8;
-            if should_be_upper != c.is_ascii_uppercase() {
-                return Err("EIP-55 checksum validation failed".to_string());
-            }
-        }
-    }
-
-    Ok(())
-}
-
-pub(crate) fn validate_filecoin_address(address: &str) -> Result<(), String> {
-    if !address.starts_with('f') && !address.starts_with('t') {
-        return Err("Filecoin address must start with f or t".to_string());
-    }
-    if address.len() < 3 {
-        return Err("Filecoin address too short".to_string());
-    }
-    let protocol = address.chars().nth(1).unwrap_or(' ');
-    match protocol {
-        '0' => {
-            if !address[2..].chars().all(|c| c.is_ascii_digit()) {
-                return Err("Filecoin ID address must contain only digits after f0".to_string());
-            }
-            Ok(())
-        }
-        '1' => {
-            let bytes = bs58::decode(&address[2..])
-                .with_check(Some(0x01))
-                .into_vec()
-                .map_err(|_| "Invalid Filecoin f1 address".to_string())?;
-            if bytes.len() != 21 {
-                return Err(
-                    "Filecoin f1 address must decode to 21 bytes (1 prefix + 20 payload)"
-                        .to_string(),
-                );
-            }
-            if bytes[0] != 1 {
-                return Err("Filecoin f1 address has wrong protocol byte".to_string());
-            }
-            Ok(())
-        }
-        '3' => {
-            let bytes = bs58::decode(&address[2..])
-                .with_check(Some(0x03))
-                .into_vec()
-                .map_err(|_| "Invalid Filecoin f3 address".to_string())?;
-            if bytes.len() != 48 {
-                return Err("Filecoin f3 (BLS) address must decode to 48 bytes".to_string());
-            }
-            Ok(())
-        }
-        '4' => {
-            if address.starts_with("f410") || address.starts_with("t410") {
-                bech32::decode(address)
-                    .map_err(|_| "Invalid Filecoin f4 (delegated) address".to_string())?;
-                Ok(())
-            } else {
-                Err("Filecoin f4 address must start with f410".to_string())
-            }
-        }
-        _ => Err("Unknown Filecoin address protocol".to_string()),
-    }
-}
-
-pub(crate) fn validate_injective_address(address: &str) -> Result<(), String> {
-    if !address.starts_with("inj1") {
-        return Err("Injective address must start with inj1".to_string());
-    }
-    bech32::decode(address)
-        .map_err(|_| "Recipient must be a valid Injective bech32 address".to_string())?;
-    Ok(())
-}
-
-pub(crate) fn validate_solana_address(address: &str) -> Result<(), String> {
-    let bytes = bs58::decode(address)
-        .into_vec()
-        .map_err(|_| "Recipient must be a valid base58 Solana address".to_string())?;
-    if bytes.len() != 32 {
-        return Err("Solana address must decode to 32 bytes".to_string());
-    }
-    Ok(())
-}
-
-pub(crate) fn validate_zcash_address(address: &str) -> Result<(), String> {
-    if address.starts_with("zs1") || address.starts_with("ztestsapling") {
-        return Err("Zcash shielded addresses are not yet supported".to_string());
-    }
-    if address.starts_with("t1") || address.starts_with("t3") || address.starts_with("tm") {
-        let bytes = bs58::decode(address)
-            .into_vec()
-            .map_err(|_| "Recipient must be a valid Zcash transparent address".to_string())?;
-        if bytes.len() != 26 {
-            return Err("Zcash transparent address must decode to 26 bytes".to_string());
-        }
-        let payload = &bytes[..22];
-        let checksum = &bytes[22..];
-        let hash = Sha256::digest(Sha256::digest(payload));
-        if &hash[..4] != checksum {
-            return Err("Zcash transparent address checksum invalid".to_string());
-        }
-        return Ok(());
-    }
-    Err("Recipient must be a valid Zcash address (t1 or tm)".to_string())
-}
-
-pub(crate) fn validate_tron_address(address: &str) -> Result<(), String> {
-    let bytes = bs58::decode(address)
-        .with_check(None)
-        .into_vec()
-        .map_err(|_| "Recipient must be a valid Tron base58check address".to_string())?;
-
-    if bytes.len() != 21 {
-        return Err("Tron address must decode to 21 bytes".to_string());
-    }
-
-    if bytes[0] != 0x41 {
-        return Err("Tron address must use mainnet 0x41 prefix".to_string());
-    }
-
-    Ok(())
 }

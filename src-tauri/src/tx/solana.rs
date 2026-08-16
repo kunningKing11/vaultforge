@@ -15,7 +15,17 @@ use spl_associated_token_account_interface::{
 use spl_token_interface::instruction::transfer_checked;
 
 use crate::derivation::solana_secret_key_from_mnemonic;
-use crate::providers::solana::{fetch_latest_solana_blockhash, fetch_solana_fee_for_message};
+use crate::providers::solana::{
+    SolanaTokenAccount, fetch_latest_solana_blockhash, fetch_solana_fee_for_message,
+};
+
+const MAX_TRANSACTION_BYTES: usize = 1232;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SolanaTokenSource {
+    pub(crate) address: String,
+    pub(crate) amount: u64,
+}
 
 pub(crate) struct SignedSolanaTransfer {
     pub(crate) signature: String,
@@ -60,12 +70,12 @@ pub(crate) fn sign_solana_token_transfer_with_blockhash(
     from: &str,
     to: &str,
     mint: &str,
-    amount: u64,
+    sources: &[SolanaTokenSource],
     decimals: u8,
     recent_blockhash: &str,
     fee_lamports: u64,
 ) -> Result<SignedSolanaTransfer, String> {
-    let instructions = spl_token_transfer_instructions(from, to, mint, amount, decimals)?;
+    let instructions = spl_token_transfer_instructions(from, to, mint, sources, decimals)?;
 
     sign_solana_instructions(SolanaTransferDraft {
         mnemonic,
@@ -96,6 +106,9 @@ fn sign_solana_instructions(draft: SolanaTransferDraft) -> Result<SignedSolanaTr
         .to_string();
     let raw_tx = wincode::serialize(&transaction)
         .map_err(|_| "Failed to serialize Solana transaction".to_string())?;
+    if raw_tx.len() > MAX_TRANSACTION_BYTES {
+        return Err("Solana transfer uses too many token accounts; consolidate the token accounts before sending".to_string());
+    }
     let raw_tx_base64 = base64::engine::general_purpose::STANDARD.encode(raw_tx);
 
     Ok(SignedSolanaTransfer {
@@ -130,11 +143,11 @@ pub(crate) async fn sign_solana_token_transfer(
     from: &str,
     to: &str,
     mint: &str,
-    amount: u64,
+    sources: &[SolanaTokenSource],
     decimals: u8,
 ) -> Result<SignedSolanaTransfer, String> {
     let recent_blockhash = fetch_latest_solana_blockhash().await?;
-    let instructions = spl_token_transfer_instructions(from, to, mint, amount, decimals)?;
+    let instructions = spl_token_transfer_instructions(from, to, mint, sources, decimals)?;
     let fee_lamports = estimate_solana_fee(from, instructions, &recent_blockhash).await?;
 
     sign_solana_token_transfer_with_blockhash(
@@ -142,11 +155,60 @@ pub(crate) async fn sign_solana_token_transfer(
         from,
         to,
         mint,
-        amount,
+        sources,
         decimals,
         &recent_blockhash,
         fee_lamports,
     )
+}
+
+pub(crate) fn select_solana_token_sources(
+    wallet_address: &str,
+    mint: &str,
+    decimals: u8,
+    amount: u64,
+    accounts: &[SolanaTokenAccount],
+) -> Result<(Vec<SolanaTokenSource>, u128), String> {
+    let ata = solana_associated_token_address(wallet_address, mint)?;
+    let mut candidates: Vec<&SolanaTokenAccount> = accounts
+        .iter()
+        .filter(|account| {
+            account.mint == mint && account.decimals == decimals && account.amount > 0
+        })
+        .collect();
+    candidates.sort_by(|left, right| {
+        (
+            left.address != ata,
+            std::cmp::Reverse(left.amount),
+            &left.address,
+        )
+            .cmp(&(
+                right.address != ata,
+                std::cmp::Reverse(right.amount),
+                &right.address,
+            ))
+    });
+
+    let total_balance = candidates
+        .iter()
+        .fold(0u128, |total, account| total + u128::from(account.amount));
+    let mut remaining = amount;
+    let mut sources = Vec::new();
+    for account in candidates {
+        let spend = account.amount.min(remaining);
+        if spend > 0 {
+            sources.push(SolanaTokenSource {
+                address: account.address.clone(),
+                amount: spend,
+            });
+            remaining -= spend;
+        }
+        if remaining == 0 {
+            return Ok((sources, total_balance));
+        }
+    }
+
+    Err("Insufficient live SPL token balance across wallet token accounts".to_string())
 }
 
 async fn estimate_solana_fee(
@@ -195,13 +257,12 @@ fn spl_token_transfer_instructions(
     from: &str,
     to: &str,
     mint: &str,
-    amount: u64,
+    sources: &[SolanaTokenSource],
     decimals: u8,
 ) -> Result<Vec<Instruction>, String> {
     let from_pubkey = parse_pubkey(from, "from")?;
     let to_pubkey = parse_pubkey(to, "recipient")?;
     let mint_pubkey = parse_pubkey(mint, "mint")?;
-    let source_ata = get_associated_token_address(&from_pubkey, &mint_pubkey);
     let destination_ata = get_associated_token_address(&to_pubkey, &mint_pubkey);
     let create_destination = create_associated_token_account_idempotent(
         &from_pubkey,
@@ -209,16 +270,25 @@ fn spl_token_transfer_instructions(
         &mint_pubkey,
         &spl_token_interface::ID,
     );
-    let transfer = transfer_checked(
-        &spl_token_interface::ID,
-        &source_ata,
-        &mint_pubkey,
-        &destination_ata,
-        &from_pubkey,
-        &[],
-        amount,
-        decimals,
-    )
-    .map_err(|_| "Failed to build SPL token transfer".to_string())?;
-    Ok(vec![create_destination, transfer])
+    if sources.is_empty() {
+        return Err("Solana token transfer has no source accounts".to_string());
+    }
+    let mut instructions = vec![create_destination];
+    for source in sources {
+        let source_pubkey = parse_pubkey(&source.address, "token source")?;
+        instructions.push(
+            transfer_checked(
+                &spl_token_interface::ID,
+                &source_pubkey,
+                &mint_pubkey,
+                &destination_ata,
+                &from_pubkey,
+                &[],
+                source.amount,
+                decimals,
+            )
+            .map_err(|_| "Failed to build SPL token transfer".to_string())?,
+        );
+    }
+    Ok(instructions)
 }
