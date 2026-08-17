@@ -6,7 +6,10 @@ use zeroize::Zeroize;
 
 use crate::activity::{activity, hash_secret};
 use crate::commands::market::refresh_asset_prices;
-use crate::derivation::{address_from_seed, derive_addresses_from_mnemonic, generate_mnemonic};
+use crate::derivation::{
+    address_from_seed, derive_addresses_from_mnemonic, generate_mnemonic,
+    validate_recovery_phrase_word_count,
+};
 use crate::dto::{Wallet, WalletSession};
 use crate::providers::fetch_portfolio_assets;
 use crate::state::{AppState, StoredWalletMetadata, clear_secret_string, session_from_state};
@@ -82,13 +85,10 @@ pub(crate) async fn import_wallet(
     mnemonic: String,
     passphrase: String,
 ) -> Result<WalletSession, String> {
-    let words = mnemonic.split_whitespace().count();
-    if words != 12 && words != 24 {
-        return Err("Recovery phrase must contain 12 or 24 words".to_string());
-    }
+    let mnemonic = mnemonic.trim().to_string();
+    validate_recovery_phrase_word_count(&mnemonic)?;
     validate_passphrase(&passphrase)?;
 
-    let mnemonic = mnemonic.trim().to_string();
     let addresses = derive_addresses_from_mnemonic(&mnemonic)?;
     let primary_address = addresses
         .get("evm")

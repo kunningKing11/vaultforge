@@ -6,6 +6,8 @@ import { appState, addressForNetwork, selectedNetwork } from "./state";
 import { render } from "./render";
 import type { SessionCommand, WalletSession } from "./types";
 
+const BIP39_WORD_COUNTS = new Set([12, 15, 18, 21, 24]);
+
 export async function createWallet(form: HTMLFormElement) {
   const formData = new FormData(form);
   const passphrase = String(formData.get("passphrase") || "");
@@ -21,12 +23,14 @@ export async function createWallet(form: HTMLFormElement) {
 
 export async function importWallet(form: HTMLFormElement) {
   const formData = new FormData(form);
+  const mnemonic = String(formData.get("mnemonic") || "");
   const passphrase = String(formData.get("passphrase") || "");
+  if (!validateRecoveryPhraseWordCount(mnemonic)) return;
   if (!validatePassphraseConfirmation(form, passphrase)) return;
 
   await runCommand("import_wallet", () =>
     walletApi.importWallet({
-      mnemonic: String(formData.get("mnemonic") || ""),
+      mnemonic,
       passphrase,
     }),
   );
@@ -322,6 +326,14 @@ function validatePassphraseConfirmation(form: HTMLFormElement, passphrase: strin
     return false;
   }
   return true;
+}
+
+function validateRecoveryPhraseWordCount(mnemonic: string) {
+  const wordCount = mnemonic.trim() === "" ? 0 : mnemonic.trim().split(/\s+/).length;
+  if (BIP39_WORD_COUNTS.has(wordCount)) return true;
+
+  pushToast("Recovery phrase must contain 12, 15, 18, 21, or 24 words.", "error");
+  return false;
 }
 
 export function updatePassphraseStrength(input: HTMLInputElement) {

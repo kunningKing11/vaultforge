@@ -1,5 +1,6 @@
 use base64::Engine;
 use bech32::{Bech32, Bech32m, Hrp};
+use bip39::{Language, Mnemonic};
 use chrono::Utc;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -10,7 +11,8 @@ use crate::assets::{cached_asset, token_addresses_match};
 use crate::commands::tx::{ensure_native_balance_covers_debit, required_native_debit};
 use crate::commands::wallet::refresh_filecoin_address;
 use crate::derivation::{
-    address_from_seed, bitcoin_bech32_address, derive_addresses_from_mnemonic,
+    BIP39_WORD_COUNTS, address_from_seed, bitcoin_bech32_address, derive_addresses_from_mnemonic,
+    validate_recovery_phrase_word_count,
 };
 use crate::dto::{Asset, Wallet};
 use crate::providers::bitcoin::{
@@ -78,6 +80,26 @@ fn starter_assets(network: &str) -> Vec<Asset> {
             token_address: Some("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string()),
         },
     ]
+}
+
+#[test]
+fn validates_standard_bip39_recovery_phrase_lengths_and_checksums() {
+    for (entropy_length, expected_word_count) in [(16, 12), (20, 15), (24, 18), (28, 21), (32, 24)]
+    {
+        let mnemonic = Mnemonic::from_entropy_in(Language::English, &vec![0; entropy_length])
+            .unwrap()
+            .to_string();
+        assert_eq!(mnemonic.split_whitespace().count(), expected_word_count);
+        assert!(BIP39_WORD_COUNTS.contains(&expected_word_count));
+        assert!(validate_recovery_phrase_word_count(&mnemonic).is_ok());
+        assert!(derive_addresses_from_mnemonic(&mnemonic).is_ok());
+    }
+
+    assert!(validate_recovery_phrase_word_count("abandon abandon abandon").is_err());
+    assert!(derive_addresses_from_mnemonic(
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
+    )
+    .is_err());
 }
 
 #[test]

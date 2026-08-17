@@ -14,6 +14,8 @@ use std::collections::HashMap;
 
 use crate::address::filecoin::filecoin_mainnet_secp256k1_address;
 
+pub(crate) const BIP39_WORD_COUNTS: [usize; 5] = [12, 15, 18, 21, 24];
+
 // TODO: why some are pub(crate) and some are not? Should we make them all pub(crate)?
 pub(crate) const BITCOIN_DERIVATION_PATH: &str = "m/84'/0'/0'/0/0";
 const EVM_DERIVATION_PATH: &str = "m/44'/60'/0'/0/0";
@@ -54,6 +56,15 @@ pub(crate) fn generate_mnemonic() -> Result<String, String> {
 
 pub(crate) fn address_from_seed(seed: &str) -> String {
     format!("0x{}", &crate::activity::hash_secret(seed)[..40])
+}
+
+pub(crate) fn validate_recovery_phrase_word_count(mnemonic: &str) -> Result<(), String> {
+    let word_count = mnemonic.split_whitespace().count();
+    if BIP39_WORD_COUNTS.contains(&word_count) {
+        Ok(())
+    } else {
+        Err("Recovery phrase must contain 12, 15, 18, 21, or 24 words".to_string())
+    }
 }
 
 fn mnemonic_seed(mnemonic: &str) -> Result<[u8; 64], String> {
