@@ -7,9 +7,8 @@ use zeroize::Zeroize;
 use crate::activity::{activity, hash_secret};
 use crate::commands::market::refresh_asset_prices;
 use crate::derivation::{
-    address_from_seed, derive_addresses_from_mnemonic, derive_addresses_from_mnemonic_filtered,
-    derivation_family, generate_mnemonic,
-    validate_recovery_phrase_word_count,
+    address_from_seed, address_key_for_network, derive_addresses_from_mnemonic_filtered,
+    generate_mnemonic, validate_recovery_phrase_word_count,
 };
 use crate::dto::{Wallet, WalletSession};
 use crate::providers::fetch_portfolio_assets;
@@ -20,7 +19,7 @@ use crate::storage::{
 use crate::validation::{clean_name, validate_passphrase};
 
 pub(crate) fn refresh_filecoin_address(wallet: &mut Wallet) -> Result<(), String> {
-    let addresses = derive_addresses_from_mnemonic(&wallet.mnemonic)?;
+    let addresses = derive_addresses_from_mnemonic_filtered(&wallet.mnemonic, &["filecoin"])?;
     let filecoin_address = addresses
         .get("filecoin")
         .cloned()
@@ -151,7 +150,7 @@ fn enabled_address_subset(
 ) -> HashMap<String, String> {
     let mut filtered = HashMap::new();
     for network_id in enabled_networks {
-        let Some(family) = derivation_family(network_id.as_str()) else {
+        let Some(family) = address_key_for_network(network_id.as_str()) else {
             continue;
         };
         if let Some(address) = addresses.get(family) {
@@ -217,7 +216,7 @@ pub(crate) async fn unlock_wallet(
     let mut refresh_addresses = enabled_address_subset(&addresses, &enabled_networks);
     if refresh_addresses.is_empty() {
         for network_id in &enabled_networks {
-            let Some(family) = derivation_family(network_id.as_str()) else {
+            let Some(family) = address_key_for_network(network_id.as_str()) else {
                 continue;
             };
             if let Some(address_value) = addresses.get(family) {
@@ -227,7 +226,9 @@ pub(crate) async fn unlock_wallet(
         }
     }
     if !refresh_addresses.contains_key("evm")
-        && enabled_networks.iter().any(|n| derivation_family(n.as_str()) == Some("evm"))
+        && enabled_networks
+            .iter()
+            .any(|n| address_key_for_network(n.as_str()) == Some("evm"))
     {
         if let Some(address_value) = addresses.get("evm") {
             refresh_addresses.insert("evm".to_string(), address_value.clone());

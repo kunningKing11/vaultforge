@@ -36,7 +36,7 @@ pub(crate) struct WalletPayload {
 fn default_enabled_networks() -> Vec<String> {
     vec![
         "bitcoin".into(),
-        "evm".into(),
+        "ethereum".into(),
         "filecoin".into(),
         "injective".into(),
         "solana".into(),

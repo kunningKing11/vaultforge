@@ -13,12 +13,13 @@ use sha3::digest::Digest as Sha3Digest;
 use std::collections::HashMap;
 
 use crate::address::filecoin::filecoin_mainnet_secp256k1_address;
+use crate::registry::network_by_id;
 
 pub(crate) const BIP39_WORD_COUNTS: [usize; 5] = [12, 15, 18, 21, 24];
 
 #[cfg(test)]
 pub(crate) const ALL_NETWORKS: &[&str] = &[
-    "bitcoin", "evm", "filecoin", "injective", "solana", "tron", "zcash",
+    "bitcoin", "ethereum", "filecoin", "injective", "solana", "tron", "zcash",
 ];
 
 // TODO: why some are pub(crate) and some are not? Should we make them all pub(crate)?
@@ -143,17 +144,8 @@ fn derive_wallet_keys(mnemonic: &str) -> Result<DerivedWalletKeys, String> {
     })
 }
 
-pub(crate) fn derivation_family(network_id: &str) -> Option<&'static str> {
-    match network_id {
-        "bitcoin" => Some("bitcoin"),
-        "evm" | "ethereum" | "avalanche_c" | "bnb" | "monad" | "arbitrum_one" | "base" | "optimism" | "polygon" => Some("evm"),
-        "filecoin" => Some("filecoin"),
-        "injective" => Some("injective"),
-        "solana" => Some("solana"),
-        "tron" => Some("tron"),
-        "zcash" => Some("zcash"),
-        _ => None,
-    }
+pub(crate) fn address_key_for_network(network_id: &str) -> Option<&'static str> {
+    network_by_id(network_id).map(|network| network.address_key.as_str())
 }
 
 pub(crate) fn derive_addresses_from_mnemonic_filtered(
@@ -164,7 +156,7 @@ pub(crate) fn derive_addresses_from_mnemonic_filtered(
     let mut addresses = HashMap::new();
 
     for network_id in enabled {
-        if let Some(family) = derivation_family(network_id) {
+        if let Some(family) = address_key_for_network(network_id) {
             match family {
                 "bitcoin" => {
                     addresses.insert(
