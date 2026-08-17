@@ -12,8 +12,7 @@ use crate::commands::tx::{ensure_native_balance_covers_debit, required_native_de
 use crate::commands::wallet::refresh_filecoin_address;
 use crate::derivation::{
     ALL_NETWORKS, BIP39_WORD_COUNTS, address_from_seed, bitcoin_bech32_address,
-    derive_addresses_from_mnemonic, derive_addresses_from_mnemonic_filtered,
-    validate_recovery_phrase_word_count,
+    derive_addresses_from_mnemonic_filtered, validate_recovery_phrase_word_count,
 };
 use crate::dto::{Asset, Wallet};
 use crate::providers::bitcoin::{
@@ -93,12 +92,13 @@ fn validates_standard_bip39_recovery_phrase_lengths_and_checksums() {
         assert_eq!(mnemonic.split_whitespace().count(), expected_word_count);
         assert!(BIP39_WORD_COUNTS.contains(&expected_word_count));
         assert!(validate_recovery_phrase_word_count(&mnemonic).is_ok());
-        assert!(derive_addresses_from_mnemonic(&mnemonic).is_ok());
+        assert!(derive_addresses_from_mnemonic_filtered(&mnemonic, ALL_NETWORKS).is_ok());
     }
 
     assert!(validate_recovery_phrase_word_count("abandon abandon abandon").is_err());
-    assert!(derive_addresses_from_mnemonic(
-        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
+    assert!(derive_addresses_from_mnemonic_filtered(
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon",
+        ALL_NETWORKS,
     )
     .is_err());
 }
@@ -206,6 +206,8 @@ fn unlock_migrates_legacy_filecoin_addresses() {
         passphrase_hash: "unused".to_string(),
         assets: vec![],
         activity: vec![],
+        enabled_networks: vec!["filecoin".to_string()],
+        auto_lock_timeout_secs: None,
     };
     refresh_filecoin_address(&mut wallet).unwrap();
     assert_eq!(
@@ -371,6 +373,8 @@ fn transfer_validation_rejects_malformed_amounts_and_mints() {
             token_address: Some("So11111111111111111111111111111111111111112".to_string()),
         }],
         activity: vec![],
+        enabled_networks: vec!["solana".to_string()],
+        auto_lock_timeout_secs: None,
     };
     let recipient = "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ";
     let mint = "So11111111111111111111111111111111111111112";
@@ -761,7 +765,7 @@ fn signs_solana_spl_token_transfer() {
 #[test]
 fn combines_classic_spl_token_accounts_with_ata_priority() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-    let addresses = derive_addresses_from_mnemonic(mnemonic).unwrap();
+    let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, ALL_NETWORKS).unwrap();
     let owner = addresses.get("solana").unwrap();
     let mint = "So11111111111111111111111111111111111111112";
     let ata = solana_associated_token_address(owner, mint).unwrap();
