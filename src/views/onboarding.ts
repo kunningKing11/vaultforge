@@ -111,16 +111,6 @@ function step2() {
         <span class="text-sm font-bold text-slate-300">Confirm passphrase</span>
         <input class="field" data-wizard-field="confirmPassphrase" type="password" minlength="8" value="${escapeHtml(wizard.confirmPassphrase)}" />
       </label>
-      ${
-        isImport
-          ? `
-        <label class="block space-y-2">
-          <span class="text-sm font-bold text-slate-300">Recovery phrase</span>
-          <textarea class="field min-h-28" data-wizard-field="mnemonic" placeholder="12 or 24 word phrase">${escapeHtml(wizard.mnemonic)}</textarea>
-        </label>
-      `
-          : ""
-      }
       <div class="flex gap-3 pt-2">
         <button class="btn-secondary flex-1" type="button" data-action="setup-prev">Back</button>
         <button class="btn-primary flex-1" type="button" data-action="setup-next">Next</button>
@@ -133,7 +123,21 @@ function step3() {
   const wizard = appState.setupWizard;
   const isImport = wizard.flow === "import";
 
-  if (isImport) return step4();
+  if (isImport) {
+    return `
+      <div class="space-y-4">
+        <p class="text-sm text-slate-300">Enter your recovery phrase exactly as you wrote it down.</p>
+        <label class="block space-y-2">
+          <span class="text-sm font-bold text-slate-300">Recovery phrase</span>
+          <textarea class="field min-h-28 resize-none" data-wizard-field="mnemonic" placeholder="12, 15, 18, 21, or 24 word phrase">${escapeHtml(wizard.mnemonic)}</textarea>
+        </label>
+        <div class="flex gap-3 pt-2">
+          <button class="btn-secondary flex-1" type="button" data-action="setup-prev">Back</button>
+          <button class="btn-primary flex-1" type="button" data-action="setup-next">Next</button>
+        </div>
+      </div>
+    `;
+  }
 
   const counts = [12, 15, 18, 21, 24] as const;
   const labels: Record<number, { title: string; desc: string }> = {
