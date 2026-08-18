@@ -246,7 +246,10 @@ function stopAutoLockTimer() {
   }
 }
 
+const MINIMUM_SPLASH_DURATION_MS = 650;
+
 async function loadSession() {
+  const splashStartedAt = performance.now();
   appState.busy = true;
   render();
   try {
@@ -255,6 +258,10 @@ async function loadSession() {
   } catch (error) {
     pushToast(formatError(error), "error");
   } finally {
+    const remainingSplashTime = MINIMUM_SPLASH_DURATION_MS - (performance.now() - splashStartedAt);
+    if (remainingSplashTime > 0) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, remainingSplashTime));
+    }
     appState.busy = false;
     render();
   }
