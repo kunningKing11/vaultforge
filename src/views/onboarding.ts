@@ -9,7 +9,7 @@ export function splashView() {
     <section class="mx-auto flex min-h-[80vh] max-w-5xl items-center justify-center">
       <div class="glass rounded-[2rem] p-10 text-center">
         <p class="theme-text-accent text-sm font-bold uppercase tracking-[0.4em]">VaultForge</p>
-        <h1 class="mt-4 text-4xl font-black">Loading wallet core</h1>
+        <h1 class="mt-4 text-4xl font-black">Loading wallet...</h1>
       </div>
     </section>
   `;
