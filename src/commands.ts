@@ -21,7 +21,7 @@ export async function setupWizard() {
       return;
     }
     if (!validateRecoveryPhraseWordCount(mnemonic)) return;
-    await runCommand("import_wallet", () =>
+    const imported = await runCommand("import_wallet", () =>
       walletApi.importWallet({
         name: wizard.name || undefined,
         mnemonic,
@@ -30,6 +30,7 @@ export async function setupWizard() {
         autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
       }),
     );
+    if (imported) clearSetupSecrets();
   } else {
     if (!wizard.acknowledgedBackup) {
       pushToast(
@@ -42,7 +43,7 @@ export async function setupWizard() {
       wizard.generatedMnemonic = await walletApi.generateMnemonic(wizard.wordCount);
     }
     wizard.mnemonic = "";
-    await runCommand("create_wallet", () =>
+    const created = await runCommand("create_wallet", () =>
       walletApi.createWallet({
         name: wizard.name || "Primary Wallet",
         passphrase,
@@ -51,7 +52,19 @@ export async function setupWizard() {
         mnemonic: wizard.generatedMnemonic,
       }),
     );
+    if (created) clearSetupSecrets();
   }
+}
+
+// Drop temporary onboarding secrets after a successful create or import.
+function clearSetupSecrets() {
+  const wizard = appState.setupWizard;
+  wizard.passphrase = "";
+  wizard.confirmPassphrase = "";
+  wizard.mnemonic = "";
+  wizard.generatedMnemonic = "";
+  wizard.recoveryPhraseVisible = false;
+  wizard.acknowledgedBackup = false;
 }
 
 export async function unlockWallet(form: HTMLFormElement) {

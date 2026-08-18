@@ -42,6 +42,7 @@ export const appState = {
     confirmPassphrase: "",
     mnemonic: "",
     generatedMnemonic: "",
+    recoveryPhraseVisible: false,
     acknowledgedBackup: false,
     wordCount: 12 as 12 | 15 | 18 | 21 | 24,
     enabledNetworks: networks.map((n) => n.id) as string[],
