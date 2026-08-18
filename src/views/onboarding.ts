@@ -1,5 +1,7 @@
 import { escapeHtml } from "../format";
 import { networks } from "../networks";
+import eyeIconUrl from "../assets/icons/eye.svg";
+import eyeOffIconUrl from "../assets/icons/eye-off.svg";
 import { featureCard, passphraseMeter } from "./shared";
 import { appState } from "../state";
 import { themes } from "../theme";
@@ -248,6 +250,14 @@ function step5() {
 function step6() {
   const wizard = appState.setupWizard;
   const isImport = wizard.flow === "import";
+  const recoveryPhrase = isImport ? wizard.mnemonic : wizard.generatedMnemonic;
+  const recoveryPhraseDisplay = wizard.recoveryPhraseVisible
+    ? recoveryPhrase
+    : recoveryPhrase.replace(/\S/g, "•");
+  const revealLabel = wizard.recoveryPhraseVisible
+    ? "Hide recovery phrase"
+    : "Show recovery phrase";
+  const recoveryPhraseIconUrl = wizard.recoveryPhraseVisible ? eyeOffIconUrl : eyeIconUrl;
 
   return `
     <form class="space-y-4" data-action="wallet-setup">
@@ -256,16 +266,27 @@ function step6() {
         ${
           isImport
             ? `
-          <p class="text-sm text-slate-300">Your wallet will be imported with the recovery phrase you provided. Make sure it is correct.</p>
+          <p class="text-sm text-slate-300">Confirm the recovery phrase you provided before importing your wallet.</p>
         `
             : `
           <p class="text-sm text-slate-300">Write down your ${wizard.wordCount}-word recovery phrase and store it securely. It is the only way to recover your wallet.</p>
-          <p class="mt-2 rounded-lg bg-white/5 p-3 font-mono text-sm text-white break-words">${escapeHtml(wizard.generatedMnemonic || "")}</p>
+        `
+        }
+        <div class="relative mt-3">
+          <textarea class="field min-h-26 resize-none pr-12 font-mono text-sm" readonly aria-label="Recovery phrase">${escapeHtml(recoveryPhraseDisplay)}</textarea>
+          <button class="absolute right-3 top-3 flex h-8 w-8 items-center justify-center text-slate-300 transition hover:text-white" type="button" data-action="toggle-recovery-phrase" aria-label="${revealLabel}" aria-pressed="${wizard.recoveryPhraseVisible}">
+            <img class="h-5 w-5" src="${recoveryPhraseIconUrl}" alt="" />
+          </button>
+        </div>
+        ${
+          !isImport
+            ? `
           <label class="mt-3 flex items-start gap-2 rounded-lg border border-white/10 bg-black/10 p-3 text-sm text-slate-300">
             <input class="mt-1 accent-white" type="checkbox" data-wizard-field="acknowledgedBackup" ${wizard.acknowledgedBackup ? "checked" : ""} />
             <span>I have written down this recovery phrase and understand it is required to recover the wallet.</span>
           </label>
         `
+            : ""
         }
       </div>
       <div class="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">

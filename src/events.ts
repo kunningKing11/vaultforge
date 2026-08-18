@@ -78,6 +78,10 @@ export function bindEvents() {
       appState.setupWizard.step = 2;
       render();
     }
+    if (action === "toggle-recovery-phrase") {
+      appState.setupWizard.recoveryPhraseVisible = !appState.setupWizard.recoveryPhraseVisible;
+      render();
+    }
     if (action === "setup-wordcount") {
       const wc = Number(target.closest<HTMLElement>("[data-wordcount]")?.dataset.wordcount);
       if (wc) {
@@ -196,6 +200,8 @@ async function wizardNext() {
 
   if (wizard.step < 6) {
     wizard.step++;
+
+    if (wizard.step === 6) wizard.recoveryPhraseVisible = false;
 
     if (wizard.step === 6 && wizard.flow === "create" && !wizard.generatedMnemonic) {
       try {
