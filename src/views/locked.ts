@@ -7,9 +7,9 @@ export function lockedWalletView() {
         <div class="theme-icon-accent mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl text-3xl">#</div>
         <p class="text-sm font-bold uppercase tracking-[0.3em] text-slate-500">Wallet locked</p>
         <h1 class="mt-2 text-3xl font-black">Unlock Wallet</h1>
-        <p class="mt-3 text-slate-400">Your wallet session is encrypted locally. Enter your passphrase to unlock your wallet.</p>
+        <p class="mt-3 text-slate-400">Your wallet session is encrypted locally. Enter your wallet password to unlock your wallet.</p>
         <form data-action="unlock-wallet" class="mt-7 space-y-4 text-left">
-          <label class="block space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Passphrase</span><input class="field" name="passphrase" type="password" required /></label>
+          <label class="block space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Wallet password</span><input class="field" name="walletPassword" type="password" required /></label>
           <button class="btn-primary w-full" type="submit">Unlock wallet</button>
         </form>
         <div class="mt-7 border-t border-rose-400/20 pt-5 text-left">

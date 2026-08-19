@@ -16,7 +16,7 @@ use crate::state::{AppState, StoredWalletMetadata, clear_secret_string, session_
 use crate::storage::{
     decrypt_wallet, derive_storage_key, persist_state_wallet, read_stored_wallet,
 };
-use crate::validation::{clean_name, validate_passphrase};
+use crate::validation::{clean_name, validate_wallet_password};
 
 pub(crate) fn refresh_filecoin_address(wallet: &mut Wallet) -> Result<(), String> {
     let addresses = derive_addresses_from_mnemonic_filtered(&wallet.mnemonic, &["filecoin"])?;
@@ -45,12 +45,12 @@ pub(crate) fn generate_mnemonic_cmd(word_count: Option<u32>) -> Result<String, S
 pub(crate) async fn create_wallet(
     state: State<'_, Mutex<AppState>>,
     name: String,
-    passphrase: String,
+    wallet_password: String,
     enabled_networks: Vec<String>,
     auto_lock_timeout_secs: Option<u64>,
     mnemonic: Option<String>,
 ) -> Result<WalletSession, String> {
-    validate_passphrase(&passphrase)?;
+    validate_wallet_password(&wallet_password)?;
     let mnemonic = match mnemonic {
         Some(m) if !m.trim().is_empty() => m.trim().to_string(),
         _ => generate_mnemonic(12)?,
@@ -71,7 +71,7 @@ pub(crate) async fn create_wallet(
         created_at: Utc::now().to_rfc3339(),
         address: primary_address,
         addresses,
-        passphrase_hash: hash_secret(&passphrase),
+        wallet_password_hash: hash_secret(&wallet_password),
         assets,
         activity: vec![activity(
             "system",
@@ -84,7 +84,7 @@ pub(crate) async fn create_wallet(
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
-    let (key, salt) = derive_storage_key(&passphrase, None)?;
+    let (key, salt) = derive_storage_key(&wallet_password, None)?;
     state.encryption_key = Some(key);
     state.storage_salt = Some(salt);
     state.wallet = Some(wallet);
@@ -98,13 +98,13 @@ pub(crate) async fn import_wallet(
     state: State<'_, Mutex<AppState>>,
     name: Option<String>,
     mnemonic: String,
-    passphrase: String,
+    wallet_password: String,
     enabled_networks: Vec<String>,
     auto_lock_timeout_secs: Option<u64>,
 ) -> Result<WalletSession, String> {
     let mnemonic = mnemonic.trim().to_string();
     validate_recovery_phrase_word_count(&mnemonic)?;
-    validate_passphrase(&passphrase)?;
+    validate_wallet_password(&wallet_password)?;
 
     let network_refs: Vec<&str> = enabled_networks.iter().map(|s| s.as_str()).collect();
     let addresses = derive_addresses_from_mnemonic_filtered(&mnemonic, &network_refs)?;
@@ -122,7 +122,7 @@ pub(crate) async fn import_wallet(
         created_at: Utc::now().to_rfc3339(),
         address: primary_address,
         addresses,
-        passphrase_hash: hash_secret(&passphrase),
+        wallet_password_hash: hash_secret(&wallet_password),
         assets,
         activity: vec![activity(
             "import",
@@ -135,7 +135,7 @@ pub(crate) async fn import_wallet(
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
-    let (key, salt) = derive_storage_key(&passphrase, None)?;
+    let (key, salt) = derive_storage_key(&wallet_password, None)?;
     state.encryption_key = Some(key);
     state.storage_salt = Some(salt);
     state.wallet = Some(wallet);
@@ -163,16 +163,16 @@ fn enabled_address_subset(
 #[tauri::command]
 pub(crate) async fn unlock_wallet(
     state: State<'_, Mutex<AppState>>,
-    passphrase: String,
+    wallet_password: String,
 ) -> Result<WalletSession, String> {
-    let passphrase_hash = hash_secret(&passphrase);
+    let wallet_password_hash = hash_secret(&wallet_password);
 
     let (address, addresses, cached_assets, enabled_networks) = {
         let mut state = state.lock().map_err(|_| "State lock failed")?;
 
         let in_memory = state.wallet.as_ref().map(|w| {
             (
-                w.passphrase_hash.clone(),
+                w.wallet_password_hash.clone(),
                 w.address.clone(),
                 w.addresses.clone(),
                 w.assets.clone(),
@@ -181,17 +181,17 @@ pub(crate) async fn unlock_wallet(
         });
 
         if let Some((stored_hash, addr, addresses, assets, enabled_networks)) = in_memory {
-            if stored_hash != passphrase_hash {
-                return Err("Invalid passphrase".to_string());
+            if stored_hash != wallet_password_hash {
+                return Err("Invalid wallet password".to_string());
             }
             state.locked = false;
             (addr, addresses, assets, enabled_networks)
         } else {
             let stored = read_stored_wallet(&state.storage_path)?
                 .ok_or_else(|| "No wallet exists yet".to_string())?;
-            let mut wallet = decrypt_wallet(&stored, &passphrase)?;
-            if wallet.passphrase_hash != passphrase_hash {
-                return Err("Invalid passphrase".to_string());
+            let mut wallet = decrypt_wallet(&stored, &wallet_password)?;
+            if wallet.wallet_password_hash != wallet_password_hash {
+                return Err("Invalid wallet password".to_string());
             }
             refresh_filecoin_address(&mut wallet)?;
             state.stored_wallet = Some(StoredWalletMetadata {
@@ -200,7 +200,7 @@ pub(crate) async fn unlock_wallet(
             let salt = BASE64
                 .decode(stored.salt)
                 .map_err(|_| "Stored wallet salt is invalid")?;
-            let (key, salt) = derive_storage_key(&passphrase, Some(&salt))?;
+            let (key, salt) = derive_storage_key(&wallet_password, Some(&salt))?;
             state.encryption_key = Some(key);
             state.storage_salt = Some(salt);
             let address = wallet.address.clone();

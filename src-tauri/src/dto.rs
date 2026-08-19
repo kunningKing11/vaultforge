@@ -8,7 +8,8 @@ pub(crate) struct Wallet {
     pub(crate) created_at: String,
     pub(crate) address: String,
     pub(crate) addresses: HashMap<String, String>,
-    pub(crate) passphrase_hash: String,
+    #[serde(alias = "passphrase_hash")]
+    pub(crate) wallet_password_hash: String,
     pub(crate) assets: Vec<Asset>,
     pub(crate) activity: Vec<Activity>,
     #[serde(default = "default_enabled_networks")]
@@ -24,7 +25,8 @@ pub(crate) struct WalletPayload {
     pub(crate) created_at: String,
     pub(crate) address: String,
     pub(crate) addresses: HashMap<String, String>,
-    pub(crate) passphrase_hash: String,
+    #[serde(alias = "passphrase_hash")]
+    pub(crate) wallet_password_hash: String,
     pub(crate) assets: Vec<Asset>,
     pub(crate) activity: Vec<Activity>,
     #[serde(default = "default_enabled_networks")]

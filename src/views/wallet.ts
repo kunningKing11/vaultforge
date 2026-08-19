@@ -238,7 +238,7 @@ function settingsView() {
         <h2 class="mt-2 text-3xl font-black">Local protection</h2>
         <div class="mt-6 grid gap-3 sm:grid-cols-2">
           ${securityTile("Storage", "AES-GCM encrypted")}
-          ${securityTile("Key derivation", "Argon2 passphrase key")}
+          ${securityTile("Key derivation", "Argon2 wallet password key")}
           ${securityTile("Mode", "ECDSA signing (EIP-1559)")}
           ${securityTile("Lock state", appState.session?.locked ? "Locked" : "Unlocked")}
         </div>

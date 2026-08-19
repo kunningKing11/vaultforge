@@ -9,9 +9,9 @@ use crate::assets::token_addresses_match;
 use crate::dto::Wallet;
 use crate::registry::network_by_id;
 
-pub(crate) fn validate_passphrase(passphrase: &str) -> Result<(), String> {
-    if passphrase.chars().count() < 8 {
-        return Err("Passphrase must be at least 8 characters".to_string());
+pub(crate) fn validate_wallet_password(wallet_password: &str) -> Result<(), String> {
+    if wallet_password.chars().count() < 8 {
+        return Err("Wallet password must be at least 8 characters".to_string());
     }
     Ok(())
 }

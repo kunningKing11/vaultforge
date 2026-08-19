@@ -173,7 +173,7 @@ Never return a `WalletSession` missing fields expected by the frontend.
 
 Real `create_wallet` behavior must:
 
-1. Validate passphrase policy.
+1. Validate wallet-password policy.
 2. Generate a valid BIP39 mnemonic using cryptographically secure randomness.
 3. Derive chain accounts using documented derivation paths.
 4. Persist encrypted wallet payload.
@@ -187,7 +187,7 @@ Do not generate mnemonics from custom word lists.
 Real `import_wallet` behavior must:
 
 1. Validate mnemonic word count and checksum.
-2. Validate passphrase policy.
+2. Validate wallet-password policy.
 3. Derive chain accounts using documented derivation paths.
 4. Persist encrypted wallet payload.
 5. Refresh balances from chain providers.
@@ -200,13 +200,13 @@ Do not derive addresses and discard them.
 Real `unlock_wallet` behavior must:
 
 1. Read stored wallet envelope.
-2. Derive decryption key from passphrase and stored salt.
+2. Derive decryption key from wallet password and stored salt.
 3. Decrypt and validate wallet payload.
 4. Reconstruct unlocked wallet/account state.
 5. Refresh or schedule refresh of balances and activity from providers.
 6. Return a complete `WalletSession`.
 
-Unlocking an already-loaded wallet must still validate the passphrase or use an explicit authenticated session policy.
+Unlocking an already-loaded wallet must still validate the wallet password or use an explicit authenticated session policy.
 
 ### Lock Wallet
 
