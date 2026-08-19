@@ -1,7 +1,7 @@
-import { escapeHtml } from "../format";
-import { networks } from "../networks";
 import eyeIconUrl from "../assets/icons/eye.svg";
 import eyeOffIconUrl from "../assets/icons/eye-off.svg";
+import { escapeHtml } from "../format";
+import { networks } from "../networks";
 import { featureCard, walletPasswordMeter } from "./shared";
 import { appState } from "../state";
 import { themes } from "../theme";
