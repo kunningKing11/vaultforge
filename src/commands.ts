@@ -5,6 +5,8 @@ import { networkById } from "./networks";
 import { appState, addressForNetwork, selectedNetwork } from "./state";
 import { render } from "./render";
 import type { SessionCommand, WalletSession } from "./types";
+import { walletApi } from "./walletApi";
+import { walletPasswordStrength } from "./walletPassword";
 
 const BIP39_WORD_COUNTS = new Set([12, 15, 18, 21, 24]);
 
@@ -389,7 +391,7 @@ function validateWalletPasswordConfirmation(walletPassword: string, confirm: str
     pushToast("Wallet passwords do not match.", "error");
     return false;
   }
-  if (walletPasswordScore(walletPassword) < 3) {
+  if (!walletPasswordStrength(walletPassword).meetsPolicy) {
     pushToast("Use a stronger wallet password before creating encrypted storage.", "error");
     return false;
   }
@@ -409,19 +411,9 @@ export function updateWalletPasswordStrength(input: HTMLInputElement) {
     "[data-wallet-password-meter]",
   );
   if (!meter) return;
-  const score = walletPasswordScore(input.value);
-  const labels = ["Too weak", "Weak", "Fair", "Strong", "Excellent"];
+  const { score, label } = walletPasswordStrength(input.value);
   meter.dataset.score = String(score);
-  meter.querySelector<HTMLElement>("[data-wallet-password-label]")!.textContent = labels[score];
-}
-
-function walletPasswordScore(value: string) {
-  let score = value.length >= 8 ? 1 : 0;
-  if (value.length >= 12) score += 1;
-  if (/[A-Z]/.test(value) && /[a-z]/.test(value)) score += 1;
-  if (/\d/.test(value)) score += 1;
-  if (/[^A-Za-z0-9]/.test(value)) score += 1;
-  return Math.min(score, 4);
+  meter.querySelector<HTMLElement>("[data-wallet-password-label]")!.textContent = label;
 }
 
 function successMessage(command: string) {
