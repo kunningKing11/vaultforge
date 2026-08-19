@@ -2,6 +2,7 @@ import { escapeHtml, formatWei, money, weiToNumber } from "../format";
 import { networkDisplayName, networks } from "../networks";
 import { appState, networkDetail } from "../state";
 import type { Activity, Asset, NetworkId, QrResilienceOption } from "../types";
+import { walletPasswordStrength } from "../walletPassword";
 
 const qrResilienceOptions: Array<QrResilienceOption> = [
   { value: "L", label: "Low", detail: "~7% recovery" },
@@ -137,8 +138,9 @@ export function featureCard(title: string, body: string) {
   return `<div class="rounded-2xl border border-white/10 bg-white/[0.04] p-5"><h3 class="font-black">${title}</h3><p class="mt-2 text-sm font-bold leading-6 text-slate-400">${body}</p></div>`;
 }
 
-export function walletPasswordMeter() {
-  return `<div class="wallet-password-meter" data-wallet-password-meter data-score="0"><div class="wallet-password-meter-track"><div></div></div><p class="mt-2 text-xs font-bold text-slate-500">Strength: <span data-wallet-password-label>Too weak</span></p></div>`;
+export function walletPasswordMeter(password: string) {
+  const { score, label } = walletPasswordStrength(password);
+  return `<div class="wallet-password-meter" data-wallet-password-meter data-score="${score}"><div class="wallet-password-meter-track"><div></div></div><p class="mt-2 text-xs font-bold text-slate-500">Strength: <span data-wallet-password-label>${label}</span></p></div>`;
 }
 
 export function iconCopy() {

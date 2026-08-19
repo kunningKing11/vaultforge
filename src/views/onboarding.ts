@@ -106,7 +106,7 @@ function step2() {
         <span class="text-sm font-bold text-slate-300">Wallet password</span>
         <input class="field" data-wizard-field="walletPassword" type="password" minlength="8" placeholder="Minimum 8 characters" data-wallet-password-input value="${escapeHtml(wizard.walletPassword)}" />
       </label>
-      ${walletPasswordMeter()}
+      ${walletPasswordMeter(wizard.walletPassword)}
       <label class="block space-y-2">
         <span class="text-sm font-bold text-slate-300">Confirm wallet password</span>
         <input class="field" data-wizard-field="confirmWalletPassword" type="password" minlength="8" value="${escapeHtml(wizard.confirmWalletPassword)}" />
