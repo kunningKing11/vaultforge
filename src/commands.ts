@@ -1,9 +1,8 @@
-import { pushToast } from "./toasts";
 import { formatError, toWei } from "./format";
-import { walletApi } from "./walletApi";
 import { networkById } from "./networks";
-import { appState, addressForNetwork, selectedNetwork } from "./state";
 import { render } from "./render";
+import { appState, addressForNetwork, selectedNetwork } from "./state";
+import { pushToast } from "./toasts";
 import type { SessionCommand, WalletSession } from "./types";
 import { walletApi } from "./walletApi";
 import { walletPasswordStrength } from "./walletPassword";
