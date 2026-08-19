@@ -1,9 +1,9 @@
 import { escapeHtml, formatWei, money, weiToNumber } from "../format";
 import { networkDisplayName, networks } from "../networks";
 import { appState, networkDetail } from "../state";
-import type { Activity, Asset, NetworkId, QrResilience } from "../types";
+import type { Activity, Asset, NetworkId, QrResilienceOption } from "../types";
 
-const qrResilienceOptions: Array<{ value: QrResilience; label: string; detail: string }> = [
+const qrResilienceOptions: Array<QrResilienceOption> = [
   { value: "L", label: "Low", detail: "~7% recovery" },
   { value: "M", label: "Medium", detail: "~15% recovery" },
   { value: "Q", label: "Quartile", detail: "~25% recovery" },
