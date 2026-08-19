@@ -82,6 +82,10 @@ export function bindEvents() {
       appState.setupWizard.recoveryPhraseVisible = !appState.setupWizard.recoveryPhraseVisible;
       render();
     }
+    if (action === "toggle-unlock-password-visibility") {
+      appState.unlockPasswordVisible = !appState.unlockPasswordVisible;
+      render();
+    }
     if (action === "setup-wordcount") {
       const wc = Number(target.closest<HTMLElement>("[data-wordcount]")?.dataset.wordcount);
       if (wc) {

@@ -1,6 +1,14 @@
+import eyeIconUrl from "../assets/icons/eye.svg";
+import eyeOffIconUrl from "../assets/icons/eye-off.svg";
 import { appState } from "../state";
 
 export function lockedWalletView() {
+  const revealLabel = appState.unlockPasswordVisible
+    ? "Hide wallet password"
+    : "Show wallet password";
+
+  const passwordIconUrl = appState.unlockPasswordVisible ? eyeOffIconUrl : eyeIconUrl;
+
   return `
     <section class="mx-auto flex min-h-[88vh] max-w-xl items-center justify-center">
       <div class="glass w-full rounded-[2rem] p-8 text-center">
@@ -9,7 +17,15 @@ export function lockedWalletView() {
         <h1 class="mt-2 text-3xl font-black">Unlock Wallet</h1>
         <p class="mt-3 text-slate-400">Your wallet session is encrypted locally. Enter your wallet password to unlock your wallet.</p>
         <form data-action="unlock-wallet" class="mt-7 space-y-4 text-left">
-          <label class="block space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Wallet password</span><input class="field" name="walletPassword" type="password" required /></label>
+          <label class="block space-y-2">
+            <span class="text-sm font-bold font-bold text-slate-300">Wallet password</span>
+            <div class="relative">
+              <input class="field pr-12" name="walletPassword" type="${appState.unlockPasswordVisible ? "text" : "password"}" required />
+              <button class="absolute right-3 top-1/2 -translate-y-1/2" type="button" data-action="toggle-unlock-password-visibility" aria-label="${revealLabel}" aria-pressed="${appState.unlockPasswordVisible}">
+                <img class="h-5 w-5" src="${passwordIconUrl}" alt="" />
+              </button>
+            </div>
+          </label>
           <button class="btn-primary w-full" type="submit">Unlock wallet</button>
         </form>
         <div class="mt-7 border-t border-rose-400/20 pt-5 text-left">

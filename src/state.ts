@@ -30,6 +30,7 @@ export const appState = {
   } as SendDraft,
   selectedActivityId: "",
   busy: false,
+  unlockPasswordVisible: false,
   lockedDeleteStep: "idle" as "idle" | "confirm" | "countdown",
   lockedDeleteRemaining: 10,
   lockedDeleteTimer: null as number | null,
