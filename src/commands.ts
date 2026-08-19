@@ -217,6 +217,7 @@ export async function swapTokens(form: HTMLFormElement) {
 
 export async function lockWallet() {
   appState.busy = true;
+  appState.unlockPasswordVisible = false;
   render();
   try {
     stopAutoLockTimer();
