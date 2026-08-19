@@ -66,7 +66,7 @@ pub(crate) fn encrypt_wallet(
         created_at: wallet.created_at.clone(),
         address: wallet.address.clone(),
         addresses: wallet.addresses.clone(),
-        passphrase_hash: wallet.passphrase_hash.clone(),
+        wallet_password_hash: wallet.wallet_password_hash.clone(),
         assets: wallet.assets.clone(),
         activity: wallet.activity.clone(),
         enabled_networks: wallet.enabled_networks.clone(),
@@ -90,7 +90,7 @@ pub(crate) fn encrypt_wallet(
 
 pub(crate) fn decrypt_wallet(
     stored: &StoredWalletFile,
-    passphrase: &str,
+    wallet_password: &str,
 ) -> Result<Wallet, String> {
     if stored.version != 2 && stored.version != 3 {
         return Err("Unsupported wallet version".to_string());
@@ -104,12 +104,12 @@ pub(crate) fn decrypt_wallet(
     let ciphertext = BASE64
         .decode(&stored.ciphertext)
         .map_err(|_| "Stored wallet payload is invalid")?;
-    let (key, _) = derive_storage_key(passphrase, Some(&salt))?;
+    let (key, _) = derive_storage_key(wallet_password, Some(&salt))?;
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|_| "Failed to initialize encryption")?;
     let nonce = Nonce::try_from(nonce.as_slice()).map_err(|_| "Stored wallet nonce is invalid")?;
     let plaintext = cipher
         .decrypt(&nonce, ciphertext.as_ref())
-        .map_err(|_| "Invalid passphrase")?;
+        .map_err(|_| "Invalid wallet password")?;
     let payload: WalletPayload = serde_json::from_slice(&plaintext)
         .map_err(|_| "Stored wallet contents are invalid".to_string())?;
     Ok(Wallet {
@@ -118,7 +118,7 @@ pub(crate) fn decrypt_wallet(
         created_at: payload.created_at,
         address: payload.address,
         addresses: payload.addresses,
-        passphrase_hash: payload.passphrase_hash,
+        wallet_password_hash: payload.wallet_password_hash,
         assets: payload.assets,
         activity: payload.activity,
         enabled_networks: payload.enabled_networks,
@@ -127,7 +127,7 @@ pub(crate) fn decrypt_wallet(
 }
 
 pub(crate) fn derive_storage_key(
-    passphrase: &str,
+    wallet_password: &str,
     salt: Option<&[u8]>,
 ) -> Result<([u8; 32], Vec<u8>), String> {
     let salt = salt.map(|value| value.to_vec()).unwrap_or_else(|| {
@@ -137,7 +137,7 @@ pub(crate) fn derive_storage_key(
     });
     let mut key = [0u8; 32];
     Argon2::default()
-        .hash_password_into(passphrase.as_bytes(), &salt, &mut key)
+        .hash_password_into(wallet_password.as_bytes(), &salt, &mut key)
         .map_err(|_| "Failed to derive wallet encryption key")?;
     Ok((key, salt))
 }

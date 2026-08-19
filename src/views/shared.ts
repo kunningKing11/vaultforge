@@ -137,8 +137,8 @@ export function featureCard(title: string, body: string) {
   return `<div class="rounded-2xl border border-white/10 bg-white/[0.04] p-5"><h3 class="font-black">${title}</h3><p class="mt-2 text-sm font-bold leading-6 text-slate-400">${body}</p></div>`;
 }
 
-export function passphraseMeter() {
-  return `<div class="passphrase-meter" data-passphrase-meter data-score="0"><div class="passphrase-meter-track"><div></div></div><p class="mt-2 text-xs font-bold text-slate-500">Strength: <span data-passphrase-label>Too weak</span></p></div>`;
+export function walletPasswordMeter() {
+  return `<div class="wallet-password-meter" data-wallet-password-meter data-score="0"><div class="wallet-password-meter-track"><div></div></div><p class="mt-2 text-xs font-bold text-slate-500">Strength: <span data-wallet-password-label>Too weak</span></p></div>`;
 }
 
 export function iconCopy() {

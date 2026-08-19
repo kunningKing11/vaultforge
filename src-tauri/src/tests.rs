@@ -14,7 +14,7 @@ use crate::derivation::{
     ALL_NETWORKS, BIP39_WORD_COUNTS, address_from_seed, bitcoin_bech32_address,
     derive_addresses_from_mnemonic_filtered, validate_recovery_phrase_word_count,
 };
-use crate::dto::{Asset, Wallet};
+use crate::dto::{Asset, Wallet, WalletPayload};
 use crate::providers::bitcoin::{
     BitcoinUtxo, parse_bitcoin_balance, parse_bitcoin_fee_rate, parse_bitcoin_utxos,
 };
@@ -101,6 +101,25 @@ fn validates_standard_bip39_recovery_phrase_lengths_and_checksums() {
         ALL_NETWORKS,
     )
     .is_err());
+}
+
+#[test]
+fn decrypts_legacy_wallet_password_hash_payloads() {
+    let payload: WalletPayload = serde_json::from_str(
+        r#"{
+            "wallet_name":"Test Wallet",
+            "mnemonic":"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "created_at":"2026-01-01T00:00:00Z",
+            "address":"0x0000000000000000000000000000000000000000",
+            "addresses":{},
+            "passphrase_hash":"legacy-hash",
+            "assets":[],
+            "activity":[]
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(payload.wallet_password_hash, "legacy-hash");
 }
 
 #[test]
@@ -203,7 +222,7 @@ fn unlock_migrates_legacy_filecoin_addresses() {
             "filecoin".to_string(),
             "f1fFXqnEMPFe1NoAajxRKukEBLwshG1LQQC".to_string(),
         )]),
-        passphrase_hash: "unused".to_string(),
+        wallet_password_hash: "unused".to_string(),
         assets: vec![],
         activity: vec![],
         enabled_networks: vec!["filecoin".to_string()],
@@ -224,7 +243,7 @@ fn validates_solana_token_transfer_recipient_as_solana_address() {
         created_at: "2025-01-01T00:00:00Z".to_string(),
         address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
         addresses: HashMap::new(),
-        passphrase_hash: "deadbeef".to_string(),
+        wallet_password_hash: "deadbeef".to_string(),
         assets: vec![Asset {
             symbol: "SPL-So1111".to_string(),
             name: "So11111111111111111111111111111111111111112".to_string(),
@@ -261,7 +280,7 @@ fn token_transfer_validation_uses_contract_or_mint_identity() {
         created_at: Utc::now().to_rfc3339(),
         address: address_from_seed("test seed"),
         addresses: HashMap::new(),
-        passphrase_hash: "deadbeef".to_string(),
+        wallet_password_hash: "deadbeef".to_string(),
         assets: vec![
             Asset {
                 symbol: "DUP".to_string(),
@@ -361,7 +380,7 @@ fn transfer_validation_rejects_malformed_amounts_and_mints() {
         created_at: "2025-01-01T00:00:00Z".to_string(),
         address: "unused".to_string(),
         addresses: HashMap::new(),
-        passphrase_hash: "unused".to_string(),
+        wallet_password_hash: "unused".to_string(),
         assets: vec![Asset {
             symbol: "SPL".to_string(),
             name: "SPL".to_string(),
@@ -924,7 +943,7 @@ fn locked_session_does_not_expose_secrets() {
         created_at: "2025-01-01T00:00:00Z".to_string(),
         address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
         addresses: HashMap::new(),
-        passphrase_hash: "deadbeef".to_string(),
+        wallet_password_hash: "deadbeef".to_string(),
         assets: vec![],
         activity: vec![],
         enabled_networks: vec![],
@@ -1065,25 +1084,25 @@ fn derives_same_key_with_same_salt() {
 
 #[test]
 fn encrypts_and_decrypts_wallet_payload() {
-    let passphrase = "Correct horse battery staple 42!";
+    let wallet_password = "Correct horse battery staple 42!";
     let wallet = Wallet {
         name: "Test Wallet".to_string(),
         mnemonic: "test mnemonic".to_string(),
         created_at: Utc::now().to_rfc3339(),
         address: address_from_seed("test seed"),
         addresses: HashMap::new(),
-        passphrase_hash: hash_secret(passphrase),
+        wallet_password_hash: hash_secret(wallet_password),
         assets: starter_assets("ethereum"),
         activity: vec![activity("system", "Created", "Local", "1")],
         enabled_networks: vec!["evm".to_string(), "bitcoin".to_string()],
         auto_lock_timeout_secs: Some(300),
     };
-    let (key, salt) = derive_storage_key(passphrase, None).unwrap();
+    let (key, salt) = derive_storage_key(wallet_password, None).unwrap();
     let stored = encrypt_wallet(&wallet, &key, &salt).unwrap();
     assert_eq!(stored.version, 3);
     assert!(!stored.ciphertext.contains(&wallet.address));
 
-    let decrypted = decrypt_wallet(&stored, passphrase).unwrap();
+    let decrypted = decrypt_wallet(&stored, wallet_password).unwrap();
     assert_eq!(decrypted.name, wallet.name);
     assert_eq!(decrypted.mnemonic, wallet.mnemonic);
     assert_eq!(decrypted.created_at, wallet.created_at);

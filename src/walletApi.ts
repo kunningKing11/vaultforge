@@ -8,7 +8,7 @@ export const walletApi = {
     invoke<string>("generate_mnemonic_cmd", { wordCount: wordCount ?? null }),
   createWallet: (args: {
     name: string;
-    passphrase: string;
+    walletPassword: string;
     enabledNetworks: string[];
     autoLockTimeoutSecs: number | null;
     mnemonic?: string;
@@ -16,11 +16,11 @@ export const walletApi = {
   importWallet: (args: {
     name?: string;
     mnemonic: string;
-    passphrase: string;
+    walletPassword: string;
     enabledNetworks: string[];
     autoLockTimeoutSecs: number | null;
   }) => invoke<WalletSession>("import_wallet", args),
-  unlockWallet: (args: { passphrase: string }) => invoke<WalletSession>("unlock_wallet", args),
+  unlockWallet: (args: { walletPassword: string }) => invoke<WalletSession>("unlock_wallet", args),
   lockWallet: () => invoke<null>("lock_wallet"),
   clearWallet: () => invoke<WalletSession>("clear_wallet"),
   signTransaction: (args: {

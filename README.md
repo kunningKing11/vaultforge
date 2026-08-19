@@ -31,7 +31,7 @@ A local-first crypto wallet desktop app built with a TypeScript frontend, Tailwi
 - Encrypted local wallet persistence using the app data directory
 - Activity details with transaction hashes, signatures, payload hashes, and copy actions
 - Security center with storage status, signing status, and local wallet clearing
-- Passphrase confirmation and strength feedback for encrypted wallet setup
+- Wallet-password confirmation and strength feedback for encrypted wallet setup
 - Send, receive, swap, assets, activity, and settings screens
 - Rust-backed Tauri commands for wallet state, validation, transaction signing, encrypted storage, provider-backed reads, broadcast, and status checks
 - Responsive TailwindCSS UI with desktop sidebar

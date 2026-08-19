@@ -235,14 +235,14 @@ select.field option:checked {
   }
 }
 
-.passphrase-meter-track {
+.wallet-password-meter-track {
   height: 0.4rem;
   overflow: hidden;
   border-radius: 999px;
   background: rgb(var(--color-surface-rgb) / 0.88);
 }
 
-.passphrase-meter-track > div {
+.wallet-password-meter-track > div {
   height: 100%;
   width: 8%;
   border-radius: inherit;
@@ -252,22 +252,22 @@ select.field option:checked {
     background 180ms ease;
 }
 
-.passphrase-meter[data-score="1"] .passphrase-meter-track > div {
+.wallet-password-meter[data-score="1"] .wallet-password-meter-track > div {
   width: 25%;
   background: var(--color-orange);
 }
 
-.passphrase-meter[data-score="2"] .passphrase-meter-track > div {
+.wallet-password-meter[data-score="2"] .wallet-password-meter-track > div {
   width: 50%;
   background: var(--color-warning-soft);
 }
 
-.passphrase-meter[data-score="3"] .passphrase-meter-track > div {
+.wallet-password-meter[data-score="3"] .wallet-password-meter-track > div {
   width: 75%;
   background: var(--color-ok);
 }
 
-.passphrase-meter[data-score="4"] .passphrase-meter-track > div {
+.wallet-password-meter[data-score="4"] .wallet-password-meter-track > div {
   width: 100%;
   background: linear-gradient(90deg, var(--color-accent), var(--color-accent-alt));
 }

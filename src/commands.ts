@@ -10,10 +10,10 @@ const BIP39_WORD_COUNTS = new Set([12, 15, 18, 21, 24]);
 
 export async function setupWizard() {
   const wizard = appState.setupWizard;
-  const passphrase = wizard.passphrase;
+  const walletPassword = wizard.walletPassword;
   const mnemonic = wizard.mnemonic.trim();
 
-  if (!validatePassphraseConfirmation(passphrase, wizard.confirmPassphrase)) return;
+  if (!validateWalletPasswordConfirmation(walletPassword, wizard.confirmWalletPassword)) return;
 
   if (wizard.flow === "import") {
     if (!mnemonic) {
@@ -25,7 +25,7 @@ export async function setupWizard() {
       walletApi.importWallet({
         name: wizard.name || undefined,
         mnemonic,
-        passphrase,
+        walletPassword,
         enabledNetworks: wizard.enabledNetworks,
         autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
       }),
@@ -46,7 +46,7 @@ export async function setupWizard() {
     const created = await runCommand("create_wallet", () =>
       walletApi.createWallet({
         name: wizard.name || "Primary Wallet",
-        passphrase,
+        walletPassword,
         enabledNetworks: wizard.enabledNetworks,
         autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
         mnemonic: wizard.generatedMnemonic,
@@ -59,8 +59,8 @@ export async function setupWizard() {
 // Drop temporary onboarding secrets after a successful create or import.
 function clearSetupSecrets() {
   const wizard = appState.setupWizard;
-  wizard.passphrase = "";
-  wizard.confirmPassphrase = "";
+  wizard.walletPassword = "";
+  wizard.confirmWalletPassword = "";
   wizard.mnemonic = "";
   wizard.generatedMnemonic = "";
   wizard.recoveryPhraseVisible = false;
@@ -71,7 +71,7 @@ export async function unlockWallet(form: HTMLFormElement) {
   const formData = new FormData(form);
   const ok = await runCommand("unlock_wallet", () =>
     walletApi.unlockWallet({
-      passphrase: String(formData.get("passphrase") || ""),
+      walletPassword: String(formData.get("walletPassword") || ""),
     }),
   );
   if (ok) resetLockedDeleteWallet();
@@ -384,13 +384,13 @@ export async function copyText(value: string, message: string) {
   pushToast(message, "success");
 }
 
-function validatePassphraseConfirmation(passphrase: string, confirm: string) {
-  if (passphrase !== confirm) {
-    pushToast("Passphrases do not match.", "error");
+function validateWalletPasswordConfirmation(walletPassword: string, confirm: string) {
+  if (walletPassword !== confirm) {
+    pushToast("Wallet passwords do not match.", "error");
     return false;
   }
-  if (passphraseScore(passphrase) < 3) {
-    pushToast("Use a stronger passphrase before creating encrypted storage.", "error");
+  if (walletPasswordScore(walletPassword) < 3) {
+    pushToast("Use a stronger wallet password before creating encrypted storage.", "error");
     return false;
   }
   return true;
@@ -404,18 +404,18 @@ function validateRecoveryPhraseWordCount(mnemonic: string) {
   return false;
 }
 
-export function updatePassphraseStrength(input: HTMLInputElement) {
+export function updateWalletPasswordStrength(input: HTMLInputElement) {
   const meter = (input.closest("form") ?? input.closest(".space-y-4"))?.querySelector<HTMLElement>(
-    "[data-passphrase-meter]",
+    "[data-wallet-password-meter]",
   );
   if (!meter) return;
-  const score = passphraseScore(input.value);
+  const score = walletPasswordScore(input.value);
   const labels = ["Too weak", "Weak", "Fair", "Strong", "Excellent"];
   meter.dataset.score = String(score);
-  meter.querySelector<HTMLElement>("[data-passphrase-label]")!.textContent = labels[score];
+  meter.querySelector<HTMLElement>("[data-wallet-password-label]")!.textContent = labels[score];
 }
 
-function passphraseScore(value: string) {
+function walletPasswordScore(value: string) {
   let score = value.length >= 8 ? 1 : 0;
   if (value.length >= 12) score += 1;
   if (/[A-Z]/.test(value) && /[a-z]/.test(value)) score += 1;

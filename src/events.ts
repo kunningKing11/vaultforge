@@ -14,7 +14,7 @@ import {
   copyReceiveAddress,
   copyQrPayload,
   copyText,
-  updatePassphraseStrength,
+  updateWalletPasswordStrength,
 } from "./commands";
 import { formatError } from "./format";
 import { normalizeNetworkId } from "./networks";
@@ -135,13 +135,14 @@ export function bindEvents() {
 
   document.addEventListener("input", (event) => {
     const target = event.target as HTMLInputElement;
-    if (target.matches("[data-passphrase-input]")) updatePassphraseStrength(target);
+    if (target.matches("[data-wallet-password-input]")) updateWalletPasswordStrength(target);
 
     if (target.matches("[data-wizard-field]")) {
       const field = target.dataset.wizardField;
       if (field === "name") appState.setupWizard.name = target.value;
-      if (field === "passphrase") appState.setupWizard.passphrase = target.value;
-      if (field === "confirmPassphrase") appState.setupWizard.confirmPassphrase = target.value;
+      if (field === "walletPassword") appState.setupWizard.walletPassword = target.value;
+      if (field === "confirmWalletPassword")
+        appState.setupWizard.confirmWalletPassword = target.value;
       if (field === "mnemonic") appState.setupWizard.mnemonic = target.value;
       if (field === "acknowledgedBackup") appState.setupWizard.acknowledgedBackup = target.checked;
     }
@@ -189,13 +190,13 @@ async function wizardNext() {
   const wizard = appState.setupWizard;
 
   if (wizard.step === 2) {
-    if (!wizard.passphrase || wizard.passphrase.length < 8) {
-      pushToast("Passphrase must be at least 8 characters.", "error");
+    if (!wizard.walletPassword || wizard.walletPassword.length < 8) {
+      pushToast("Wallet password must be at least 8 characters.", "error");
       return;
     }
 
-    if (wizard.passphrase !== wizard.confirmPassphrase) {
-      pushToast("Passphrases do not match.", "error");
+    if (wizard.walletPassword !== wizard.confirmWalletPassword) {
+      pushToast("Wallet passwords do not match.", "error");
       return;
     }
   }
