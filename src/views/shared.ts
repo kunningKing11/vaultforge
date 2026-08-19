@@ -62,9 +62,9 @@ export function activityDetails(item: Activity | null) {
       <h2 class="mt-2 text-2xl font-black">${escapeHtml(item.title)}</h2>
       <div class="mt-5 space-y-3">
         ${detailRow("Status", item.status)}
-        ${detailRow("Amount", item.amount ?? "n/a")}
-        ${detailRow("Fee", item.fee ?? "n/a")}
-        ${detailRow("Network", networkDisplayName(item.network ?? "n/a"))}
+        ${detailRow("Amount", item.amount ?? "N/A")}
+        ${detailRow("Fee", item.fee ?? "N/A")}
+        ${detailRow("Network", networkDisplayName(item.network ?? "N/A"))}
         ${detailRow("Timestamp", new Date(item.timestamp).toLocaleString())}
         ${copyableDetailRow("Transaction hash", item.hash)}
         ${item.from ? copyableDetailRow("From", item.from) : ""}
