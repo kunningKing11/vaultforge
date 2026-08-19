@@ -89,6 +89,12 @@ export type View =
 
 export type QrResilience = "L" | "M" | "Q" | "H";
 
+export type QrResilienceOption = {
+  value: QrResilience;
+  label: string;
+  detail: string;
+};
+
 export type Toast = {
   id: number;
   message: string;
