@@ -176,6 +176,13 @@ export function bindEvents() {
       }
     }
   });
+
+  document.addEventListener("keydown", (event) => {
+    const target = event.target as HTMLElement;
+    if (event.key === "Enter" && target.matches('[data-wizard-field="mnemonic"]')) {
+      event.preventDefault();
+    }
+  });
 }
 
 async function wizardNext() {
