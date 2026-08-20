@@ -41,6 +41,7 @@ export const appState = {
     name: "",
     walletPassword: "",
     confirmWalletPassword: "",
+    walletPasswordVisible: false,
     mnemonic: "",
     generatedMnemonic: "",
     recoveryPhraseVisible: false,
