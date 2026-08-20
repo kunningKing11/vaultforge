@@ -26,6 +26,7 @@ import { applyTheme, ThemeName, themes } from "./theme";
 import { pushToast } from "./toasts";
 import type { QrResilience, View } from "./types";
 import { walletApi } from "./walletApi";
+import { walletPasswordStrength } from "./walletPassword";
 
 export function bindEvents() {
   document.addEventListener("click", (event) => {
@@ -196,16 +197,22 @@ export function bindEvents() {
 
 async function wizardNext() {
   const wizard = appState.setupWizard;
+  const walletPassword = wizard.walletPassword;
 
   if (wizard.step === 2) {
-    if (!wizard.walletPassword || wizard.walletPassword.length < 8) {
+    if (walletPassword.length < 8) {
       pushToast("Wallet password must be at least 8 characters.", "error");
       return;
     }
 
-    if (wizard.walletPassword !== wizard.confirmWalletPassword) {
+    if (walletPassword !== wizard.confirmWalletPassword) {
       pushToast("Wallet passwords do not match.", "error");
       return;
+    }
+
+    if (!walletPasswordStrength(walletPassword).meetsPolicy) {
+      pushToast("Use a stronger wallet password to continue.", "error");
+      return false;
     }
   }
 
