@@ -78,6 +78,10 @@ export function bindEvents() {
       appState.setupWizard.step = 2;
       render();
     }
+    if (action === "toggle-wallet-password-visibility") {
+      appState.setupWizard.walletPasswordVisible = !appState.setupWizard.walletPasswordVisible;
+      render();
+    }
     if (action === "toggle-recovery-phrase") {
       appState.setupWizard.recoveryPhraseVisible = !appState.setupWizard.recoveryPhraseVisible;
       render();

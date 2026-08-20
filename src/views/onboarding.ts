@@ -90,6 +90,11 @@ function step1() {
 function step2() {
   const wizard = appState.setupWizard;
   const isImport = wizard.flow === "import";
+  const passwordRevealLabel = wizard.walletPasswordVisible
+    ? "Hide wallet passwords"
+    : "Show wallet passwords";
+
+  const passwordIconUrl = wizard.walletPasswordVisible ? eyeOffIconUrl : eyeIconUrl;
   return `
     <div class="space-y-4">
       ${
@@ -104,12 +109,22 @@ function step2() {
       }
       <label class="block space-y-2">
         <span class="text-sm font-bold text-slate-300">Wallet password</span>
-        <input class="field" data-wizard-field="walletPassword" type="password" minlength="8" placeholder="Minimum 8 characters" data-wallet-password-input value="${escapeHtml(wizard.walletPassword)}" />
+        <div class="relative">
+          <input class="field" data-wizard-field="walletPassword" type="${wizard.walletPasswordVisible ? "text" : "password"}" minlength="8" placeholder="Minimum 8 characters" data-wallet-password-input value="${escapeHtml(wizard.walletPassword)}" />
+          <button class="absolute right-3 top-1/2 -translate-y-1/2" type="button" data-action="toggle-wallet-password-visibility" aria-label="${passwordRevealLabel}" aria-pressed="${wizard.walletPasswordVisible}">
+            <img class="h-5 w-5" src="${passwordIconUrl}" alt="" />
+          </button>
+        </div>
       </label>
       ${walletPasswordMeter(wizard.walletPassword)}
       <label class="block space-y-2">
         <span class="text-sm font-bold text-slate-300">Confirm wallet password</span>
-        <input class="field" data-wizard-field="confirmWalletPassword" type="password" minlength="8" value="${escapeHtml(wizard.confirmWalletPassword)}" />
+        <div class="relative">
+          <input class="field" data-wizard-field="confirmWalletPassword" type="${wizard.walletPasswordVisible ? "text" : "password"}" minlength="8" value="${escapeHtml(wizard.confirmWalletPassword)}" />
+          <button class="absolute right-3 top-1/2 -translate-y-1/2" type="button" data-action="toggle-wallet-password-visibility" aria-label="${passwordRevealLabel}" aria-pressed="${wizard.walletPasswordVisible}">
+            <img class="h-5 w-5" src="${passwordIconUrl}" alt="" />
+          </button>
+        </div>
       </label>
       <div class="flex gap-3 pt-2">
         <button class="btn-secondary flex-1" type="button" data-action="setup-prev">Back</button>
