@@ -14,8 +14,6 @@ export async function setupWizard() {
   const walletPassword = wizard.walletPassword;
   const mnemonic = wizard.mnemonic.trim();
 
-  if (!validateWalletPasswordConfirmation(walletPassword, wizard.confirmWalletPassword)) return;
-
   if (wizard.flow === "import") {
     if (!mnemonic) {
       pushToast("Please enter a recovery phrase to import a wallet.", "error");
@@ -384,18 +382,6 @@ export async function copyQrPayload() {
 export async function copyText(value: string, message: string) {
   await navigator.clipboard.writeText(value);
   pushToast(message, "success");
-}
-
-function validateWalletPasswordConfirmation(walletPassword: string, confirm: string) {
-  if (walletPassword !== confirm) {
-    pushToast("Wallet passwords do not match.", "error");
-    return false;
-  }
-  if (!walletPasswordStrength(walletPassword).meetsPolicy) {
-    pushToast("Use a stronger wallet password before creating encrypted storage.", "error");
-    return false;
-  }
-  return true;
 }
 
 function validateRecoveryPhraseWordCount(mnemonic: string) {
