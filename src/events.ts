@@ -188,8 +188,15 @@ export function bindEvents() {
   });
 
   document.addEventListener("keydown", (event) => {
-    const target = event.target as HTMLElement;
-    if (event.key === "Enter" && target.matches('[data-wizard-field="mnemonic"]')) {
+    const target = event.target as HTMLTextAreaElement;
+    if (!target.matches('[data-wizard-field="mnemonic"]')) return;
+
+    if (event.key === "Enter") event.preventDefault();
+    if (
+      event.key === " " &&
+      target.selectionStart === target.selectionEnd &&
+      target.value[target.selectionStart - 1] === " "
+    ) {
       event.preventDefault();
     }
   });
