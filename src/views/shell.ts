@@ -1,7 +1,7 @@
 import lockIconUrl from "../assets/icons/lock.svg";
 import { escapeHtml, shortAddress } from "../format";
-import { appState } from "../state";
 import appLogoUrl from "../../src-tauri/icons/icon.svg";
+import { appState } from "../state";
 import { walletView } from "./wallet";
 
 export function walletShell() {
