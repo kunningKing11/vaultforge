@@ -1,4 +1,5 @@
 import lockIconUrl from "../assets/icons/lock.svg";
+import refreshIconUrl from "../assets/icons/refresh.svg";
 import { escapeHtml, shortAddress } from "../format";
 import appLogoUrl from "../../src-tauri/icons/icon.svg";
 import { appState } from "../state";
@@ -50,8 +51,14 @@ function topBar() {
         <h1 class="mt-1 text-4xl font-black">${escapeHtml(appState.session.wallet_name ?? "")}</h1>
       </div>
       <div class="flex flex-wrap gap-3">
-        <button class="btn-secondary" data-action="refresh" type="button">Refresh</button>
-        <button class="btn-secondary inline-flex items-center gap-2" data-action="lock" type="button"><img class="h-4 w-4" src="${lockIconUrl}" alt="" />Lock</button>
+        <button class="btn-secondary inline-flex items-center gap-2" data-action="refresh" type="button">
+          <img class="h-4 w-4" src="${refreshIconUrl}" alt="" />
+          Refresh
+        </button>
+        <button class="btn-secondary inline-flex items-center gap-2" data-action="lock" type="button">
+          <img class="h-4 w-4" src="${lockIconUrl}" alt="" />
+          Lock
+        </button>
         <button class="btn-primary" data-view="send" type="button">Send funds</button>
       </div>
     </header>
