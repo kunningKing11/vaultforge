@@ -1,3 +1,4 @@
+import lockIconUrl from "../assets/icons/lock.svg";
 import { escapeHtml, shortAddress } from "../format";
 import { appState } from "../state";
 import appLogoUrl from "../../src-tauri/icons/icon.svg";
@@ -50,7 +51,7 @@ function topBar() {
       </div>
       <div class="flex flex-wrap gap-3">
         <button class="btn-secondary" data-action="refresh" type="button">Refresh</button>
-        <button class="btn-secondary" data-action="lock" type="button">Lock</button>
+        <button class="btn-secondary inline-flex items-center gap-2" data-action="lock" type="button"><img class="h-4 w-4" src="${lockIconUrl}" alt="" />Lock</button>
         <button class="btn-primary" data-view="send" type="button">Send funds</button>
       </div>
     </header>
