@@ -1,14 +1,13 @@
 import QRCode from "qrcode";
 import { pushToast } from "./toasts";
 import { formatError, shortAddress } from "./format";
-import { appState, receivePayload, selectedNetwork } from "./state";
+import { addressForNetwork, appState, receivePayload, selectedNetwork } from "./state";
 import { getSelectedTheme, themes } from "./theme";
 
 export async function ensureReceiveQr(): Promise<boolean> {
   const theme = themes[getSelectedTheme()];
 
-  if (appState.currentView !== "receive" || !appState.session?.address || appState.session?.locked)
-    return false;
+  if (appState.currentView !== "receive" || appState.session?.locked) return false;
 
   const payload = receivePayload();
   if (!payload) {
@@ -53,14 +52,16 @@ export function resetQr(): void {
 }
 
 export function downloadQrSvg(): void {
-  if (!appState.qrSvg || !appState.session?.address) return;
+  if (!appState.qrSvg) return;
 
   const net = selectedNetwork();
+  const address = addressForNetwork(net);
+  if (!address) return;
   const blob = new Blob([appState.qrSvg], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `vaultforge-${net.id}-${shortAddress(appState.session.address).replace(/[^a-zA-Z0-9]/g, "")}-qr.svg`;
+  link.download = `vaultforge-${net.id}-${shortAddress(address).replace(/[^a-zA-Z0-9]/g, "")}-qr.svg`;
   document.body.appendChild(link);
   link.click();
   link.remove();

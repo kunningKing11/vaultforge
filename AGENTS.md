@@ -150,10 +150,11 @@ type WalletSession = {
   has_wallet: boolean;
   locked: boolean;
   wallet_name: string | null;
-  address: string | null;
   addresses?: Record<string, string> | null;
   assets: Asset[];
   activity: Activity[];
+  enabled_networks: string[];
+  auto_lock_timeout_secs: number | null;
 };
 ```
 
@@ -161,7 +162,7 @@ Current frontend `Asset` contract includes optional `token_address?: string | nu
 
 Session rules:
 
-- No wallet: return `has_wallet = false`, `locked = false`, no address, empty assets, and empty activity.
+- No wallet: return `has_wallet = false`, `locked = false`, no addresses, empty assets, and empty activity.
 - Locked wallet: return `has_wallet = true`, `locked = true`, wallet name if available, no decrypted secrets, and no provider data unless intentionally persisted as plaintext cache.
 - Unlocked wallet: return real derived addresses and provider-derived portfolio/activity data.
 

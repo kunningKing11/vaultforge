@@ -64,7 +64,6 @@ pub(crate) fn encrypt_wallet(
         wallet_name: wallet.name.clone(),
         mnemonic: wallet.mnemonic.clone(),
         created_at: wallet.created_at.clone(),
-        address: wallet.address.clone(),
         addresses: wallet.addresses.clone(),
         wallet_password_hash: wallet.wallet_password_hash.clone(),
         assets: wallet.assets.clone(),
@@ -79,7 +78,7 @@ pub(crate) fn encrypt_wallet(
         .map_err(|_| "Failed to encrypt wallet")?;
 
     Ok(StoredWalletFile {
-        version: 3,
+        version: 4,
         wallet_name: wallet.name.clone(),
         network: "ethereum".to_string(),
         salt: BASE64.encode(salt),
@@ -92,7 +91,7 @@ pub(crate) fn decrypt_wallet(
     stored: &StoredWalletFile,
     wallet_password: &str,
 ) -> Result<Wallet, String> {
-    if stored.version != 2 && stored.version != 3 {
+    if stored.version != 2 && stored.version != 3 && stored.version != 4 {
         return Err("Unsupported wallet version".to_string());
     }
     let salt = BASE64
@@ -116,7 +115,6 @@ pub(crate) fn decrypt_wallet(
         name: payload.wallet_name,
         mnemonic: payload.mnemonic,
         created_at: payload.created_at,
-        address: payload.address,
         addresses: payload.addresses,
         wallet_password_hash: payload.wallet_password_hash,
         assets: payload.assets,

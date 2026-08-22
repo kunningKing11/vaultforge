@@ -6,7 +6,6 @@ pub(crate) struct Wallet {
     pub(crate) name: String,
     pub(crate) mnemonic: String,
     pub(crate) created_at: String,
-    pub(crate) address: String,
     pub(crate) addresses: HashMap<String, String>,
     #[serde(alias = "passphrase_hash")]
     pub(crate) wallet_password_hash: String,
@@ -23,7 +22,6 @@ pub(crate) struct WalletPayload {
     pub(crate) wallet_name: String,
     pub(crate) mnemonic: String,
     pub(crate) created_at: String,
-    pub(crate) address: String,
     pub(crate) addresses: HashMap<String, String>,
     #[serde(alias = "passphrase_hash")]
     pub(crate) wallet_password_hash: String,
@@ -99,7 +97,6 @@ pub(crate) struct WalletSession {
     pub(crate) has_wallet: bool,
     pub(crate) locked: bool,
     pub(crate) wallet_name: Option<String>,
-    pub(crate) address: Option<String>,
     pub(crate) addresses: Option<HashMap<String, String>>,
     pub(crate) assets: Vec<Asset>,
     pub(crate) activity: Vec<Activity>,
