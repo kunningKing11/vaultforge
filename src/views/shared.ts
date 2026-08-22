@@ -11,6 +11,10 @@ const qrResilienceOptions: Array<QrResilienceOption> = [
   { value: "H", label: "High", detail: "~30% recovery" },
 ];
 
+export function inlineIcon(svg: string, sizeClass = "h-4 w-4") {
+  return svg.replace("<svg", `<svg class="${sizeClass}" aria-hidden="true"`);
+}
+
 export function assetCard(asset: Asset) {
   const value = assetValue(asset);
   const positive = asset.change_24h >= 0;

@@ -1,5 +1,6 @@
-import eyeIconUrl from "../assets/icons/eye.svg";
-import eyeOffIconUrl from "../assets/icons/eye-off.svg";
+import eyeIcon from "../assets/icons/eye.svg?raw";
+import eyeOffIcon from "../assets/icons/eye-off.svg?raw";
+import { inlineIcon } from "./shared";
 import { appState } from "../state";
 
 export function lockedWalletView() {
@@ -7,7 +8,7 @@ export function lockedWalletView() {
     ? "Hide wallet password"
     : "Show wallet password";
 
-  const passwordIconUrl = appState.unlockPasswordVisible ? eyeOffIconUrl : eyeIconUrl;
+  const passwordIcon = appState.unlockPasswordVisible ? eyeOffIcon : eyeIcon;
 
   return `
     <section class="mx-auto flex min-h-[88vh] max-w-xl items-center justify-center">
@@ -22,7 +23,7 @@ export function lockedWalletView() {
             <div class="relative">
               <input class="field pr-12" name="walletPassword" type="${appState.unlockPasswordVisible ? "text" : "password"}" required />
               <button class="absolute right-3 top-1/2 -translate-y-1/2" type="button" data-action="toggle-unlock-password-visibility" aria-label="${revealLabel}" aria-pressed="${appState.unlockPasswordVisible}">
-                <img class="h-5 w-5" src="${passwordIconUrl}" alt="" />
+                ${inlineIcon(passwordIcon, "h-5 w-5")}
               </button>
             </div>
           </label>

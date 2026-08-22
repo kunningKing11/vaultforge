@@ -1,10 +1,11 @@
-import lockIconUrl from "../assets/icons/lock.svg";
-import refreshIconUrl from "../assets/icons/refresh.svg";
-import sendIconUrl from "../assets/icons/send.svg";
+import lockIcon from "../assets/icons/lock.svg?raw";
+import refreshIcon from "../assets/icons/refresh.svg?raw";
+import sendIcon from "../assets/icons/send.svg?raw";
 import { escapeHtml, shortAddress } from "../format";
 import appLogoUrl from "../../src-tauri/icons/icon.svg";
 import { appState } from "../state";
 import { walletView } from "./wallet";
+import { inlineIcon } from "./shared";
 
 export function walletShell() {
   if (!appState.session) return "";
@@ -18,7 +19,7 @@ export function walletShell() {
         <div class="sidebar-nav-shell min-h-0 flex-1">
           <nav id="sidebar-nav" class="sidebar-nav min-h-0 flex-1 space-y-2" data-sidebar-scroll tabindex="0" aria-label="Wallet sections">
             ${navButton("dashboard", "Dashboard")}
-            ${navButton("send", "Send", sendIconUrl)}
+            ${navButton("send", "Send", sendIcon)}
             ${navButton("receive", "Receive")}
             ${navButton("swap", "Swap")}
             ${navButton("assets", "Assets")}
@@ -53,15 +54,15 @@ function topBar() {
       </div>
       <div class="flex flex-wrap gap-3">
         <button class="btn-secondary inline-flex items-center gap-2" data-action="refresh" type="button">
-          <img class="h-4 w-4" src="${refreshIconUrl}" alt="" />
+          ${inlineIcon(refreshIcon)}
           Refresh
         </button>
         <button class="btn-secondary inline-flex items-center gap-2" data-action="lock" type="button">
-          <img class="h-4 w-4" src="${lockIconUrl}" alt="" />
+          ${inlineIcon(lockIcon)}
           Lock
         </button>
         <button class="btn-primary inline-flex items-center gap-2" data-view="send" type="button">
-          <img class="h-4 w-4" src="${sendIconUrl}" alt="" />
+          ${inlineIcon(sendIcon)}
           Send funds
         </button>
       </div>
@@ -70,7 +71,7 @@ function topBar() {
 }
 
 function navButton(view: string, label: string, iconUrl?: string) {
-  return `<button class="nav-item ${appState.currentView === view ? "active" : ""} ${iconUrl ? "inline-flex items-center gap-2" : ""}" data-view="${view}" type="button">${iconUrl ? `<img class="h-4 w-4" src="${iconUrl}" alt="" />` : ""}${label}</button>`;
+  return `<button class="nav-item ${appState.currentView === view ? "active" : ""} ${iconUrl ? "inline-flex items-center gap-2" : ""}" data-view="${view}" type="button">${iconUrl ? inlineIcon(iconUrl) : ""}${label}</button>`;
 }
 
 function mobileNav() {
