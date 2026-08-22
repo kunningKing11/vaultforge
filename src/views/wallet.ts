@@ -1,3 +1,5 @@
+import copyIcon from "../assets/icons/copy.svg?raw";
+import downloadIcon from "../assets/icons/download.svg?raw";
 import { escapeHtml, formatWei, money, shortAddress } from "../format";
 import { networkDisplayName } from "../networks";
 import {
@@ -18,8 +20,7 @@ import {
   assetValue,
   decimalsForAsset,
   emptyState,
-  iconCopy,
-  iconDownload,
+  inlineIcon,
   qrResilienceSelect,
   receiveNetworkSelect,
   sendAssetSelect,
@@ -168,8 +169,8 @@ function receiveView() {
       <div class="theme-panel-accent mt-6 rounded-3xl border border-dashed p-6 text-center">
         <div class="theme-glow qr-code mx-auto flex h-56 w-56 items-center justify-center rounded-2xl bg-white p-4">${qrContent}</div>
         <div class="mt-4 flex flex-col justify-center gap-3 sm:flex-row">
-          <button class="btn-secondary" data-action="copy-qr" type="button" ${qrActionsDisabled}>${iconCopy()} Copy SVG</button>
-          <button class="btn-secondary" data-action="download-qr" type="button" ${qrActionsDisabled}>${iconDownload()} Download SVG</button>
+          <button class="btn-secondary" data-action="copy-qr" type="button" ${qrActionsDisabled}>${inlineIcon(copyIcon)} Copy SVG</button>
+          <button class="btn-secondary" data-action="download-qr" type="button" ${qrActionsDisabled}>${inlineIcon(downloadIcon)} Download SVG</button>
         </div>
         <div class="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-left">
           <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
