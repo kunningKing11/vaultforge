@@ -11,7 +11,7 @@ const qrResilienceOptions: Array<QrResilienceOption> = [
   { value: "H", label: "High", detail: "~30% recovery" },
 ];
 
-export function inlineIcon(svg: string, sizeClass = "h-4 w-4") {
+export function inlineIcon(svg: string, sizeClass = "h-5 w-5") {
   return svg.replace("<svg", `<svg class="${sizeClass}" aria-hidden="true"`);
 }
 
@@ -145,14 +145,6 @@ export function featureCard(title: string, body: string) {
 export function walletPasswordMeter(password: string) {
   const { score, label } = walletPasswordStrength(password);
   return `<div class="wallet-password-meter" data-wallet-password-meter data-score="${score}"><div class="wallet-password-meter-track"><div></div></div><p class="mt-2 text-xs font-bold text-slate-500">Strength: <span data-wallet-password-label>${label}</span></p></div>`;
-}
-
-export function iconCopy() {
-  return `<svg aria-hidden="true" class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M8 8.5C8 7.12 9.12 6 10.5 6h6C17.88 6 19 7.12 19 8.5v8c0 1.38-1.12 2.5-2.5 2.5h-6A2.5 2.5 0 0 1 8 16.5v-8Z" stroke="currentColor" stroke-width="1.8"/><path d="M5 14.5v-8C5 5.12 6.12 4 7.5 4h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
-}
-
-export function iconDownload() {
-  return `<svg aria-hidden="true" class="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M12 4v10m0 0 4-4m-4 4-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 16.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 }
 
 export function loadingBar() {
