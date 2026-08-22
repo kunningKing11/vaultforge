@@ -79,7 +79,7 @@ pub(crate) async fn sign_transaction(
 ) -> Result<SignedTransaction, String> {
     validate_unlocked(&state)?;
 
-    let (mnemonic, address, addresses, assets) = {
+    let (mnemonic, addresses, assets) = {
         let state = state.lock().map_err(|_| "State lock failed")?;
         let wallet = state
             .wallet
@@ -95,7 +95,6 @@ pub(crate) async fn sign_transaction(
         )?;
         (
             wallet.mnemonic.clone(),
-            wallet.address.clone(),
             wallet.addresses.clone(),
             wallet.assets.clone(),
         )
@@ -307,6 +306,10 @@ pub(crate) async fn sign_transaction(
 
             let native_symbol = config.native_asset.symbol.as_str();
             let is_native = symbol == native_symbol;
+            let address = addresses
+                .get("evm")
+                .cloned()
+                .ok_or_else(|| "Wallet EVM address is not available".to_string())?;
 
             let (tx_to, tx_data, display_to) = if is_native {
                 (to.clone(), Vec::new(), to.clone())
@@ -424,11 +427,10 @@ pub(crate) async fn send_transaction(
             .wallet
             .as_ref()
             .ok_or_else(|| "No wallet exists yet".to_string())?;
-        if signed.from != wallet.address
-            && !wallet
-                .addresses
-                .values()
-                .any(|address| address == &signed.from)
+        if !wallet
+            .addresses
+            .values()
+            .any(|address| address == &signed.from)
         {
             return Err("Signed transaction does not match this wallet".to_string());
         }

@@ -11,7 +11,7 @@ use crate::assets::{cached_asset, token_addresses_match};
 use crate::commands::tx::{ensure_native_balance_covers_debit, required_native_debit};
 use crate::commands::wallet::refresh_filecoin_address;
 use crate::derivation::{
-    ALL_NETWORKS, BIP39_WORD_COUNTS, address_from_seed, bitcoin_bech32_address,
+    ALL_NETWORKS, BIP39_WORD_COUNTS, bitcoin_bech32_address,
     derive_addresses_from_mnemonic_filtered, validate_recovery_phrase_word_count,
 };
 use crate::dto::{Asset, Wallet, WalletPayload};
@@ -217,7 +217,6 @@ fn unlock_migrates_legacy_filecoin_addresses() {
         name: "Test Wallet".to_string(),
         mnemonic: mnemonic.to_string(),
         created_at: "2025-01-01T00:00:00Z".to_string(),
-        address: "unused".to_string(),
         addresses: HashMap::from([(
             "filecoin".to_string(),
             "f1fFXqnEMPFe1NoAajxRKukEBLwshG1LQQC".to_string(),
@@ -241,7 +240,6 @@ fn validates_solana_token_transfer_recipient_as_solana_address() {
         name: "Test Wallet".to_string(),
         mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about".to_string(),
         created_at: "2025-01-01T00:00:00Z".to_string(),
-        address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
         addresses: HashMap::new(),
         wallet_password_hash: "deadbeef".to_string(),
         assets: vec![Asset {
@@ -278,7 +276,6 @@ fn token_transfer_validation_uses_contract_or_mint_identity() {
         name: "Test".to_string(),
         mnemonic: "test mnemonic".to_string(),
         created_at: Utc::now().to_rfc3339(),
-        address: address_from_seed("test seed"),
         addresses: HashMap::new(),
         wallet_password_hash: "deadbeef".to_string(),
         assets: vec![
@@ -378,7 +375,6 @@ fn transfer_validation_rejects_malformed_amounts_and_mints() {
         name: "Test Wallet".to_string(),
         mnemonic: "test mnemonic".to_string(),
         created_at: "2025-01-01T00:00:00Z".to_string(),
-        address: "unused".to_string(),
         addresses: HashMap::new(),
         wallet_password_hash: "unused".to_string(),
         assets: vec![Asset {
@@ -941,7 +937,6 @@ fn locked_session_does_not_expose_secrets() {
         name: "Secret Wallet".to_string(),
         mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about".to_string(),
         created_at: "2025-01-01T00:00:00Z".to_string(),
-        address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
         addresses: HashMap::new(),
         wallet_password_hash: "deadbeef".to_string(),
         assets: vec![],
@@ -957,7 +952,6 @@ fn locked_session_does_not_expose_secrets() {
     let session = session_from_state(&state);
     assert_eq!(session.has_wallet, true);
     assert_eq!(session.locked, true);
-    assert!(session.address.is_none());
     assert!(session.addresses.is_none());
     assert!(session.assets.is_empty());
     assert!(session.activity.is_empty());
@@ -1089,7 +1083,6 @@ fn encrypts_and_decrypts_wallet_payload() {
         name: "Test Wallet".to_string(),
         mnemonic: "test mnemonic".to_string(),
         created_at: Utc::now().to_rfc3339(),
-        address: address_from_seed("test seed"),
         addresses: HashMap::new(),
         wallet_password_hash: hash_secret(wallet_password),
         assets: starter_assets("ethereum"),
@@ -1099,15 +1092,17 @@ fn encrypts_and_decrypts_wallet_payload() {
     };
     let (key, salt) = derive_storage_key(wallet_password, None).unwrap();
     let stored = encrypt_wallet(&wallet, &key, &salt).unwrap();
-    assert_eq!(stored.version, 3);
-    assert!(!stored.ciphertext.contains(&wallet.address));
+    assert_eq!(stored.version, 4);
 
     let decrypted = decrypt_wallet(&stored, wallet_password).unwrap();
     assert_eq!(decrypted.name, wallet.name);
     assert_eq!(decrypted.mnemonic, wallet.mnemonic);
     assert_eq!(decrypted.created_at, wallet.created_at);
     assert_eq!(decrypted.enabled_networks, wallet.enabled_networks);
-    assert_eq!(decrypted.auto_lock_timeout_secs, wallet.auto_lock_timeout_secs);
+    assert_eq!(
+        decrypted.auto_lock_timeout_secs,
+        wallet.auto_lock_timeout_secs
+    );
 }
 
 #[test]

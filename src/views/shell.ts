@@ -2,13 +2,28 @@ import lockIcon from "../assets/icons/lock.svg?raw";
 import refreshIcon from "../assets/icons/refresh.svg?raw";
 import sendIcon from "../assets/icons/send.svg?raw";
 import { escapeHtml, shortAddress } from "../format";
+import { networkById } from "../networks";
 import appLogoUrl from "../../src-tauri/icons/icon.svg";
-import { appState } from "../state";
+import { addressKeyForNetwork, appState } from "../state";
 import { walletView } from "./wallet";
 import { inlineIcon } from "./shared";
 
 export function walletShell() {
   if (!appState.session) return "";
+  const displayedAddressKeys = new Set<string>();
+  let addressCards = "";
+  for (const networkId of appState.session.enabled_networks) {
+    const network = networkById(networkId);
+    if (!network) continue;
+
+    const addressKey = addressKeyForNetwork(network);
+    const address = appState.session.addresses?.[addressKey];
+    if (!address || displayedAddressKeys.has(addressKey)) continue;
+
+    displayedAddressKeys.add(addressKey);
+    const label = addressKey === "evm" ? "EVM" : network.name;
+    addressCards += `<p class="mt-2 break-all font-mono text-sm font-bold text-slate-300">${escapeHtml(label)}: ${escapeHtml(shortAddress(address))}</p>`;
+  }
   return `
     <div class="mx-auto grid max-w-[1500px] gap-5 pb-24 lg:grid-cols-[280px_1fr] lg:pb-0">
       <aside class="glass hidden rounded-[2rem] p-5 lg:sticky lg:top-5 lg:h-[calc(100vh-2.5rem)] lg:flex lg:min-h-0 lg:flex-col">
@@ -31,9 +46,9 @@ export function walletShell() {
           </div>
         </div>
         <div class="mt-8 shrink-0 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-          <p class="text-xs uppercase tracking-[0.25em] text-slate-500">Address</p>
-          <p class="mt-2 break-all font-mono text-sm font-bold text-slate-300">${escapeHtml(shortAddress(appState.session.address))}</p>
-          <button class="btn-secondary mt-4 w-full text-sm font-bold" data-action="copy-address" type="button">Copy</button>
+          <p class="text-xs uppercase tracking-[0.25em] text-slate-500">Addresses</p>
+          ${addressCards}
+          <button class="btn-secondary mt-4 w-full text-sm font-bold" data-action="copy-address" type="button">Copy receive address</button>
         </div>
       </aside>
       <section class="space-y-5">

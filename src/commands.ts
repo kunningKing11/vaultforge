@@ -361,8 +361,7 @@ async function runCommand(command: SessionCommand, action: () => Promise<WalletS
 }
 
 export async function copyAddress() {
-  if (!appState.session?.address) return;
-  await copyText(appState.session.address, "Receive address copied.");
+  await copyReceiveAddress();
 }
 
 export async function copyReceiveAddress() {

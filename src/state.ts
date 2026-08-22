@@ -66,11 +66,12 @@ export function networkDetail(network: Network, short = true): string {
   return network.ticker;
 }
 
+export function addressKeyForNetwork(network: Network): string {
+  return network.kind === "svm" ? "solana" : network.kind;
+}
+
 export function addressForNetwork(network: Network): string {
-  const fallback = appState.session?.address ?? "";
-  if (!fallback) return "";
-  if (!appState.session?.addresses) return fallback;
-  return appState.session.addresses[network.kind] ?? fallback;
+  return appState.session?.addresses?.[addressKeyForNetwork(network)] ?? "";
 }
 
 export function receivePayload(): string {

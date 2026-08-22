@@ -68,10 +68,6 @@ pub(crate) fn generate_mnemonic(word_count: u32) -> Result<String, String> {
         .map_err(|_| "Failed to generate recovery phrase".to_string())
 }
 
-pub(crate) fn address_from_seed(seed: &str) -> String {
-    format!("0x{}", &crate::activity::hash_secret(seed)[..40])
-}
-
 pub(crate) fn validate_recovery_phrase_word_count(mnemonic: &str) -> Result<(), String> {
     let word_count = mnemonic.split_whitespace().count();
     if BIP39_WORD_COUNTS.contains(&word_count) {

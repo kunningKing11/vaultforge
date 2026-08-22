@@ -7,8 +7,8 @@ use zeroize::Zeroize;
 use crate::activity::{activity, hash_secret};
 use crate::commands::market::refresh_asset_prices;
 use crate::derivation::{
-    address_from_seed, address_key_for_network, derive_addresses_from_mnemonic_filtered,
-    generate_mnemonic, validate_recovery_phrase_word_count,
+    address_key_for_network, derive_addresses_from_mnemonic_filtered, generate_mnemonic,
+    validate_recovery_phrase_word_count,
 };
 use crate::dto::{Wallet, WalletSession};
 use crate::providers::fetch_portfolio_assets;
@@ -57,11 +57,6 @@ pub(crate) async fn create_wallet(
     };
     let network_refs: Vec<&str> = enabled_networks.iter().map(|s| s.as_str()).collect();
     let addresses = derive_addresses_from_mnemonic_filtered(&mnemonic, &network_refs)?;
-    let primary_address = addresses
-        .get("evm")
-        .cloned()
-        .unwrap_or_else(|| address_from_seed(&mnemonic));
-
     let mut assets = fetch_portfolio_assets(&addresses, &[]).await;
     let _ = refresh_asset_prices(&mut assets).await;
 
@@ -69,7 +64,6 @@ pub(crate) async fn create_wallet(
         name: clean_name(name),
         mnemonic,
         created_at: Utc::now().to_rfc3339(),
-        address: primary_address,
         addresses,
         wallet_password_hash: hash_secret(&wallet_password),
         assets,
@@ -108,11 +102,6 @@ pub(crate) async fn import_wallet(
 
     let network_refs: Vec<&str> = enabled_networks.iter().map(|s| s.as_str()).collect();
     let addresses = derive_addresses_from_mnemonic_filtered(&mnemonic, &network_refs)?;
-    let primary_address = addresses
-        .get("evm")
-        .cloned()
-        .unwrap_or_else(|| address_from_seed(&mnemonic));
-
     let mut assets = fetch_portfolio_assets(&addresses, &[]).await;
     let _ = refresh_asset_prices(&mut assets).await;
 
@@ -120,7 +109,6 @@ pub(crate) async fn import_wallet(
         name: clean_name(name.unwrap_or_else(|| "Imported Wallet".to_string())),
         mnemonic,
         created_at: Utc::now().to_rfc3339(),
-        address: primary_address,
         addresses,
         wallet_password_hash: hash_secret(&wallet_password),
         assets,
@@ -167,25 +155,24 @@ pub(crate) async fn unlock_wallet(
 ) -> Result<WalletSession, String> {
     let wallet_password_hash = hash_secret(&wallet_password);
 
-    let (address, addresses, cached_assets, enabled_networks) = {
+    let (addresses, cached_assets, enabled_networks) = {
         let mut state = state.lock().map_err(|_| "State lock failed")?;
 
         let in_memory = state.wallet.as_ref().map(|w| {
             (
                 w.wallet_password_hash.clone(),
-                w.address.clone(),
                 w.addresses.clone(),
                 w.assets.clone(),
                 w.enabled_networks.clone(),
             )
         });
 
-        if let Some((stored_hash, addr, addresses, assets, enabled_networks)) = in_memory {
+        if let Some((stored_hash, addresses, assets, enabled_networks)) = in_memory {
             if stored_hash != wallet_password_hash {
                 return Err("Invalid wallet password".to_string());
             }
             state.locked = false;
-            (addr, addresses, assets, enabled_networks)
+            (addresses, assets, enabled_networks)
         } else {
             let stored = read_stored_wallet(&state.storage_path)?
                 .ok_or_else(|| "No wallet exists yet".to_string())?;
@@ -203,13 +190,12 @@ pub(crate) async fn unlock_wallet(
             let (key, salt) = derive_storage_key(&wallet_password, Some(&salt))?;
             state.encryption_key = Some(key);
             state.storage_salt = Some(salt);
-            let address = wallet.address.clone();
             let addresses = wallet.addresses.clone();
             let assets = wallet.assets.clone();
             let enabled_networks = wallet.enabled_networks.clone();
             state.wallet = Some(wallet);
             state.locked = false;
-            (address, addresses, assets, enabled_networks)
+            (addresses, assets, enabled_networks)
         }
     };
 
@@ -234,12 +220,6 @@ pub(crate) async fn unlock_wallet(
             refresh_addresses.insert("evm".to_string(), address_value.clone());
         }
     }
-    let primary_address = refresh_addresses
-        .values()
-        .next()
-        .cloned()
-        .unwrap_or_else(|| address.clone());
-    let _ = primary_address;
     let mut fresh_assets = fetch_portfolio_assets(&refresh_addresses, &cached_assets).await;
     let _ = refresh_asset_prices(&mut fresh_assets).await;
 
