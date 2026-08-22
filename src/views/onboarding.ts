@@ -1,8 +1,8 @@
-import eyeIconUrl from "../assets/icons/eye.svg";
-import eyeOffIconUrl from "../assets/icons/eye-off.svg";
+import eyeIcon from "../assets/icons/eye.svg?raw";
+import eyeOffIcon from "../assets/icons/eye-off.svg?raw";
 import { escapeHtml } from "../format";
 import { networks } from "../networks";
-import { featureCard, walletPasswordMeter } from "./shared";
+import { featureCard, inlineIcon, walletPasswordMeter } from "./shared";
 import { appState } from "../state";
 import { themes } from "../theme";
 
@@ -94,7 +94,7 @@ function step2() {
     ? "Hide wallet passwords"
     : "Show wallet passwords";
 
-  const passwordIconUrl = wizard.walletPasswordVisible ? eyeOffIconUrl : eyeIconUrl;
+  const passwordIcon = wizard.walletPasswordVisible ? eyeOffIcon : eyeIcon;
   return `
     <div class="space-y-4">
       ${
@@ -112,7 +112,7 @@ function step2() {
         <div class="relative">
           <input class="field" data-wizard-field="walletPassword" type="${wizard.walletPasswordVisible ? "text" : "password"}" minlength="8" placeholder="Minimum 8 characters" data-wallet-password-input value="${escapeHtml(wizard.walletPassword)}" />
           <button class="absolute right-3 top-1/2 -translate-y-1/2" type="button" data-action="toggle-wallet-password-visibility" aria-label="${passwordRevealLabel}" aria-pressed="${wizard.walletPasswordVisible}">
-            <img class="h-5 w-5" src="${passwordIconUrl}" alt="" />
+            ${inlineIcon(passwordIcon, "h-5 w-5")}
           </button>
         </div>
       </label>
@@ -122,7 +122,7 @@ function step2() {
         <div class="relative">
           <input class="field" data-wizard-field="confirmWalletPassword" type="${wizard.walletPasswordVisible ? "text" : "password"}" minlength="8" value="${escapeHtml(wizard.confirmWalletPassword)}" />
           <button class="absolute right-3 top-1/2 -translate-y-1/2" type="button" data-action="toggle-wallet-password-visibility" aria-label="${passwordRevealLabel}" aria-pressed="${wizard.walletPasswordVisible}">
-            <img class="h-5 w-5" src="${passwordIconUrl}" alt="" />
+            ${inlineIcon(passwordIcon, "h-5 w-5")}
           </button>
         </div>
       </label>
@@ -276,7 +276,7 @@ function step6() {
   const revealLabel = wizard.recoveryPhraseVisible
     ? "Hide recovery phrase"
     : "Show recovery phrase";
-  const recoveryPhraseIconUrl = wizard.recoveryPhraseVisible ? eyeOffIconUrl : eyeIconUrl;
+  const recoveryPhraseIcon = wizard.recoveryPhraseVisible ? eyeOffIcon : eyeIcon;
 
   return `
     <form class="space-y-4" data-action="wallet-setup">
@@ -294,7 +294,7 @@ function step6() {
         <div class="relative mt-3">
           <textarea class="field min-h-26 resize-none pr-12 font-mono text-sm" readonly aria-label="Recovery phrase">${escapeHtml(recoveryPhraseDisplay)}</textarea>
           <button class="absolute right-3 top-3 flex h-8 w-8 items-center justify-center text-slate-300 transition hover:text-white" type="button" data-action="toggle-recovery-phrase" aria-label="${revealLabel}" aria-pressed="${wizard.recoveryPhraseVisible}">
-            <img class="h-5 w-5" src="${recoveryPhraseIconUrl}" alt="" />
+            ${inlineIcon(recoveryPhraseIcon, "h-5 w-5")}
           </button>
         </div>
         ${
