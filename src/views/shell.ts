@@ -1,5 +1,6 @@
 import lockIconUrl from "../assets/icons/lock.svg";
 import refreshIconUrl from "../assets/icons/refresh.svg";
+import sendIconUrl from "../assets/icons/send.svg";
 import { escapeHtml, shortAddress } from "../format";
 import appLogoUrl from "../../src-tauri/icons/icon.svg";
 import { appState } from "../state";
@@ -17,7 +18,7 @@ export function walletShell() {
         <div class="sidebar-nav-shell min-h-0 flex-1">
           <nav id="sidebar-nav" class="sidebar-nav min-h-0 flex-1 space-y-2" data-sidebar-scroll tabindex="0" aria-label="Wallet sections">
             ${navButton("dashboard", "Dashboard")}
-            ${navButton("send", "Send")}
+            ${navButton("send", "Send", sendIconUrl)}
             ${navButton("receive", "Receive")}
             ${navButton("swap", "Swap")}
             ${navButton("assets", "Assets")}
@@ -59,14 +60,17 @@ function topBar() {
           <img class="h-4 w-4" src="${lockIconUrl}" alt="" />
           Lock
         </button>
-        <button class="btn-primary" data-view="send" type="button">Send funds</button>
+        <button class="btn-primary inline-flex items-center gap-2" data-view="send" type="button">
+          <img class="h-4 w-4" src="${sendIconUrl}" alt="" />
+          Send funds
+        </button>
       </div>
     </header>
   `;
 }
 
-function navButton(view: string, label: string) {
-  return `<button class="nav-item ${appState.currentView === view ? "active" : ""}" data-view="${view}" type="button">${label}</button>`;
+function navButton(view: string, label: string, iconUrl?: string) {
+  return `<button class="nav-item ${appState.currentView === view ? "active" : ""} ${iconUrl ? "inline-flex items-center gap-2" : ""}" data-view="${view}" type="button">${iconUrl ? `<img class="h-4 w-4" src="${iconUrl}" alt="" />` : ""}${label}</button>`;
 }
 
 function mobileNav() {
