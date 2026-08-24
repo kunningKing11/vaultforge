@@ -93,7 +93,7 @@ function sendView() {
     <section class="glass max-w-3xl rounded-[2rem] p-6">
       <p class="text-sm font-bold uppercase tracking-[0.3em] text-slate-500">Transfer</p>
       <h2 class="mt-2 text-3xl font-black">Send crypto</h2>
-      <p class="mt-3 text-sm font-bold leading-6 text-slate-400">Transactions are signed locally before broadcast to the chain RPC. Review the signature before funds leave your balance.</p>
+      <p class="mt-3 text-sm font-bold leading-6 text-slate-400">Transactions are signed locally before being broadcast to the chain RPC. Review the signature before funds leave your balance.</p>
       <form data-action="sign-transaction" class="mt-6 grid gap-4">
         <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Recipient address</span><input class="field" name="to" data-recipient-address placeholder="${addressPlaceholder(selectedSymbol)}" value="${escapeHtml(appState.sendDraft.to)}" required /></label>
         <div class="grid gap-4 sm:grid-cols-2">
