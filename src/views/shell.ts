@@ -1,13 +1,20 @@
+import activityIcon from "../assets/icons/activity.svg?raw";
+import appLogoUrl from "../../src-tauri/icons/icon.svg";
+import assetsIcon from "../assets/icons/assets.svg?raw";
 import copyIcon from "../assets/icons/copy.svg?raw";
+import dashboardIcon from "../assets/icons/dashboard.svg?raw";
 import lockIcon from "../assets/icons/lock.svg?raw";
+import receiveIcon from "../assets/icons/receive.svg?raw";
 import refreshIcon from "../assets/icons/refresh.svg?raw";
+import sendUpIcon from "../assets/icons/send-up.svg?raw";
 import sendIcon from "../assets/icons/send.svg?raw";
+import settingsIcon from "../assets/icons/settings.svg?raw";
+import swapIcon from "../assets/icons/swap.svg?raw";
 import { escapeHtml, shortAddress } from "../format";
 import { networkById } from "../networks";
-import appLogoUrl from "../../src-tauri/icons/icon.svg";
 import { addressKeyForNetwork, appState } from "../state";
-import { walletView } from "./wallet";
 import { inlineIcon } from "./shared";
+import { walletView } from "./wallet";
 
 export function walletShell() {
   if (!appState.session) return "";
@@ -26,11 +33,10 @@ export function walletShell() {
 
     displayedAddressKeys.add(addressKey);
     const label = addressKey === "evm" ? "EVM" : network.name;
-    addressCards += `<p class="mt-2 break-all font-mono text-sm font-bold text-slate-300">${escapeHtml(label)}: ${escapeHtml(shortAddress(address))}</p>`;
-    addressCards += `<button class="btn-secondary copy-address-button" data-action="copy-address" data-copy-btn-id="${counter}" type="button" aria-label="Copy ${escapeHtml(label)} address">${inlineIcon({ svg: copyIcon, sizeClass: "h-4 w-4" })}</button>`;
+    addressCards += `<div class="mt-2 flex items-center gap-2"><p class="min-w-0 flex-1 break-all font-mono text-sm font-bold text-slate-300">${escapeHtml(label)}: ${escapeHtml(shortAddress(address))}</p><button class="btn-secondary copy-address-button shrink-0" data-action="copy-address" data-copy-btn-id="${counter}" type="button" aria-label="Copy ${escapeHtml(label)} address">${inlineIcon({ svg: copyIcon, sizeClass: "h-4 w-4" })}</button></div>`;
   }
   return `
-    <div class="mx-auto grid max-w-[1500px] gap-5 pb-24 lg:grid-cols-[280px_1fr] lg:pb-0">
+    <div class="mx-auto grid max-w-[1500px] gap-5 pb-32 lg:grid-cols-[350px_1fr] lg:pb-0">
       <aside class="glass hidden rounded-[2rem] p-5 lg:sticky lg:top-5 lg:h-[calc(100vh-2.5rem)] lg:flex lg:min-h-0 lg:flex-col">
         <div class="mb-8 flex shrink-0 items-center gap-3">
           <img class="h-12 w-12 rounded-2xl" src="${appLogoUrl}" alt="VaultForge App Logo" />
@@ -38,13 +44,7 @@ export function walletShell() {
         </div>
         <div class="sidebar-nav-shell min-h-0 flex-1">
           <nav id="sidebar-nav" class="sidebar-nav min-h-0 flex-1 space-y-2" data-sidebar-scroll tabindex="0" aria-label="Wallet sections">
-            ${navButton("dashboard", "Dashboard")}
-            ${navButton("send", "Send", sendIcon)}
-            ${navButton("receive", "Receive")}
-            ${navButton("swap", "Swap")}
-            ${navButton("assets", "Assets")}
-            ${navButton("activity", "Activity")}
-            ${navButton("settings", "Settings")}
+            ${navigationItems.map(navButton).join("")}
           </nav>
           <div class="sidebar-scrollbar" data-sidebar-scrollbar role="scrollbar" tabindex="0" aria-controls="sidebar-nav" aria-label="Scroll wallet sections vertically" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
             <div class="sidebar-scrollbar-thumb" data-sidebar-scrollbar-thumb></div>
@@ -89,22 +89,62 @@ function topBar() {
   `;
 }
 
-function navButton(view: string, label: string, iconUrl?: string) {
-  return `<button class="nav-item ${appState.currentView === view ? "active" : ""} ${iconUrl ? "inline-flex items-center gap-2" : ""}" data-view="${view}" type="button">${iconUrl ? inlineIcon({ svg: iconUrl }) : ""}${label}</button>`;
+function navButton({ view, label, icon }: NavigationItem) {
+  return `<button class="nav-item inline-flex items-center gap-2 ${appState.currentView === view ? "active" : ""}" data-view="${view}" type="button">${inlineIcon({ svg: icon })}${label}</button>`;
 }
 
 function mobileNav() {
   return `
-    <nav class="mobile-nav glass">
-      ${mobileNavButton("dashboard", "Home")}
-      ${mobileNavButton("send", "Send")}
-      ${mobileNavButton("receive", "Receive")}
-      ${mobileNavButton("activity", "Activity")}
-      ${mobileNavButton("settings", "Secure")}
+    <nav class="mobile-nav glass rounded-[2rem]" aria-label="Wallet sections">
+      ${navigationItems.map(mobileNavButton).join("")}
     </nav>
   `;
 }
 
-function mobileNavButton(view: string, label: string) {
-  return `<button class="mobile-nav-item ${appState.currentView === view ? "active" : ""}" data-view="${view}" type="button">${label}</button>`;
+function mobileNavButton({ view, label, icon }: NavigationItem) {
+  return `<button class="mobile-nav-item ${appState.currentView === view ? "active" : ""}" data-view="${view}" type="button" aria-label="${label}">${inlineIcon({ svg: icon, sizeClass: "mobile-nav-icon" })}<span>${label}</span></button>`;
 }
+
+interface NavigationItem {
+  view: string;
+  label: string;
+  icon: string;
+}
+
+const navigationItems: NavigationItem[] = [
+  {
+    view: "dashboard",
+    label: "Dashboard",
+    icon: dashboardIcon,
+  },
+  {
+    view: "send",
+    label: "Send",
+    icon: sendUpIcon,
+  },
+  {
+    view: "receive",
+    label: "Receive",
+    icon: receiveIcon,
+  },
+  {
+    view: "swap",
+    label: "Swap",
+    icon: swapIcon,
+  },
+  {
+    view: "assets",
+    label: "Assets",
+    icon: assetsIcon,
+  },
+  {
+    view: "activity",
+    label: "Activity",
+    icon: activityIcon,
+  },
+  {
+    view: "settings",
+    label: "Settings",
+    icon: settingsIcon,
+  },
+];
