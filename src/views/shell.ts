@@ -19,13 +19,10 @@ import { walletView } from "./wallet";
 export function walletShell() {
   if (!appState.session) return "";
   const displayedAddressKeys = new Set<string>();
-  let counter = 0;
   let addressCards = "";
   for (const networkId of appState.session.enabled_networks) {
     const network = networkById(networkId);
     if (!network) continue;
-
-    counter++;
 
     const addressKey = addressKeyForNetwork(network);
     const address = appState.session.addresses?.[addressKey];
@@ -33,7 +30,7 @@ export function walletShell() {
 
     displayedAddressKeys.add(addressKey);
     const label = addressKey === "evm" ? "EVM" : network.name;
-    addressCards += `<div class="mt-2 flex items-center gap-2"><p class="min-w-0 flex-1 break-all font-mono text-sm font-bold text-slate-300">${escapeHtml(label)}: ${escapeHtml(shortAddress(address))}</p><button class="btn-secondary copy-address-button shrink-0" data-action="copy-address" data-copy-btn-id="${counter}" type="button" aria-label="Copy ${escapeHtml(label)} address">${inlineIcon({ svg: copyIcon, sizeClass: "h-4 w-4" })}</button></div>`;
+    addressCards += `<div class="mt-2 flex items-center gap-2"><p class="min-w-0 flex-1 break-all font-mono text-sm font-bold text-slate-300">${escapeHtml(label)}: ${escapeHtml(shortAddress(address))}</p><button class="btn-secondary copy-address-button shrink-0" data-action="copy-address" data-copy-address="${escapeHtml(address)}" type="button" aria-label="Copy ${escapeHtml(label)} address">${inlineIcon({ svg: copyIcon, sizeClass: "h-4 w-4" })}</button></div>`;
   }
   return `
     <div class="mx-auto grid max-w-[1500px] gap-5 pb-32 lg:grid-cols-[350px_1fr] lg:pb-0">

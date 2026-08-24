@@ -360,8 +360,8 @@ async function runCommand(command: SessionCommand, action: () => Promise<WalletS
   }
 }
 
-export async function copyAddress() {
-  await copyReceiveAddress();
+export async function copyAddress(address: string) {
+  await copyText(address, "Address copied.");
 }
 
 export async function copyReceiveAddress() {
