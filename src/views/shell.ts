@@ -1,3 +1,4 @@
+import copyIcon from "../assets/icons/copy.svg?raw";
 import lockIcon from "../assets/icons/lock.svg?raw";
 import refreshIcon from "../assets/icons/refresh.svg?raw";
 import sendIcon from "../assets/icons/send.svg?raw";
@@ -11,10 +12,13 @@ import { inlineIcon } from "./shared";
 export function walletShell() {
   if (!appState.session) return "";
   const displayedAddressKeys = new Set<string>();
+  let counter = 0;
   let addressCards = "";
   for (const networkId of appState.session.enabled_networks) {
     const network = networkById(networkId);
     if (!network) continue;
+
+    counter++;
 
     const addressKey = addressKeyForNetwork(network);
     const address = appState.session.addresses?.[addressKey];
@@ -23,6 +27,7 @@ export function walletShell() {
     displayedAddressKeys.add(addressKey);
     const label = addressKey === "evm" ? "EVM" : network.name;
     addressCards += `<p class="mt-2 break-all font-mono text-sm font-bold text-slate-300">${escapeHtml(label)}: ${escapeHtml(shortAddress(address))}</p>`;
+    addressCards += `<button class="btn-secondary copy-address-button" data-action="copy-address" data-copy-btn-id="${counter}" type="button" aria-label="Copy ${escapeHtml(label)} address">${inlineIcon({ svg: copyIcon, sizeClass: "h-4 w-4" })}</button>`;
   }
   return `
     <div class="mx-auto grid max-w-[1500px] gap-5 pb-24 lg:grid-cols-[280px_1fr] lg:pb-0">
@@ -48,7 +53,6 @@ export function walletShell() {
         <div class="mt-8 shrink-0 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <p class="text-xs uppercase tracking-[0.25em] text-slate-500">Addresses</p>
           ${addressCards}
-          <button class="btn-secondary mt-4 w-full text-sm font-bold" data-action="copy-address" type="button">Copy receive address</button>
         </div>
       </aside>
       <section class="space-y-5">
@@ -69,15 +73,15 @@ function topBar() {
       </div>
       <div class="flex flex-wrap gap-3">
         <button class="btn-secondary inline-flex items-center gap-2" data-action="refresh" type="button">
-          ${inlineIcon(refreshIcon)}
+          ${inlineIcon({ svg: refreshIcon })}
           Refresh
         </button>
         <button class="btn-secondary inline-flex items-center gap-2" data-action="lock" type="button">
-          ${inlineIcon(lockIcon)}
+          ${inlineIcon({ svg: lockIcon })}
           Lock
         </button>
         <button class="btn-primary inline-flex items-center gap-2" data-view="send" type="button">
-          ${inlineIcon(sendIcon)}
+          ${inlineIcon({ svg: sendIcon })}
           Send funds
         </button>
       </div>
@@ -86,7 +90,7 @@ function topBar() {
 }
 
 function navButton(view: string, label: string, iconUrl?: string) {
-  return `<button class="nav-item ${appState.currentView === view ? "active" : ""} ${iconUrl ? "inline-flex items-center gap-2" : ""}" data-view="${view}" type="button">${iconUrl ? inlineIcon(iconUrl) : ""}${label}</button>`;
+  return `<button class="nav-item ${appState.currentView === view ? "active" : ""} ${iconUrl ? "inline-flex items-center gap-2" : ""}" data-view="${view}" type="button">${iconUrl ? inlineIcon({ svg: iconUrl }) : ""}${label}</button>`;
 }
 
 function mobileNav() {

@@ -23,7 +23,7 @@ export function lockedWalletView() {
             <div class="relative">
               <input class="field pr-12" name="walletPassword" type="${appState.unlockPasswordVisible ? "text" : "password"}" required />
               <button class="absolute right-3 top-1/2 -translate-y-1/2" type="button" data-action="toggle-unlock-password-visibility" aria-label="${revealLabel}" aria-pressed="${appState.unlockPasswordVisible}">
-                ${inlineIcon(passwordIcon)}
+                ${inlineIcon({ svg: passwordIcon })}
               </button>
             </div>
           </label>

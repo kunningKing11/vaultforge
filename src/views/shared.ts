@@ -11,8 +11,21 @@ const qrResilienceOptions: Array<QrResilienceOption> = [
   { value: "H", label: "High", detail: "~30% recovery" },
 ];
 
-export function inlineIcon(svg: string, sizeClass = "h-5 w-5") {
-  return svg.replace("<svg", `<svg class="${sizeClass}" aria-hidden="true"`);
+interface InlineIconOptions {
+  svg: string;
+  sizeClass?: string;
+  decorative?: boolean;
+  label?: string;
+}
+
+export function inlineIcon({
+  svg,
+  sizeClass = "h-5 w-5",
+  decorative = true,
+  label = "",
+}: InlineIconOptions) {
+  const aria = decorative ? 'aria-hidden="true"' : `role="img" aria-label="${escapeHtml(label)}"`;
+  return `<span class="inline-icon ${sizeClass}" ${aria}>${svg}</span>`;
 }
 
 export function assetCard(asset: Asset) {

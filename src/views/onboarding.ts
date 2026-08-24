@@ -112,7 +112,7 @@ function step2() {
         <div class="relative">
           <input class="field" data-wizard-field="walletPassword" type="${wizard.walletPasswordVisible ? "text" : "password"}" minlength="8" placeholder="Minimum 8 characters" data-wallet-password-input value="${escapeHtml(wizard.walletPassword)}" />
           <button class="absolute right-3 top-1/2 -translate-y-1/2" type="button" data-action="toggle-wallet-password-visibility" aria-label="${passwordRevealLabel}" aria-pressed="${wizard.walletPasswordVisible}">
-            ${inlineIcon(passwordIcon)}
+            ${inlineIcon({ svg: passwordIcon })}
           </button>
         </div>
       </label>
@@ -122,7 +122,7 @@ function step2() {
         <div class="relative">
           <input class="field" data-wizard-field="confirmWalletPassword" type="${wizard.walletPasswordVisible ? "text" : "password"}" minlength="8" value="${escapeHtml(wizard.confirmWalletPassword)}" />
           <button class="absolute right-3 top-1/2 -translate-y-1/2" type="button" data-action="toggle-wallet-password-visibility" aria-label="${passwordRevealLabel}" aria-pressed="${wizard.walletPasswordVisible}">
-            ${inlineIcon(passwordIcon)}
+            ${inlineIcon({ svg: passwordIcon })}
           </button>
         </div>
       </label>
@@ -294,7 +294,7 @@ function step6() {
         <div class="relative mt-3">
           <textarea class="field min-h-26 resize-none pr-12 font-mono text-sm" readonly aria-label="Recovery phrase">${escapeHtml(recoveryPhraseDisplay)}</textarea>
           <button class="absolute right-3 top-3 flex h-8 w-8 items-center justify-center text-slate-300 transition hover:text-white" type="button" data-action="toggle-recovery-phrase" aria-label="${revealLabel}" aria-pressed="${wizard.recoveryPhraseVisible}">
-            ${inlineIcon(recoveryPhraseIcon)}
+            ${inlineIcon({ svg: recoveryPhraseIcon })}
           </button>
         </div>
         ${
