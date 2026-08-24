@@ -48,7 +48,10 @@ export function bindEvents() {
     if (action === "cancel-locked-delete-wallet") cancelLockedDeleteWallet();
     if (action === "start-locked-delete-wallet-countdown") startLockedDeleteWalletCountdown();
     if (action === "refresh") void refreshPrices();
-    if (action === "copy-address") void copyAddress();
+    if (action === "copy-address") {
+      const address = target.closest<HTMLElement>("[data-copy-address]")?.dataset.copyAddress;
+      if (address) void copyAddress(address);
+    }
     if (action === "copy-receive-address") void copyReceiveAddress();
     if (action === "copy-qr") void copyQrPayload();
     if (action === "download-qr") downloadQrSvg();
