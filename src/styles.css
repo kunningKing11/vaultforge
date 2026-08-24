@@ -332,6 +332,7 @@ select.field option:checked {
   max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
+  overscroll-behavior: contain;
   scrollbar-width: none;
 }
 

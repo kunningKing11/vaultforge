@@ -239,19 +239,19 @@ export function installScrollbarBehavior(): void {
       }
 
       const horizontalScroll = target.closest<HTMLElement>("[data-horizontal-scroll]");
-      if (!horizontalScroll || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+      if (!horizontalScroll) return;
 
       const maxScroll = maxScrollLeft(horizontalScroll);
-      const direction = Math.sign(event.deltaY);
-      const canScroll =
-        maxScroll > 0 &&
-        ((direction > 0 && horizontalScroll.scrollLeft < maxScroll) ||
-          (direction < 0 && horizontalScroll.scrollLeft > 0));
+      if (maxScroll === 0) return;
 
-      if (!canScroll) return;
+      const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      if (delta === 0) return;
 
       event.preventDefault();
-      horizontalScroll.scrollLeft += event.deltaY * WHEEL_SCROLL_MULTIPLIER;
+      horizontalScroll.scrollLeft = Math.max(
+        0,
+        Math.min(maxScroll, horizontalScroll.scrollLeft + delta * WHEEL_SCROLL_MULTIPLIER),
+      );
     },
     { passive: false },
   );
