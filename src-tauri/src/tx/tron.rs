@@ -25,8 +25,8 @@ pub(crate) fn sign_tron_unsigned_transfer(
     let raw_data_hex = unsigned_tx["raw_data_hex"]
         .as_str()
         .ok_or_else(|| "Tron unsigned transaction missing raw_data_hex".to_string())?;
-    let raw_data_bytes = hex::decode(raw_data_hex)
-        .map_err(|_| "Invalid Tron raw_data_hex".to_string())?;
+    let raw_data_bytes =
+        hex::decode(raw_data_hex).map_err(|_| "Invalid Tron raw_data_hex".to_string())?;
     let txid_bytes = Sha256::digest(&raw_data_bytes);
     let computed_txid = hex::encode(txid_bytes);
     let txid = unsigned_tx["txID"]
@@ -42,7 +42,8 @@ pub(crate) fn sign_tron_unsigned_transfer(
     let signature: k256::ecdsa::Signature = signing_key
         .sign_prehash(&txid_bytes)
         .map_err(|_| "Tron transaction signing failed".to_string())?;
-    let recovery_id = recovery_id_for_signature(signing_key.verifying_key(), &txid_bytes, &signature)?;
+    let recovery_id =
+        recovery_id_for_signature(signing_key.verifying_key(), &txid_bytes, &signature)?;
     let mut signature_bytes = signature.to_bytes().to_vec();
     signature_bytes.push(recovery_id.to_byte());
     let signature_hex = hex::encode(signature_bytes);

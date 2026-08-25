@@ -147,21 +147,6 @@ struct SolanaProvider;
 struct TronProvider;
 struct ZcashProvider;
 
-impl ChainProvider for EvmProvider {
-    fn chain_name(&self) -> &'static str {
-        "EVM"
-    }
-    fn symbol(&self) -> &'static str {
-        "ETH"
-    }
-    fn validate_address(&self, address: &str) -> Result<(), String> {
-        validate_evm_address(address)
-    }
-    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> {
-        ethereum_address_from_private_key(private_key)
-    }
-}
-
 impl ChainProvider for BitcoinProvider {
     fn chain_name(&self) -> &'static str {
         "Bitcoin"
@@ -174,6 +159,21 @@ impl ChainProvider for BitcoinProvider {
     }
     fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> {
         bitcoin_bech32_address(private_key, false)
+    }
+}
+
+impl ChainProvider for EvmProvider {
+    fn chain_name(&self) -> &'static str {
+        "EVM"
+    }
+    fn symbol(&self) -> &'static str {
+        "ETH"
+    }
+    fn validate_address(&self, address: &str) -> Result<(), String> {
+        validate_evm_address(address)
+    }
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> {
+        ethereum_address_from_private_key(private_key)
     }
 }
 
