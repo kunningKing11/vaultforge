@@ -3,7 +3,7 @@ import { networkById } from "./networks";
 import { render } from "./render";
 import { appState, addressForNetwork, selectedNetwork } from "./state";
 import { pushToast } from "./toasts";
-import type { SessionCommand, WalletSession } from "./types";
+import type { RefreshWarning, SessionCommand, WalletRefreshResult, WalletSession } from "./types";
 import { walletApi } from "./walletApi";
 import { walletPasswordStrength } from "./walletPassword";
 
@@ -20,7 +20,7 @@ export async function setupWizard() {
       return;
     }
     if (!validateRecoveryPhraseWordCount(mnemonic)) return;
-    const imported = await runCommand("import_wallet", () =>
+    const imported = await runRefreshCommand("import_wallet", () =>
       walletApi.importWallet({
         name: wizard.name || undefined,
         mnemonic,
@@ -42,7 +42,7 @@ export async function setupWizard() {
       wizard.generatedMnemonic = await walletApi.generateMnemonic(wizard.wordCount);
     }
     wizard.mnemonic = "";
-    const created = await runCommand("create_wallet", () =>
+    const created = await runRefreshCommand("create_wallet", () =>
       walletApi.createWallet({
         name: wizard.name || "Primary Wallet",
         walletPassword,
@@ -68,7 +68,7 @@ function clearSetupSecrets() {
 
 export async function unlockWallet(form: HTMLFormElement) {
   const formData = new FormData(form);
-  const ok = await runCommand("unlock_wallet", () =>
+  const ok = await runRefreshCommand("unlock_wallet", () =>
     walletApi.unlockWallet({
       walletPassword: String(formData.get("walletPassword") || ""),
     }),
@@ -333,8 +333,8 @@ function syncAutoLockTimerWithSession() {
   startAutoLockTimer();
 }
 
-export async function refreshPrices() {
-  await runCommand("refresh_prices", () => walletApi.refreshPrices());
+export async function refreshPortfolio() {
+  await runRefreshCommand("refresh_portfolio", () => walletApi.refreshPortfolio());
 }
 
 async function runCommand(command: SessionCommand, action: () => Promise<WalletSession | null>) {
@@ -348,6 +348,33 @@ async function runCommand(command: SessionCommand, action: () => Promise<WalletS
         appState.lastActivity = Date.now();
       }
       syncAutoLockTimerWithSession();
+    }
+    pushToast(successMessage(command), "success");
+    return true;
+  } catch (error) {
+    pushToast(formatError(error), "error");
+    return false;
+  } finally {
+    appState.busy = false;
+    render();
+  }
+}
+
+async function runRefreshCommand(
+  command: SessionCommand,
+  action: () => Promise<WalletRefreshResult>,
+) {
+  appState.busy = true;
+  render();
+  try {
+    const result = await action();
+    appState.session = result.session;
+    if (command === "unlock_wallet") {
+      appState.lastActivity = Date.now();
+    }
+    syncAutoLockTimerWithSession();
+    for (const warning of result.warnings) {
+      pushToast(refreshWarningMessage(warning), "warning");
     }
     pushToast(successMessage(command), "success");
     return true;
@@ -411,7 +438,15 @@ function successMessage(command: string) {
     sign_transaction: "Transaction signed locally.",
     send_transaction: "Signed transaction broadcast to the RPC provider.",
     swap_tokens: "Swap completed in the local simulator.",
-    refresh_prices: "Market prices refreshed.",
+    refresh_portfolio: "Portfolio refreshed.",
   };
   return messages[command] ?? "Updated.";
+}
+
+function refreshWarningMessage({ kind, subject }: RefreshWarning): string {
+  if (kind === "balance") {
+    return `${subject} balance refresh failed. Try again for an accurate balance.`;
+  }
+
+  return `${subject} refresh failed. Try again for an accurate value.`;
 }

@@ -506,6 +506,15 @@ select.field option:checked {
   );
 }
 
+.toast-warning {
+  border-color: rgb(var(--color-warning-rgb) / 0.46);
+  background: linear-gradient(
+    145deg,
+    rgb(var(--color-surface-rgb) / 0.96),
+    rgb(var(--color-warning-dark-rgb) / 0.72)
+  );
+}
+
 .toast-dot {
   margin-top: 0.45rem;
   height: 0.55rem;
@@ -519,6 +528,11 @@ select.field option:checked {
 .toast-error .toast-dot {
   background: var(--color-error);
   box-shadow: 0 0 18px rgb(var(--color-error-rgb) / 0.72);
+}
+
+.toast-warning .toast-dot {
+  background: var(--color-warning);
+  box-shadow: 0 0 18px rgb(var(--color-warning-rgb) / 0.72);
 }
 
 .toast-track {
@@ -542,6 +556,10 @@ select.field option:checked {
 
 .toast-error .toast-progress {
   background: linear-gradient(90deg, var(--color-error), var(--color-warning));
+}
+
+.toast-warning .toast-progress {
+  background: linear-gradient(90deg, var(--color-warning), var(--color-orange));
 }
 
 .toast-enter {

@@ -1,7 +1,7 @@
 use crate::assets::{cached_asset, cached_asset_by_token_address};
 use crate::dto::Asset;
+use crate::providers::NetworkAssetRefresh;
 use crate::providers::http::rpc_post;
-use crate::providers::prices::fetch_token_metadata;
 use crate::registry::{NetworkConfig, network_by_id};
 use std::collections::BTreeMap;
 
@@ -53,10 +53,16 @@ pub(crate) async fn fetch_solana_token_accounts(
     parse_solana_token_accounts(&json, address)
 }
 
-pub(crate) async fn fetch_solana_assets(address: &str, cached_assets: &[Asset]) -> Vec<Asset> {
+pub(crate) async fn fetch_solana_assets(
+    address: &str,
+    cached_assets: &[Asset],
+) -> NetworkAssetRefresh {
     let config = solana_config().expect("Solana must exist in the generated network registry");
-    let native = match fetch_solana_native_balance(address).await {
-        Ok(lamports) => Asset {
+    let mut balance_failed = false;
+    let mut assets = vec![];
+
+    match fetch_solana_native_balance(address).await {
+        Ok(lamports) => assets.push(Asset {
             symbol: config.native_asset.symbol.clone(),
             name: config.native_asset.name.clone(),
             balance: lamports.to_string(),
@@ -65,27 +71,26 @@ pub(crate) async fn fetch_solana_assets(address: &str, cached_assets: &[Asset]) 
             change_24h: 0.0,
             network: "solana".to_string(),
             token_address: None,
-        },
-        Err(_) => cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
-            .unwrap_or_else(|| Asset {
-                symbol: config.native_asset.symbol.clone(),
-                name: config.native_asset.name.clone(),
-                balance: "0".to_string(),
-                decimals: config.native_asset.decimals,
-                price_usd: 0.0,
-                change_24h: 0.0,
-                network: "solana".to_string(),
-                token_address: None,
-            }),
-    };
-
-    let mut assets = vec![native];
+        }),
+        Err(_) => {
+            balance_failed = true;
+            if let Some(cached) =
+                cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
+            {
+                assets.push(cached);
+            }
+        }
+    }
 
     let token_accounts = match fetch_solana_token_accounts(address).await {
         Ok(accounts) => accounts,
         Err(_) => {
+            balance_failed = true;
             assets.extend(cached_solana_token_assets(cached_assets));
-            return assets;
+            return NetworkAssetRefresh {
+                assets,
+                balance_failed,
+            };
         }
     };
 
@@ -104,22 +109,15 @@ pub(crate) async fn fetch_solana_assets(address: &str, cached_assets: &[Asset]) 
 
     for (mint, (amount, decimals)) in token_balances {
         let cached = cached_asset_by_token_address(cached_assets, "solana", &mint);
-        let metadata = fetch_token_metadata("solana", &mint).await.ok();
-        let symbol = metadata
+        let symbol = cached
             .as_ref()
-            .map(|value| value.symbol.clone())
-            .or_else(|| cached.as_ref().map(|asset| asset.symbol.clone()))
+            .map(|asset| asset.symbol.clone())
             .unwrap_or_else(|| fallback_solana_token_symbol(&mint));
-        let name = metadata
+        let name = cached
             .as_ref()
-            .map(|value| value.name.clone())
-            .or_else(|| cached.as_ref().map(|asset| asset.name.clone()))
+            .map(|asset| asset.name.clone())
             .unwrap_or_else(|| format!("SPL Token {}", short_mint(&mint)));
-        let price_usd = metadata
-            .as_ref()
-            .and_then(|value| value.price_usd)
-            .or_else(|| cached.as_ref().map(|asset| asset.price_usd))
-            .unwrap_or(0.0);
+        let price_usd = cached.as_ref().map(|asset| asset.price_usd).unwrap_or(0.0);
         let change_24h = cached.as_ref().map(|asset| asset.change_24h).unwrap_or(0.0);
 
         assets.push(Asset {
@@ -133,7 +131,10 @@ pub(crate) async fn fetch_solana_assets(address: &str, cached_assets: &[Asset]) 
             token_address: Some(mint),
         });
     }
-    assets
+    NetworkAssetRefresh {
+        assets,
+        balance_failed,
+    }
 }
 
 fn cached_solana_token_assets(cached_assets: &[Asset]) -> impl Iterator<Item = Asset> + '_ {

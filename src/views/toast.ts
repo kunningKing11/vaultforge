@@ -5,7 +5,7 @@ export function toastTemplate(toast: Toast, entered: boolean) {
   const elapsed = Date.now() - toast.createdAt;
   const entryClass = entered || toast.exiting ? "" : "toast-enter";
   const exitClass = toast.exiting ? "toast-exit" : "";
-  const toneClass = toast.tone === "error" ? "toast-error" : "toast-success";
+  const toneClass = `toast-${toast.tone}`;
 
   return `
     <article class="toast-card ${toneClass} ${entryClass} ${exitClass}" data-toast-id="${toast.id}">

@@ -37,6 +37,16 @@ export type WalletSession = {
   auto_lock_timeout_secs: number | null;
 };
 
+export type RefreshWarning = {
+  kind: "balance" | "value";
+  subject: string;
+};
+
+export type WalletRefreshResult = {
+  session: WalletSession;
+  warnings: RefreshWarning[];
+};
+
 export type SignedTransaction = {
   from: string;
   to: string;
@@ -74,7 +84,7 @@ export type SessionCommand =
   | "send_transaction"
   | "swap_tokens"
   | "clear_wallet"
-  | "refresh_prices";
+  | "refresh_portfolio";
 
 export type View =
   | "dashboard"

@@ -1,5 +1,6 @@
 use crate::assets::cached_asset;
 use crate::dto::Asset;
+use crate::providers::NetworkAssetRefresh;
 use crate::providers::http::rpc_post;
 use crate::registry::{NetworkConfig, network_by_id};
 
@@ -35,33 +36,32 @@ pub(crate) async fn fetch_tron_native_balance(address: &str) -> Result<u128, Str
     Ok(json["balance"].as_u64().unwrap_or(0) as u128)
 }
 
-pub(crate) async fn fetch_tron_assets(address: &str, cached_assets: &[Asset]) -> Vec<Asset> {
+pub(crate) async fn fetch_tron_assets(
+    address: &str,
+    cached_assets: &[Asset],
+) -> NetworkAssetRefresh {
     let config = tron_config().expect("Tron must exist in the generated network registry");
-    let native = match fetch_tron_native_balance(address).await {
-        Ok(sun) => Asset {
-            symbol: config.native_asset.symbol.clone(),
-            name: config.native_asset.name.clone(),
-            balance: sun.to_string(),
-            decimals: config.native_asset.decimals,
-            price_usd: 0.0,
-            change_24h: 0.0,
-            network: "tron".to_string(),
-            token_address: None,
-        },
-        Err(_) => cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
-            .unwrap_or_else(|| Asset {
+    match fetch_tron_native_balance(address).await {
+        Ok(sun) => NetworkAssetRefresh {
+            assets: vec![Asset {
                 symbol: config.native_asset.symbol.clone(),
                 name: config.native_asset.name.clone(),
-                balance: "0".to_string(),
+                balance: sun.to_string(),
                 decimals: config.native_asset.decimals,
                 price_usd: 0.0,
                 change_24h: 0.0,
                 network: "tron".to_string(),
                 token_address: None,
-            }),
-    };
-
-    vec![native]
+            }],
+            balance_failed: false,
+        },
+        Err(_) => NetworkAssetRefresh {
+            assets: cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
+                .into_iter()
+                .collect(),
+            balance_failed: true,
+        },
+    }
 }
 
 pub(crate) async fn create_tron_transfer(
