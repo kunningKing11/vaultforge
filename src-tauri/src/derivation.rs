@@ -19,7 +19,13 @@ pub(crate) const BIP39_WORD_COUNTS: [usize; 5] = [12, 15, 18, 21, 24];
 
 #[cfg(test)]
 pub(crate) const ALL_NETWORKS: &[&str] = &[
-    "bitcoin", "ethereum", "filecoin", "injective", "solana", "tron", "zcash",
+    "bitcoin",
+    "ethereum",
+    "filecoin",
+    "injective",
+    "solana",
+    "tron",
+    "zcash",
 ];
 
 // TODO: why some are pub(crate) and some are not? Should we make them all pub(crate)?
