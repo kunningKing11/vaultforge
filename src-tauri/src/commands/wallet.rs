@@ -5,14 +5,16 @@ use tauri::State;
 use zeroize::Zeroize;
 
 use crate::activity::{activity, hash_secret};
-use crate::commands::market::refresh_asset_prices;
+use crate::commands::market::refresh_wallet_portfolio;
 use crate::derivation::{
     address_key_for_network, derive_addresses_from_mnemonic_filtered, generate_mnemonic,
     validate_recovery_phrase_word_count,
 };
-use crate::dto::{Wallet, WalletSession};
-use crate::providers::fetch_portfolio_assets;
-use crate::state::{AppState, StoredWalletMetadata, clear_secret_string, session_from_state};
+use crate::dto::{Wallet, WalletRefreshResult, WalletSession};
+use crate::state::{
+    AppState, StoredWalletMetadata, clear_secret_string, refresh_result_from_state,
+    session_from_state,
+};
 use crate::storage::{
     decrypt_wallet, derive_storage_key, persist_state_wallet, read_stored_wallet,
 };
@@ -49,7 +51,7 @@ pub(crate) async fn create_wallet(
     enabled_networks: Vec<String>,
     auto_lock_timeout_secs: Option<u64>,
     mnemonic: Option<String>,
-) -> Result<WalletSession, String> {
+) -> Result<WalletRefreshResult, String> {
     validate_wallet_password(&wallet_password)?;
     let mnemonic = match mnemonic {
         Some(m) if !m.trim().is_empty() => m.trim().to_string(),
@@ -57,8 +59,7 @@ pub(crate) async fn create_wallet(
     };
     let network_refs: Vec<&str> = enabled_networks.iter().map(|s| s.as_str()).collect();
     let addresses = derive_addresses_from_mnemonic_filtered(&mnemonic, &network_refs)?;
-    let mut assets = fetch_portfolio_assets(&addresses, &[]).await;
-    let _ = refresh_asset_prices(&mut assets).await;
+    let refreshed = refresh_wallet_portfolio(&addresses, &[], &enabled_networks).await;
 
     let wallet = Wallet {
         name: clean_name(name),
@@ -66,7 +67,7 @@ pub(crate) async fn create_wallet(
         created_at: Utc::now().to_rfc3339(),
         addresses,
         wallet_password_hash: hash_secret(&wallet_password),
-        assets,
+        assets: refreshed.assets,
         activity: vec![activity(
             "system",
             "Wallet created",
@@ -84,7 +85,7 @@ pub(crate) async fn create_wallet(
     state.wallet = Some(wallet);
     state.locked = false;
     persist_state_wallet(&mut state)?;
-    Ok(session_from_state(&state))
+    Ok(refresh_result_from_state(&state, refreshed.warnings))
 }
 
 #[tauri::command]
@@ -95,15 +96,14 @@ pub(crate) async fn import_wallet(
     wallet_password: String,
     enabled_networks: Vec<String>,
     auto_lock_timeout_secs: Option<u64>,
-) -> Result<WalletSession, String> {
+) -> Result<WalletRefreshResult, String> {
     let mnemonic = mnemonic.trim().to_string();
     validate_recovery_phrase_word_count(&mnemonic)?;
     validate_wallet_password(&wallet_password)?;
 
     let network_refs: Vec<&str> = enabled_networks.iter().map(|s| s.as_str()).collect();
     let addresses = derive_addresses_from_mnemonic_filtered(&mnemonic, &network_refs)?;
-    let mut assets = fetch_portfolio_assets(&addresses, &[]).await;
-    let _ = refresh_asset_prices(&mut assets).await;
+    let refreshed = refresh_wallet_portfolio(&addresses, &[], &enabled_networks).await;
 
     let wallet = Wallet {
         name: clean_name(name.unwrap_or_else(|| "Imported Wallet".to_string())),
@@ -111,7 +111,7 @@ pub(crate) async fn import_wallet(
         created_at: Utc::now().to_rfc3339(),
         addresses,
         wallet_password_hash: hash_secret(&wallet_password),
-        assets,
+        assets: refreshed.assets,
         activity: vec![activity(
             "import",
             "Wallet imported",
@@ -129,7 +129,7 @@ pub(crate) async fn import_wallet(
     state.wallet = Some(wallet);
     state.locked = false;
     persist_state_wallet(&mut state)?;
-    Ok(session_from_state(&state))
+    Ok(refresh_result_from_state(&state, refreshed.warnings))
 }
 
 fn enabled_address_subset(
@@ -152,7 +152,7 @@ fn enabled_address_subset(
 pub(crate) async fn unlock_wallet(
     state: State<'_, Mutex<AppState>>,
     wallet_password: String,
-) -> Result<WalletSession, String> {
+) -> Result<WalletRefreshResult, String> {
     let wallet_password_hash = hash_secret(&wallet_password);
 
     let (addresses, cached_assets, enabled_networks) = {
@@ -220,15 +220,14 @@ pub(crate) async fn unlock_wallet(
             refresh_addresses.insert("evm".to_string(), address_value.clone());
         }
     }
-    let mut fresh_assets = fetch_portfolio_assets(&refresh_addresses, &cached_assets).await;
-    let _ = refresh_asset_prices(&mut fresh_assets).await;
+    let refreshed = refresh_wallet_portfolio(&refresh_addresses, &cached_assets, &enabled_networks).await;
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
     if let Some(wallet) = state.wallet.as_mut() {
-        wallet.assets = fresh_assets;
+        wallet.assets = refreshed.assets;
     }
     persist_state_wallet(&mut state)?;
-    Ok(session_from_state(&state))
+    Ok(refresh_result_from_state(&state, refreshed.warnings))
 }
 
 #[tauri::command]

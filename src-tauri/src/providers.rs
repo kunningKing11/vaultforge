@@ -25,37 +25,76 @@ pub(crate) mod prices;
 pub(crate) mod solana;
 pub(crate) mod tron;
 
+pub(crate) struct NetworkAssetRefresh {
+    pub(crate) assets: Vec<Asset>,
+    pub(crate) balance_failed: bool,
+}
+
+pub(crate) struct PortfolioAssetRefresh {
+    pub(crate) assets: Vec<Asset>,
+    pub(crate) failed_networks: Vec<String>,
+}
+
 pub(crate) async fn fetch_portfolio_assets(
     addresses: &HashMap<String, String>,
     cached_assets: &[Asset],
-) -> Vec<Asset> {
+    enabled_networks: &[String],
+) -> PortfolioAssetRefresh {
     let mut assets = vec![];
+    let mut failed_networks = vec![];
 
     if let Some(evm_address) = addresses.get("evm") {
         for config in evm_networks() {
-            assets.extend(fetch_evm_assets(config, evm_address, cached_assets).await);
+            if !enabled_networks.contains(&config.id) {
+                continue;
+            }
+
+            let refreshed = fetch_evm_assets(config, evm_address, cached_assets).await;
+            if refreshed.balance_failed {
+                failed_networks.push(config.name.clone());
+            }
+            assets.extend(refreshed.assets);
         }
     }
 
-    if let Some(solana_address) = addresses.get("solana") {
-        assets.extend(fetch_solana_assets(solana_address, cached_assets).await);
+    if enabled_networks.iter().any(|id| id == "solana") {
+        if let Some(solana_address) = addresses.get("solana") {
+            let refreshed = fetch_solana_assets(solana_address, cached_assets).await;
+            if refreshed.balance_failed {
+                failed_networks.push("Solana".to_string());
+            }
+            assets.extend(refreshed.assets);
+        }
     }
 
-    if let Some(tron_address) = addresses.get("tron") {
-        assets.extend(fetch_tron_assets(tron_address, cached_assets).await);
+    if enabled_networks.iter().any(|id| id == "tron") {
+        if let Some(tron_address) = addresses.get("tron") {
+            let refreshed = fetch_tron_assets(tron_address, cached_assets).await;
+            if refreshed.balance_failed {
+                failed_networks.push("Tron".to_string());
+            }
+            assets.extend(refreshed.assets);
+        }
     }
 
     for config in &registry().networks {
         if matches!(config.kind.as_str(), "evm" | "svm" | "tron") {
             continue;
         }
+
+        if !enabled_networks.contains(&config.id) {
+            continue;
+        }
+
         let Some(address) = addresses.get(&config.address_key) else {
             continue;
         };
 
         match fetch_non_evm_native_asset(config, address).await {
-            Ok(asset) => assets.push(asset),
+            Ok(Some(asset)) => assets.push(asset),
+            Ok(None) => {}
             Err(_) => {
+                failed_networks.push(config.name.clone());
                 if let Some(cached) =
                     cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
                 {
@@ -65,24 +104,22 @@ pub(crate) async fn fetch_portfolio_assets(
         }
     }
 
-    assets
+    PortfolioAssetRefresh {
+        assets,
+        failed_networks,
+    }
 }
 
 async fn fetch_non_evm_native_asset(
     config: &NetworkConfig,
     address: &str,
-) -> Result<Asset, String> {
+) -> Result<Option<Asset>, String> {
     let balance = match config.id.as_str() {
         "bitcoin" => fetch_bitcoin_balance(address).await?,
-        _ => {
-            return Err(format!(
-                "{} provider is not implemented yet",
-                config.native_asset.symbol
-            ));
-        }
+        _ => return Ok(None), // intentionally unsupported networks will be ignored, but not treated as an error
     };
 
-    Ok(Asset {
+    Ok(Some(Asset {
         symbol: config.native_asset.symbol.clone(),
         name: config.native_asset.name.clone(),
         balance,
@@ -91,7 +128,7 @@ async fn fetch_non_evm_native_asset(
         change_24h: 0.0,
         network: config.id.clone(),
         token_address: None,
-    })
+    }))
 }
 
 #[allow(dead_code)]

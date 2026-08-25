@@ -1,9 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { NetworkId, SignedTransaction, WalletSession } from "./types";
+import type { NetworkId, SignedTransaction, WalletRefreshResult, WalletSession } from "./types";
 
 export const walletApi = {
   getWallet: () => invoke<WalletSession>("get_wallet"),
-  refreshPrices: () => invoke<WalletSession>("refresh_prices"),
+  refreshPortfolio: () => invoke<WalletRefreshResult>("refresh_portfolio"),
   generateMnemonic: (wordCount?: number) =>
     invoke<string>("generate_mnemonic_cmd", { wordCount: wordCount ?? null }),
   createWallet: (args: {
@@ -12,15 +12,16 @@ export const walletApi = {
     enabledNetworks: string[];
     autoLockTimeoutSecs: number | null;
     mnemonic?: string;
-  }) => invoke<WalletSession>("create_wallet", args),
+  }) => invoke<WalletRefreshResult>("create_wallet", args),
   importWallet: (args: {
     name?: string;
     mnemonic: string;
     walletPassword: string;
     enabledNetworks: string[];
     autoLockTimeoutSecs: number | null;
-  }) => invoke<WalletSession>("import_wallet", args),
-  unlockWallet: (args: { walletPassword: string }) => invoke<WalletSession>("unlock_wallet", args),
+  }) => invoke<WalletRefreshResult>("import_wallet", args),
+  unlockWallet: (args: { walletPassword: string }) =>
+    invoke<WalletRefreshResult>("unlock_wallet", args),
   lockWallet: () => invoke<null>("lock_wallet"),
   clearWallet: () => invoke<WalletSession>("clear_wallet"),
   signTransaction: (args: {

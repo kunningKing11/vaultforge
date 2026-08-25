@@ -40,7 +40,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::wallet::get_wallet,
             commands::wallet::generate_mnemonic_cmd,
-            commands::market::refresh_prices,
+            commands::market::refresh_portfolio,
             commands::wallet::create_wallet,
             commands::wallet::import_wallet,
             commands::wallet::unlock_wallet,

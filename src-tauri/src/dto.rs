@@ -106,6 +106,26 @@ pub(crate) struct WalletSession {
     pub(crate) auto_lock_timeout_secs: Option<u64>,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RefreshWarningKind {
+    Balance,
+    Value,
+}
+
+#[derive(Clone, Serialize)]
+pub(crate) struct RefreshWarning {
+    pub(crate) kind: RefreshWarningKind,
+    pub(crate) subject: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WalletRefreshResult {
+    pub(crate) session: WalletSession,
+    pub(crate) warnings: Vec<RefreshWarning>,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SignedTransaction {

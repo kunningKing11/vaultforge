@@ -1,5 +1,6 @@
 use crate::assets::cached_asset;
 use crate::dto::Asset;
+use crate::providers::NetworkAssetRefresh;
 use crate::providers::http::rpc_post;
 use crate::registry::{AssetConfig, NetworkConfig, network_by_id};
 
@@ -78,9 +79,12 @@ pub(crate) async fn fetch_evm_assets(
     config: &EvmNetworkConfig,
     address: &str,
     cached_assets: &[Asset],
-) -> Vec<Asset> {
-    let native = match fetch_evm_native_balance(config, address).await {
-        Ok(wei) => Asset {
+) -> NetworkAssetRefresh {
+    let mut balance_failed = false;
+    let mut assets = vec![];
+
+    match fetch_evm_native_balance(config, address).await {
+        Ok(wei) => assets.push(Asset {
             symbol: config.native_asset.symbol.clone(),
             name: config.native_asset.name.clone(),
             balance: wei.to_string(),
@@ -89,21 +93,16 @@ pub(crate) async fn fetch_evm_assets(
             change_24h: 0.0,
             network: config.id.to_string(),
             token_address: None,
-        },
-        Err(_) => cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
-            .unwrap_or_else(|| Asset {
-                symbol: config.native_asset.symbol.clone(),
-                name: config.native_asset.name.clone(),
-                balance: "0".to_string(),
-                decimals: config.native_asset.decimals,
-                price_usd: 0.0,
-                change_24h: 0.0,
-                network: config.id.to_string(),
-                token_address: None,
-            }),
-    };
-
-    let mut assets = vec![native];
+        }),
+        Err(_) => {
+            balance_failed = true;
+            if let Some(cached) =
+                cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
+            {
+                assets.push(cached);
+            }
+        }
+    }
 
     for token in evm_tokens_for_network(&config.id) {
         match fetch_evm_token_balance(config, token, address).await {
@@ -120,6 +119,7 @@ pub(crate) async fn fetch_evm_assets(
                 });
             }
             Err(_) => {
+                balance_failed = true;
                 if let Some(cached) = cached_asset(cached_assets, &config.id, &token.symbol) {
                     assets.push(cached);
                 }
@@ -127,7 +127,10 @@ pub(crate) async fn fetch_evm_assets(
         }
     }
 
-    assets
+    NetworkAssetRefresh {
+        assets,
+        balance_failed,
+    }
 }
 
 pub(crate) async fn fetch_evm_nonce(

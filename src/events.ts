@@ -9,7 +9,7 @@ import {
   showLockedDeleteWallet,
   cancelLockedDeleteWallet,
   startLockedDeleteWalletCountdown,
-  refreshPrices,
+  refreshPortfolio,
   copyAddress,
   copyReceiveAddress,
   copyQrPayload,
@@ -47,7 +47,7 @@ export function bindEvents() {
     if (action === "show-locked-delete-wallet") showLockedDeleteWallet();
     if (action === "cancel-locked-delete-wallet") cancelLockedDeleteWallet();
     if (action === "start-locked-delete-wallet-countdown") startLockedDeleteWalletCountdown();
-    if (action === "refresh") void refreshPrices();
+    if (action === "refresh") void refreshPortfolio();
     if (action === "copy-address") {
       const address = target.closest<HTMLElement>("[data-copy-address]")?.dataset.copyAddress;
       if (address) void copyAddress(address);

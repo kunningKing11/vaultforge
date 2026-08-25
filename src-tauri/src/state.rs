@@ -1,4 +1,4 @@
-use crate::dto::{Wallet, WalletSession};
+use crate::dto::{RefreshWarning, Wallet, WalletRefreshResult, WalletSession};
 use crate::storage::read_stored_wallet;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -102,5 +102,15 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
         activity: wallet.activity.clone(),
         enabled_networks: wallet.enabled_networks.clone(),
         auto_lock_timeout_secs: wallet.auto_lock_timeout_secs,
+    }
+}
+
+pub(crate) fn refresh_result_from_state(
+    state: &AppState,
+    warnings: Vec<RefreshWarning>,
+) -> WalletRefreshResult {
+    WalletRefreshResult {
+        session: session_from_state(state),
+        warnings,
     }
 }

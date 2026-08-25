@@ -73,7 +73,7 @@ Place Tauri command handlers under `src-tauri/src/commands/` by responsibility:
 
 - `commands/wallet.rs` for wallet lifecycle commands such as create, import, unlock, lock, clear, and session reads.
 - `commands/tx.rs` for signing, broadcasting, swap compatibility flows, and transaction status commands.
-- `commands/market.rs` for market-data and price refresh commands.
+- `commands/market.rs` for market-data and provider-backed portfolio refresh commands.
 
 Command modules may orchestrate domain modules, but core wallet, storage, derivation, provider, validation, and transaction-format logic should stay in their dedicated modules. Do not grow `main.rs` or a single command file into a catch-all.
 
