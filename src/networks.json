@@ -264,7 +264,7 @@
       "id": "solana",
       "name": "Solana",
       "addressKey": "solana",
-      "rpcUrl": "https://solana-rpc.publicnode.com",
+      "rpcUrl": "https://api.mainnet.solana.com",
       "coinGeckoNetworkId": "solana",
       "nativeAsset": { "symbol": "SOL", "name": "Solana", "decimals": 9, "coinGeckoId": "solana" }
     },
