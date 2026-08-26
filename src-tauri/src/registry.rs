@@ -125,16 +125,20 @@ mod tests {
     }
 
     #[test]
-    fn supported_publicnode_providers_come_from_registry() {
+    fn supported_rpc_providers_use_expected_hosts() {
         for network in &registry().networks {
-            if network.id == "monad" || network.rpc_url.is_none() {
+            let Some(rpc_url) = network.rpc_url.as_deref() else {
                 continue;
+            };
+            match network.id.as_str() {
+                "monad" => assert_eq!(rpc_url, "https://rpc.monad.xyz"),
+                "solana" => assert_eq!(rpc_url, "https://api.mainnet.solana.com"),
+                _ => assert!(
+                    rpc_url.contains("publicnode.com"),
+                    "{} should use PublicNode",
+                    network.id
+                ),
             }
-            assert!(
-                network.rpc_url().unwrap().contains("publicnode.com"),
-                "{} should use PublicNode",
-                network.id
-            );
         }
         assert_eq!(evm_networks().count(), 8);
     }
