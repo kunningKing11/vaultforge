@@ -1,7 +1,7 @@
 use bech32::{self, Bech32, Hrp, hrp, segwit};
 use bip32::{DerivationPath, XPrv};
 use bip39::{Language, Mnemonic};
-use ed25519_dalek::{PublicKey as DalekPublicKey, SecretKey as DalekSecretKey};
+use ed25519_dalek::SigningKey as DalekSigningKey;
 use hmac::{Hmac, KeyInit, Mac};
 use k256::ecdsa::SigningKey;
 use rand::RngExt;
@@ -270,9 +270,8 @@ pub(crate) fn zcash_transparent_address(
 }
 
 pub(crate) fn solana_address_from_secret_key(secret_bytes: &[u8; 32]) -> Result<String, String> {
-    let secret = DalekSecretKey::from_bytes(secret_bytes)
-        .map_err(|_| "Failed to derive Solana key".to_string())?;
-    let public = DalekPublicKey::from(&secret);
+    let secret = DalekSigningKey::from_bytes(secret_bytes);
+    let public = secret.verifying_key();
     Ok(bs58::encode(public.as_bytes()).into_string())
 }
 
