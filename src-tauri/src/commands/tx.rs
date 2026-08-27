@@ -79,7 +79,7 @@ pub(crate) async fn sign_transaction(
 ) -> Result<SignedTransaction, String> {
     validate_unlocked(&state)?;
 
-    let (mnemonic, addresses, assets) = {
+    let (mnemonic, addresses, assets, bitcoin_account) = {
         let state = state.lock().map_err(|_| "State lock failed")?;
         let wallet = state
             .wallet
@@ -97,6 +97,7 @@ pub(crate) async fn sign_transaction(
             wallet.mnemonic.clone(),
             wallet.addresses.clone(),
             wallet.assets.clone(),
+            state.bitcoin_account.clone(),
         )
     };
 
@@ -129,7 +130,11 @@ pub(crate) async fn sign_transaction(
             let amount_sats: u64 = value
                 .try_into()
                 .map_err(|_| "BTC amount is too large".to_string())?;
-            let signed_btc = sign_bitcoin_transfer(&mnemonic, &from, &to, amount_sats).await?;
+            let bitcoin_account = bitcoin_account
+                .as_ref()
+                .ok_or_else(|| "Bitcoin account discovery is unavailable".to_string())?;
+            let signed_btc =
+                sign_bitcoin_transfer(&mnemonic, &from, &to, amount_sats, bitcoin_account).await?;
 
             Ok(SignedTransaction {
                 from,

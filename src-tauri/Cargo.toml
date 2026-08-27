@@ -42,7 +42,7 @@ bs58 = { version = "0.5", features = ["check"] }
 bech32 = "0.12"
 ed25519-dalek = "2.2"
 zeroize = { version = "1", features = ["zeroize_derive"] }
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["rt", "time"] }
 tauri = { version = "2", features = ["image-png"] }
 # cookie 0.18.1 does not compile against time 0.3.52's parsing API.
 time = "=0.3.55"

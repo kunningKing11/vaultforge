@@ -18,7 +18,11 @@ The below items are the priorities for this project and an item will probably ge
     - [x] signing
     - [x] broadcast
     - [x] status polling
-    - [ ] multiple BTC address types / account scanning (e.g., not just `bc1q` addresses)
+    - [x] BIP84 receive/change account scanning
+    - [ ] additional owned-address types:
+      - [ ] BIP44
+      - [ ] BIP49
+      - [ ] BIP86
   - [x] EVM basic transfers
     - [x] native transfers
     - [x] ERC-20 transfers

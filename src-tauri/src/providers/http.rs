@@ -47,11 +47,21 @@ pub(crate) async fn rpc_post(
 }
 
 pub(crate) async fn http_get_json(url: &str) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::builder()
+    let client = http_client()?;
+    http_get_json_with_client(&client, url).await
+}
+
+pub(crate) fn http_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
-        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))
+}
 
+pub(crate) async fn http_get_json_with_client(
+    client: &reqwest::Client,
+    url: &str,
+) -> Result<serde_json::Value, String> {
     let mut last_err = String::new();
     for attempt in 1..=3 {
         let response = match client
@@ -65,17 +75,21 @@ pub(crate) async fn http_get_json(url: &str) -> Result<serde_json::Value, String
             Err(e) => {
                 last_err = format!("HTTP request failed (attempt {attempt}/3): {e}");
                 if attempt < 3 {
-                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64))
-                        .await;
+                    tokio::time::sleep(http_retry_delay(url, attempt, None)).await;
                 }
                 continue;
             }
         };
 
         if !response.status().is_success() {
+            let retry_after_secs = response
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.parse::<u64>().ok());
             last_err = format!("HTTP returned {} (attempt {attempt}/3)", response.status());
             if attempt < 3 {
-                tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+                tokio::time::sleep(http_retry_delay(url, attempt, retry_after_secs)).await;
             }
             continue;
         }
@@ -86,6 +100,17 @@ pub(crate) async fn http_get_json(url: &str) -> Result<serde_json::Value, String
             .map_err(|e| format!("HTTP response parse failed: {e}"));
     }
     Err(last_err)
+}
+
+fn http_retry_delay(url: &str, attempt: u64, retry_after_secs: Option<u64>) -> std::time::Duration {
+    let jitter_ms = url
+        .bytes()
+        .fold(0u64, |total, byte| total.wrapping_add(u64::from(byte)))
+        % 250;
+    let base_ms = retry_after_secs
+        .map(|seconds| seconds.min(30).saturating_mul(1_000))
+        .unwrap_or_else(|| 500u64.saturating_mul(attempt));
+    std::time::Duration::from_millis(base_ms.saturating_add(jitter_ms))
 }
 
 pub(crate) async fn http_post_text(url: &str, body: &str) -> Result<String, String> {

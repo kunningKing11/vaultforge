@@ -1,5 +1,5 @@
 use bech32::{self, Bech32, Hrp, hrp, segwit};
-use bip32::{DerivationPath, XPrv};
+use bip32::{ChildNumber, DerivationPath, XPrv, XPub};
 use bip39::{Language, Mnemonic};
 use ed25519_dalek::SigningKey as DalekSigningKey;
 use hmac::{Hmac, KeyInit, Mac};
@@ -11,6 +11,7 @@ use sha2::{Digest as Sha2Digest, Sha256, Sha512};
 use sha3::Keccak256;
 use sha3::digest::Digest as Sha3Digest;
 use std::collections::HashMap;
+use zeroize::Zeroize;
 
 use crate::address::filecoin::filecoin_mainnet_secp256k1_address;
 use crate::registry::network_by_id;
@@ -30,6 +31,8 @@ pub(crate) const ALL_NETWORKS: &[&str] = &[
 
 // TODO: why some are pub(crate) and some are not? Should we make them all pub(crate)?
 pub(crate) const BITCOIN_DERIVATION_PATH: &str = "m/84'/0'/0'/0/0";
+const BITCOIN_BIP84_ACCOUNT_PATH: &str = "m/84'/0'/0'";
+pub(crate) const BITCOIN_BIP84_GAP_LIMIT: u32 = 20;
 const EVM_DERIVATION_PATH: &str = "m/44'/60'/0'/0/0";
 const FILECOIN_DERIVATION_PATH: &str = "m/44'/461'/0'/0/0";
 const INJECTIVE_DERIVATION_PATH: &str = EVM_DERIVATION_PATH;
@@ -45,6 +48,104 @@ struct DerivedWalletKeys {
     solana: [u8; 32],
     tron: [u8; 32],
     zcash: [u8; 32],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum BitcoinBranch {
+    External,
+    Change,
+}
+
+impl BitcoinBranch {
+    fn index(self) -> u32 {
+        match self {
+            Self::External => 0,
+            Self::Change => 1,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct BitcoinKeyOrigin {
+    pub(crate) branch: BitcoinBranch,
+    pub(crate) index: u32,
+}
+
+impl BitcoinKeyOrigin {
+    pub(crate) fn external(index: u32) -> Self {
+        Self {
+            branch: BitcoinBranch::External,
+            index,
+        }
+    }
+
+    pub(crate) fn change(index: u32) -> Self {
+        Self {
+            branch: BitcoinBranch::Change,
+            index,
+        }
+    }
+
+    pub(crate) fn derivation_path(self) -> String {
+        format!(
+            "{BITCOIN_BIP84_ACCOUNT_PATH}/{}/{}",
+            self.branch.index(),
+            self.index
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct BitcoinDerivedAddress {
+    pub(crate) origin: BitcoinKeyOrigin,
+    pub(crate) address: String,
+}
+
+#[derive(Clone)]
+pub(crate) struct BitcoinAccount {
+    account_xpub: XPub,
+}
+
+impl BitcoinAccount {
+    pub(crate) fn from_mnemonic(mnemonic: &str) -> Result<Self, String> {
+        let mut seed = mnemonic_seed(mnemonic)?;
+        let result = (|| {
+            let path: DerivationPath = BITCOIN_BIP84_ACCOUNT_PATH
+                .parse()
+                .map_err(|_| "Invalid Bitcoin BIP84 account path".to_string())?;
+            let account_xprv = XPrv::derive_from_path(seed.as_slice(), &path)
+                .map_err(|_| "Failed to derive Bitcoin BIP84 account".to_string())?;
+            Ok(Self {
+                account_xpub: XPub::from(&account_xprv),
+            })
+        })();
+        seed.zeroize();
+        result
+    }
+
+    pub(crate) fn derive_address(
+        &self,
+        origin: BitcoinKeyOrigin,
+    ) -> Result<BitcoinDerivedAddress, String> {
+        let branch = ChildNumber::new(origin.branch.index(), false)
+            .map_err(|_| "Invalid Bitcoin BIP84 branch".to_string())?;
+        let index = ChildNumber::new(origin.index, false)
+            .map_err(|_| "Invalid Bitcoin BIP84 address index".to_string())?;
+        let branch_xpub = self
+            .account_xpub
+            .derive_child(branch)
+            .map_err(|_| "Failed to derive Bitcoin BIP84 branch".to_string())?;
+        let address_xpub = branch_xpub
+            .derive_child(index)
+            .map_err(|_| "Failed to derive Bitcoin BIP84 address".to_string())?;
+        let public_key = address_xpub.public_key().to_encoded_point(true);
+        let address = bitcoin_bech32_address_from_public_key(public_key.as_bytes(), false)?;
+        Ok(BitcoinDerivedAddress { origin, address })
+    }
+
+    pub(crate) fn primary_address(&self) -> Result<BitcoinDerivedAddress, String> {
+        self.derive_address(BitcoinKeyOrigin::external(0))
+    }
 }
 
 pub(crate) fn signing_key_from_mnemonic(mnemonic: &str) -> Result<k256::ecdsa::SigningKey, String> {
@@ -93,14 +194,18 @@ pub(crate) fn secp256k1_private_key_from_mnemonic(
     mnemonic: &str,
     path: &str,
 ) -> Result<[u8; 32], String> {
-    let seed = mnemonic_seed(mnemonic)?;
-    let path: DerivationPath = path
-        .parse()
-        .map_err(|_| format!("Invalid derivation path: {path}"))?;
-    let child = XPrv::derive_from_path(seed, &path)
-        .map_err(|_| format!("Failed to derive key at {path}"))?;
-    let bytes = child.private_key().to_bytes();
-    Ok(bytes.into())
+    let mut seed = mnemonic_seed(mnemonic)?;
+    let result = (|| {
+        let path: DerivationPath = path
+            .parse()
+            .map_err(|_| format!("Invalid derivation path: {path}"))?;
+        let child = XPrv::derive_from_path(seed.as_slice(), &path)
+            .map_err(|_| format!("Failed to derive key at {path}"))?;
+        let bytes = child.private_key().to_bytes();
+        Ok(bytes.into())
+    })();
+    seed.zeroize();
+    result
 }
 
 pub(crate) fn solana_secret_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32], String> {
@@ -244,8 +349,14 @@ pub(crate) fn bitcoin_bech32_address(
     let signing_key = signing_key_from_private_key(private_key)?;
     let verifying_key = signing_key.verifying_key();
     let encoded = verifying_key.to_sec1_point(true);
-    let public_bytes = encoded.as_bytes();
-    let hashed = <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_bytes));
+    bitcoin_bech32_address_from_public_key(encoded.as_bytes(), is_testnet)
+}
+
+fn bitcoin_bech32_address_from_public_key(
+    public_key: &[u8],
+    is_testnet: bool,
+) -> Result<String, String> {
+    let hashed = <Ripemd160 as RipemdDigest>::digest(<Sha256 as Sha2Digest>::digest(public_key));
     let hrp = if is_testnet { hrp::TB } else { hrp::BC };
     segwit::encode_v0(hrp, &hashed).map_err(|_| "Failed to encode address".to_string())
 }

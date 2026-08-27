@@ -1,4 +1,5 @@
 use crate::dto::{RefreshWarning, Wallet, WalletRefreshResult, WalletSession};
+use crate::providers::bitcoin::BitcoinAccountSnapshot;
 use crate::storage::read_stored_wallet;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -26,6 +27,7 @@ pub(crate) struct AppState {
     pub(crate) stored_wallet: Option<StoredWalletMetadata>,
     pub(crate) encryption_key: Option<[u8; 32]>,
     pub(crate) storage_salt: Option<Vec<u8>>,
+    pub(crate) bitcoin_account: Option<BitcoinAccountSnapshot>,
     pub(crate) storage_path: PathBuf,
 }
 
@@ -48,6 +50,7 @@ impl AppState {
             stored_wallet,
             encryption_key: None,
             storage_salt: None,
+            bitcoin_account: None,
             storage_path,
         }
     }
@@ -93,11 +96,20 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
         };
     }
 
+    let mut addresses = wallet.addresses.clone();
+    if let Some(bitcoin_address) = state
+        .bitcoin_account
+        .as_ref()
+        .and_then(|account| account.next_receive_address())
+    {
+        addresses.insert("bitcoin".to_string(), bitcoin_address.address.clone());
+    }
+
     WalletSession {
         has_wallet: true,
         locked: false,
         wallet_name: Some(wallet.name.clone()),
-        addresses: Some(wallet.addresses.clone()),
+        addresses: Some(addresses),
         assets: wallet.assets.clone(),
         activity: wallet.activity.clone(),
         enabled_networks: wallet.enabled_networks.clone(),

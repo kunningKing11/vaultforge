@@ -11,11 +11,11 @@ use crate::derivation::{
     filecoin_address_from_private_key, tron_address_from_private_key, zcash_transparent_address,
 };
 use crate::dto::Asset;
-use crate::providers::bitcoin::fetch_bitcoin_balance;
+use crate::providers::bitcoin::{BitcoinAccountSnapshot, scan_bitcoin_account};
 use crate::providers::evm::fetch_evm_assets;
 use crate::providers::solana::fetch_solana_assets;
 use crate::providers::tron::fetch_tron_assets;
-use crate::registry::{NetworkConfig, evm_networks, registry};
+use crate::registry::{evm_networks, network_by_id};
 use std::collections::HashMap;
 
 pub(crate) mod bitcoin;
@@ -33,15 +33,18 @@ pub(crate) struct NetworkAssetRefresh {
 pub(crate) struct PortfolioAssetRefresh {
     pub(crate) assets: Vec<Asset>,
     pub(crate) failed_networks: Vec<String>,
+    pub(crate) bitcoin_account: Option<BitcoinAccountSnapshot>,
 }
 
 pub(crate) async fn fetch_portfolio_assets(
     addresses: &HashMap<String, String>,
     cached_assets: &[Asset],
     enabled_networks: &[String],
+    cached_bitcoin_account: Option<&BitcoinAccountSnapshot>,
 ) -> PortfolioAssetRefresh {
     let mut assets = vec![];
     let mut failed_networks = vec![];
+    let mut bitcoin_account = cached_bitcoin_account.cloned();
 
     if let Some(evm_address) = addresses.get("evm") {
         for config in evm_networks() {
@@ -77,49 +80,56 @@ pub(crate) async fn fetch_portfolio_assets(
         }
     }
 
-    for config in &registry().networks {
-        if matches!(config.kind.as_str(), "evm" | "svm" | "tron") {
-            continue;
-        }
-
-        if !enabled_networks.contains(&config.id) {
-            continue;
-        }
-
-        let Some(address) = addresses.get(&config.address_key) else {
-            continue;
-        };
-
-        match fetch_non_evm_native_asset(config, address).await {
-            Ok(Some(asset)) => assets.push(asset),
-            Ok(None) => {}
-            Err(_) => {
-                failed_networks.push(config.name.clone());
-                if let Some(cached) =
-                    cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
-                {
-                    assets.push(cached);
+    if enabled_networks.iter().any(|id| id == "bitcoin") {
+        if let Some(config) = network_by_id("bitcoin") {
+            let refreshed =
+                refresh_bitcoin_account_asset(addresses, bitcoin_account.as_ref()).await;
+            match refreshed {
+                Ok((asset, refreshed_account)) => {
+                    assets.push(asset);
+                    bitcoin_account = Some(refreshed_account);
+                }
+                Err(_) => {
+                    failed_networks.push(config.name.clone());
+                    if let Some(cached) =
+                        cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
+                    {
+                        assets.push(cached);
+                    }
                 }
             }
+        } else {
+            failed_networks.push("Bitcoin".to_string());
         }
+    } else {
+        bitcoin_account = None;
     }
 
     PortfolioAssetRefresh {
         assets,
         failed_networks,
+        bitcoin_account,
     }
 }
 
-async fn fetch_non_evm_native_asset(
-    config: &NetworkConfig,
-    address: &str,
-) -> Result<Option<Asset>, String> {
-    let balance = match config.id.as_str() {
-        "bitcoin" => fetch_bitcoin_balance(address).await?,
-        _ => return Ok(None), // intentionally unsupported networks will be ignored, but not treated as an error
-    };
+async fn refresh_bitcoin_account_asset(
+    addresses: &HashMap<String, String>,
+    cached_account: Option<&BitcoinAccountSnapshot>,
+) -> Result<(Asset, BitcoinAccountSnapshot), String> {
+    let config = network_by_id("bitcoin")
+        .ok_or_else(|| "Bitcoin is missing from the network registry".to_string())?;
+    let primary_address = addresses
+        .get(&config.address_key)
+        .ok_or_else(|| "Wallet BTC address is not available".to_string())?;
+    let cached_account =
+        cached_account.ok_or_else(|| "Bitcoin account discovery is not initialized".to_string())?;
+    if cached_account.account().primary_address()?.address != *primary_address {
+        return Err("Bitcoin account does not match the wallet receive address".to_string());
+    }
 
-    Ok(Some(Asset {
+    let refreshed_account = scan_bitcoin_account(cached_account.account()).await?;
+    let balance = refreshed_account.total_balance()?.to_string();
+    let asset = Asset {
         symbol: config.native_asset.symbol.clone(),
         name: config.native_asset.name.clone(),
         balance,
@@ -128,7 +138,8 @@ async fn fetch_non_evm_native_asset(
         change_24h: 0.0,
         network: config.id.clone(),
         token_address: None,
-    }))
+    };
+    Ok((asset, refreshed_account))
 }
 
 #[allow(dead_code)]

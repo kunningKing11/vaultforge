@@ -11,12 +11,13 @@ use crate::assets::{cached_asset, token_addresses_match};
 use crate::commands::tx::{ensure_native_balance_covers_debit, required_native_debit};
 use crate::commands::wallet::refresh_filecoin_address;
 use crate::derivation::{
-    ALL_NETWORKS, BIP39_WORD_COUNTS, bitcoin_bech32_address,
-    derive_addresses_from_mnemonic_filtered, validate_recovery_phrase_word_count,
+    ALL_NETWORKS, BIP39_WORD_COUNTS, BitcoinAccount, BitcoinDerivedAddress, BitcoinKeyOrigin,
+    derive_addresses_from_mnemonic_filtered, secp256k1_private_key_from_mnemonic,
+    signing_key_from_private_key, validate_recovery_phrase_word_count,
 };
 use crate::dto::{Asset, Wallet, WalletPayload};
 use crate::providers::bitcoin::{
-    BitcoinUtxo, parse_bitcoin_balance, parse_bitcoin_fee_rate, parse_bitcoin_utxos,
+    BitcoinUtxo, parse_bitcoin_address_stats, parse_bitcoin_fee_rate, parse_bitcoin_utxos,
 };
 use crate::providers::evm::{evm_config_by_id, parse_evm_fee_history};
 use crate::providers::get_provider;
@@ -423,14 +424,94 @@ fn parses_bitcoin_balance_with_mempool_values() {
     let json = serde_json::json!({
         "chain_stats": {
             "funded_txo_sum": 5000,
-            "spent_txo_sum": 1200
+            "spent_txo_sum": 1200,
+            "tx_count": 2
         },
         "mempool_stats": {
             "funded_txo_sum": 700,
-            "spent_txo_sum": 200
+            "spent_txo_sum": 200,
+            "tx_count": 1
         }
     });
-    assert_eq!(parse_bitcoin_balance(&json).unwrap(), 4300);
+    let stats = parse_bitcoin_address_stats(&json).unwrap();
+    assert_eq!(stats.balance, 4300);
+    assert!(stats.used);
+}
+
+#[test]
+fn rejects_incomplete_bitcoin_address_stats() {
+    let json = serde_json::json!({
+        "chain_stats": {
+            "funded_txo_sum": 5000,
+            "spent_txo_sum": 1200,
+            "tx_count": 2
+        },
+        "mempool_stats": {
+            "funded_txo_sum": 0,
+            "tx_count": 0
+        }
+    });
+    assert!(parse_bitcoin_address_stats(&json).is_err());
+}
+
+#[test]
+fn bitcoin_history_marks_a_spent_address_as_used() {
+    let json = serde_json::json!({
+        "chain_stats": {
+            "funded_txo_sum": 155_856,
+            "spent_txo_sum": 155_856,
+            "tx_count": 2
+        },
+        "mempool_stats": {
+            "funded_txo_sum": 0,
+            "spent_txo_sum": 0,
+            "tx_count": 0
+        }
+    });
+    let stats = parse_bitcoin_address_stats(&json).unwrap();
+    assert_eq!(stats.balance, 0);
+    assert!(stats.used);
+}
+
+const BITCOIN_TEST_MNEMONIC: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+fn bitcoin_test_owner(origin: BitcoinKeyOrigin) -> BitcoinDerivedAddress {
+    BitcoinAccount::from_mnemonic(BITCOIN_TEST_MNEMONIC)
+        .unwrap()
+        .derive_address(origin)
+        .unwrap()
+}
+
+fn bitcoin_test_utxo(
+    txid_byte: u8,
+    value: u64,
+    confirmed: bool,
+    origin: BitcoinKeyOrigin,
+) -> BitcoinUtxo {
+    BitcoinUtxo {
+        txid: format!("{txid_byte:02x}").repeat(32),
+        vout: 0,
+        value,
+        confirmed,
+        owner: bitcoin_test_owner(origin),
+    }
+}
+
+#[test]
+fn derives_standard_bip84_receive_and_change_addresses() {
+    let account = BitcoinAccount::from_mnemonic(BITCOIN_TEST_MNEMONIC).unwrap();
+    assert_eq!(
+        account.primary_address().unwrap().address,
+        "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
+    );
+    assert_eq!(
+        account
+            .derive_address(BitcoinKeyOrigin::change(0))
+            .unwrap()
+            .address,
+        "bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el"
+    );
 }
 
 #[test]
@@ -449,9 +530,12 @@ fn parses_bitcoin_utxos_and_fee_rate() {
             "status": { "confirmed": true }
         }
     ]);
-    let utxos = parse_bitcoin_utxos(&json).unwrap();
-    assert_eq!(utxos.len(), 1);
+    let owner = bitcoin_test_owner(BitcoinKeyOrigin::external(0));
+    let utxos = parse_bitcoin_utxos(&json, &owner).unwrap();
+    assert_eq!(utxos.len(), 2);
     assert_eq!(utxos[0].value, 50_000);
+    assert_eq!(utxos[1].value, 100);
+    assert_eq!(utxos[0].owner, owner);
 
     let fees = serde_json::json!({ "3": 2.1, "6": 1.4 });
     assert_eq!(parse_bitcoin_fee_rate(&fees).unwrap(), 3);
@@ -459,12 +543,12 @@ fn parses_bitcoin_utxos_and_fee_rate() {
 
 #[test]
 fn selects_bitcoin_coins_with_change() {
-    let utxos = vec![BitcoinUtxo {
-        txid: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f".to_string(),
-        vout: 0,
-        value: 50_000,
-        confirmed: true,
-    }];
+    let utxos = vec![bitcoin_test_utxo(
+        1,
+        50_000,
+        true,
+        BitcoinKeyOrigin::external(0),
+    )];
     let (selected, fee, change) = bitcoin_select_coins(&utxos, 10_000, 2).unwrap();
     assert_eq!(selected.len(), 1);
     assert_eq!(fee, bitcoin_estimated_vbytes(1, 2) * 2);
@@ -473,21 +557,21 @@ fn selects_bitcoin_coins_with_change() {
 
 #[test]
 fn signs_bitcoin_p2wpkh_transfer() {
-    let private_key = [0x01u8; 32];
-    let from = bitcoin_bech32_address(&private_key, false).unwrap();
-    let utxos = vec![BitcoinUtxo {
-        txid: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f".to_string(),
-        vout: 0,
-        value: 50_000,
-        confirmed: true,
-    }];
+    let from = bitcoin_test_owner(BitcoinKeyOrigin::external(0));
+    let utxos = vec![bitcoin_test_utxo(
+        1,
+        50_000,
+        true,
+        BitcoinKeyOrigin::external(0),
+    )];
     let signed = bitcoin_signed_transfer(
-        &private_key,
-        &from,
+        BITCOIN_TEST_MNEMONIC,
+        &from.address,
         "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
         10_000,
         &utxos,
         2,
+        &from,
     )
     .unwrap();
 
@@ -496,6 +580,88 @@ fn signs_bitcoin_p2wpkh_transfer() {
     assert!(!signed.first_signature_hex.is_empty());
     assert_eq!(signed.fee_sats, bitcoin_estimated_vbytes(1, 2) * 2);
     assert_eq!(signed.post_balance, 50_000 - 10_000 - signed.fee_sats);
+}
+
+#[test]
+fn signs_bitcoin_inputs_from_different_bip84_paths() {
+    let from = bitcoin_test_owner(BitcoinKeyOrigin::external(0));
+    let second_owner = bitcoin_test_owner(BitcoinKeyOrigin::change(1));
+    let utxos = vec![
+        bitcoin_test_utxo(1, 6_000, true, BitcoinKeyOrigin::external(0)),
+        bitcoin_test_utxo(2, 5_000, true, BitcoinKeyOrigin::change(1)),
+    ];
+    let signed = bitcoin_signed_transfer(
+        BITCOIN_TEST_MNEMONIC,
+        &from.address,
+        "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        10_000,
+        &utxos,
+        2,
+        &from,
+    )
+    .unwrap();
+
+    let raw = signed.raw_tx_hex;
+    for owner in [&from, &second_owner] {
+        let private_key = secp256k1_private_key_from_mnemonic(
+            BITCOIN_TEST_MNEMONIC,
+            &owner.origin.derivation_path(),
+        )
+        .unwrap();
+        let public_key = signing_key_from_private_key(&private_key)
+            .unwrap()
+            .verifying_key()
+            .to_sec1_point(true);
+        assert!(raw.contains(&hex::encode(public_key.as_bytes())));
+    }
+    assert_eq!(signed.post_balance, 11_000 - 10_000 - signed.fee_sats);
+}
+
+#[test]
+fn rejects_bitcoin_utxo_with_forged_key_origin() {
+    let from = bitcoin_test_owner(BitcoinKeyOrigin::external(0));
+    let mut forged = bitcoin_test_utxo(1, 50_000, true, BitcoinKeyOrigin::external(0));
+    forged.owner.address = bitcoin_test_owner(BitcoinKeyOrigin::change(0)).address;
+    let error = bitcoin_signed_transfer(
+        BITCOIN_TEST_MNEMONIC,
+        &from.address,
+        "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        10_000,
+        &[forged],
+        2,
+        &from,
+    )
+    .err()
+    .unwrap();
+    assert!(error.contains("does not belong"));
+}
+
+#[test]
+fn bitcoin_coin_selection_handles_no_change_and_segwit_dust() {
+    let amount = 10_000;
+    let fee_rate = 2;
+    let fee_no_change = bitcoin_estimated_vbytes(1, 1) * fee_rate;
+    let fee_with_change = bitcoin_estimated_vbytes(1, 2) * fee_rate;
+
+    let no_change = vec![bitcoin_test_utxo(
+        1,
+        amount + fee_no_change + 10,
+        true,
+        BitcoinKeyOrigin::external(0),
+    )];
+    let (_, fee, change) = bitcoin_select_coins(&no_change, amount, fee_rate).unwrap();
+    assert_eq!(fee, fee_no_change + 10);
+    assert_eq!(change, 0);
+
+    let exact_dust = vec![bitcoin_test_utxo(
+        2,
+        amount + fee_with_change + 294,
+        true,
+        BitcoinKeyOrigin::external(0),
+    )];
+    let (_, fee, change) = bitcoin_select_coins(&exact_dust, amount, fee_rate).unwrap();
+    assert_eq!(fee, fee_with_change);
+    assert_eq!(change, 294);
 }
 
 #[test]

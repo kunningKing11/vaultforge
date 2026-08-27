@@ -55,22 +55,22 @@ For a full list of upcoming features (there are quite a few!), click [here](http
 
 The table distinguishes implemented backend paths from network entries that are currently address or validation scaffolding. “No” means the feature is not implemented; it does not imply that the underlying chain lacks it.
 
-| Chain             | Native transfer         | Token transfer          | NFTs / Filecoin storage / Shielded pools (whichever are applicable) |
-| :---------------- | :---------------------- | :---------------------- | ------------------------------------------------------------------: |
-| Arbitrum One      | Yes                     | ERC-20                  |                                                                  No |
-| Avalanche C-Chain | Yes                     | ERC-20                  |                                                                  No |
-| Base              | Yes                     | ERC-20                  |                                                                  No |
-| BNB Smart Chain   | Yes                     | ERC-20                  |                                                                  No |
-| Bitcoin           | Yes (basic P2WPKH path) | No                      |                                                                  No |
-| Ethereum Mainnet  | Yes                     | ERC-20                  |                                                                  No |
-| Filecoin          | No                      | No                      |                                                                  No |
-| Injective         | No                      | No                      |                                                                  No |
-| Monad             | Yes                     | ERC-20                  |                                                                  No |
-| Optimism          | Yes                     | ERC-20                  |                                                                  No |
-| Polygon           | Yes                     | ERC-20                  |                                                                  No |
-| Solana            | Yes                     | Classic SPL Token       |                                                                  No |
-| Tron              | Yes                     | No (TRC-20 unavailable) |                                                                  No |
-| Zcash             | No                      | No                      |                                                                  No |
+| Chain             | Native transfer            | Token transfer          | NFTs / Filecoin storage / Shielded pools (whichever are applicable) |
+| :---------------- | :------------------------- | :---------------------- | ------------------------------------------------------------------: |
+| Arbitrum One      | Yes                        | ERC-20                  |                                                                  No |
+| Avalanche C-Chain | Yes                        | ERC-20                  |                                                                  No |
+| Base              | Yes                        | ERC-20                  |                                                                  No |
+| BNB Smart Chain   | Yes                        | ERC-20                  |                                                                  No |
+| Bitcoin           | Yes (BIP84 P2WPKH account) | No                      |                                                                  No |
+| Ethereum Mainnet  | Yes                        | ERC-20                  |                                                                  No |
+| Filecoin          | No                         | No                      |                                                                  No |
+| Injective         | No                         | No                      |                                                                  No |
+| Monad             | Yes                        | ERC-20                  |                                                                  No |
+| Optimism          | Yes                        | ERC-20                  |                                                                  No |
+| Polygon           | Yes                        | ERC-20                  |                                                                  No |
+| Solana            | Yes                        | Classic SPL Token       |                                                                  No |
+| Tron              | Yes                        | No (TRC-20 unavailable) |                                                                  No |
+| Zcash             | No                         | No                      |                                                                  No |
 
 ## Development
 

@@ -4,6 +4,7 @@ use tauri::State;
 
 use crate::assets::{cached_asset, cached_asset_by_token_address};
 use crate::dto::{Asset, RefreshWarning, RefreshWarningKind, WalletRefreshResult};
+use crate::providers::bitcoin::BitcoinAccountSnapshot;
 use crate::providers::fetch_portfolio_assets;
 use crate::providers::prices::{
     CoinGeckoPriceResponse, TokenMetadata, fetch_market_prices, fetch_token_metadata,
@@ -15,13 +16,14 @@ use crate::storage::persist_state_wallet;
 pub(crate) struct PortfolioRefresh {
     pub(crate) assets: Vec<Asset>,
     pub(crate) warnings: Vec<RefreshWarning>,
+    pub(crate) bitcoin_account: Option<BitcoinAccountSnapshot>,
 }
 
 #[tauri::command]
 pub(crate) async fn refresh_portfolio(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<WalletRefreshResult, String> {
-    let (addresses, cached_assets, enabled_networks) = {
+    let (addresses, cached_assets, enabled_networks, bitcoin_account) = {
         let state = state.lock().map_err(|_| "State lock failed")?;
         if state.locked {
             return Err("Wallet is locked".to_string());
@@ -34,10 +36,17 @@ pub(crate) async fn refresh_portfolio(
             wallet.addresses.clone(),
             wallet.assets.clone(),
             wallet.enabled_networks.clone(),
+            state.bitcoin_account.clone(),
         )
     };
 
-    let refreshed = refresh_wallet_portfolio(&addresses, &cached_assets, &enabled_networks).await;
+    let refreshed = refresh_wallet_portfolio(
+        &addresses,
+        &cached_assets,
+        &enabled_networks,
+        bitcoin_account.as_ref(),
+    )
+    .await;
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
     let wallet = state
@@ -45,6 +54,7 @@ pub(crate) async fn refresh_portfolio(
         .as_mut()
         .ok_or_else(|| "No wallet exists yet".to_string())?;
     wallet.assets = refreshed.assets;
+    state.bitcoin_account = refreshed.bitcoin_account;
     persist_state_wallet(&mut state)?;
     Ok(refresh_result_from_state(&state, refreshed.warnings))
 }
@@ -53,8 +63,10 @@ pub(crate) async fn refresh_wallet_portfolio(
     addresses: &HashMap<String, String>,
     cached_assets: &[Asset],
     enabled_networks: &[String],
+    bitcoin_account: Option<&BitcoinAccountSnapshot>,
 ) -> PortfolioRefresh {
-    let refreshed = fetch_portfolio_assets(addresses, cached_assets, enabled_networks).await;
+    let refreshed =
+        fetch_portfolio_assets(addresses, cached_assets, enabled_networks, bitcoin_account).await;
     let mut assets = refreshed.assets;
     preserve_cached_market_data(&mut assets, cached_assets);
     let mut warnings: Vec<RefreshWarning> = refreshed
@@ -64,7 +76,11 @@ pub(crate) async fn refresh_wallet_portfolio(
         .collect();
     warnings.extend(refresh_asset_prices(&mut assets).await);
 
-    PortfolioRefresh { assets, warnings }
+    PortfolioRefresh {
+        assets,
+        warnings,
+        bitcoin_account: refreshed.bitcoin_account,
+    }
 }
 
 pub(crate) async fn refresh_asset_prices(assets: &mut [Asset]) -> Vec<RefreshWarning> {
