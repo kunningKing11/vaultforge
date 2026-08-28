@@ -26,6 +26,14 @@ import {
   sendAssetSelect,
 } from "./shared";
 
+const MIN_VISIBLE_ASSET_VALUE_USD = 1;
+
+function visibleAssets() {
+  return (appState.session?.assets ?? []).filter(
+    (asset) => asset.price_usd <= 0 || assetValue(asset) >= MIN_VISIBLE_ASSET_VALUE_USD,
+  );
+}
+
 export function walletView() {
   if (appState.currentView === "send") return sendView();
   if (appState.currentView === "receive") return receiveView();
@@ -38,7 +46,7 @@ export function walletView() {
 
 function dashboardView() {
   if (!appState.session) return "";
-  const topAssets = [...appState.session.assets]
+  const topAssets = [...visibleAssets()]
     .sort((left, right) => assetValue(right) - assetValue(left))
     .map(assetCard)
     .join("");
@@ -204,7 +212,7 @@ function swapView() {
 }
 
 function assetsView() {
-  const assets = appState.session?.assets ?? [];
+  const assets = visibleAssets();
   return `
     <section class="glass rounded-[2rem] p-6">
       <div class="mb-5 flex items-center justify-between"><h2 class="text-2xl font-black">Assets</h2><span class="text-sm font-bold text-slate-500">${assets.length} tracked</span></div>
