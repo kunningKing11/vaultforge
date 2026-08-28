@@ -36,9 +36,9 @@ The below items are the priorities for this project and an item will probably ge
     - [x] recipient ATA rent estimation
     - [ ] Token-2022 support
     - [x] pre-sign live balance refresh
-  - [ ] Tron (TRX) basic transfers
+  - [x] Tron (TRX) basic transfers
     - [x] native TRX transfers
-    - [ ] Tron token transfers
+    - [x] Tron token transfers
   - [ ] Ripple (XRP) basic transfers
     - [ ] native XRP transfers
     - [ ] Ripple token transfers

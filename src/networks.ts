@@ -33,10 +33,20 @@ function validateAsset(asset: NetworkAssetConfig, context: string) {
   }
 }
 
-function validateToken(token: NetworkTokenConfig, context: string) {
+function validateToken(token: NetworkTokenConfig, context: string, network: Network) {
   validateAsset(token, context);
-  if (token.standard !== "erc20" || !/^0x[0-9a-fA-F]{40}$/.test(token.tokenAddress)) {
-    throw new Error(`${context} must be an ERC-20 token with a valid contract address`);
+  const validAddress =
+    (token.standard === "erc20" && /^0x[0-9a-fA-F]{40}$/.test(token.tokenAddress)) ||
+    (token.standard === "spl" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(token.tokenAddress)) ||
+    (token.standard === "trc20" && /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(token.tokenAddress));
+  const validStandard =
+    (network.kind === "evm" && token.standard === "erc20") ||
+    (network.kind === "svm" && token.standard === "spl") ||
+    (network.kind === "tron" && token.standard === "trc20");
+  if (!validStandard || !validAddress) {
+    throw new Error(
+      `${context} has an invalid token standard or contract address on the ${network.id} network`,
+    );
   }
 }
 
@@ -58,14 +68,14 @@ export function normalizeNetworkRegistry(source: NetworkDataSource): NormalizedN
     } as Network;
 
     validateAsset(network.nativeAsset, `${network.id} native asset`);
-    if (network.kind === "evm") {
-      if (!network.chainId || !network.rpcUrl) {
+    if (network.kind === "evm" || network.kind === "tron" || network.kind === "svm") {
+      if (network.kind === "evm" && (!network.chainId || !network.rpcUrl)) {
         throw new Error(`${network.id} must define chainId and rpcUrl`);
       }
       const tokenSymbols = new Set<string>();
       const tokenAddresses = new Set<string>();
       for (const token of network.tokens) {
-        validateToken(token, `${network.id} ${token.symbol}`);
+        validateToken(token, `${network.id} ${token.symbol}`, network);
         const address = token.tokenAddress.toLowerCase();
         if (tokenSymbols.has(token.symbol) || tokenAddresses.has(address)) {
           throw new Error(`${network.id} contains a duplicate token symbol or contract`);

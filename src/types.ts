@@ -154,7 +154,7 @@ export interface NetworkAssetConfig {
 }
 
 export interface NetworkTokenConfig extends NetworkAssetConfig {
-  standard: "erc20";
+  standard: "erc20" | "spl" | "trc20";
   tokenAddress: string;
 }
 

@@ -274,7 +274,25 @@
       "name": "Tron",
       "addressKey": "tron",
       "rpcUrl": "https://tron-rpc.publicnode.com",
-      "nativeAsset": { "symbol": "TRX", "name": "Tron", "decimals": 6, "coinGeckoId": "tron" }
+      "nativeAsset": { "symbol": "TRX", "name": "Tron", "decimals": 6, "coinGeckoId": "tron" },
+      "tokens": [
+        {
+          "standard": "trc20",
+          "symbol": "USDT",
+          "name": "Tether USD",
+          "decimals": 6,
+          "tokenAddress": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+          "coinGeckoId": "tether"
+        },
+        {
+          "standard": "trc20",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "tokenAddress": "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8",
+          "coinGeckoId": "usd-coin"
+        }
+      ]
     },
     {
       "kind": "zcash",
