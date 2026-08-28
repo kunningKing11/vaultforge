@@ -63,13 +63,19 @@ export function walletShell() {
 
 function topBar() {
   if (!appState.session) return "";
+  const portfolioStatus = appState.portfolioRefreshing
+    ? "Updating balances…"
+    : appState.portfolioStale
+      ? "Portfolio data may be out of date. Refresh to retry."
+      : "";
   return `
     <header class="glass flex flex-col gap-4 rounded-[2rem] p-5 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h1 class="mt-1 text-4xl font-black">${escapeHtml(appState.session.wallet_name ?? "")}</h1>
+        ${portfolioStatus ? `<p class="mt-2 text-sm font-bold text-slate-400" role="status">${portfolioStatus}</p>` : ""}
       </div>
       <div class="flex flex-wrap gap-3">
-        <button class="btn-secondary inline-flex items-center gap-2" data-action="refresh" type="button">
+        <button class="btn-secondary inline-flex items-center gap-2" data-action="refresh" type="button" ${appState.portfolioRefreshing ? "disabled" : ""}>
           ${inlineIcon({ svg: refreshIcon })}
           Refresh
         </button>

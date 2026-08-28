@@ -73,7 +73,10 @@ export async function unlockWallet(form: HTMLFormElement) {
       walletPassword: String(formData.get("walletPassword") || ""),
     }),
   );
-  if (ok) resetLockedDeleteWallet();
+  if (ok) {
+    resetLockedDeleteWallet();
+    void refreshPortfolioInBackground();
+  }
 }
 
 export async function signTransaction(form: HTMLFormElement) {
@@ -214,6 +217,7 @@ export async function swapTokens(form: HTMLFormElement) {
 }
 
 export async function lockWallet() {
+  invalidatePortfolioRefresh();
   appState.busy = true;
   appState.unlockPasswordVisible = false;
   render();
@@ -244,6 +248,7 @@ export async function clearWallet() {
 }
 
 async function deleteStoredWallet() {
+  invalidatePortfolioRefresh();
   stopLockedDeleteTimer();
   resetLockedDeleteWallet();
   const ok = await runCommand("clear_wallet", () => walletApi.clearWallet());
@@ -334,7 +339,39 @@ function syncAutoLockTimerWithSession() {
 }
 
 export async function refreshPortfolio() {
+  if (appState.portfolioRefreshing) return;
   await runRefreshCommand("refresh_portfolio", () => walletApi.refreshPortfolio());
+}
+
+async function refreshPortfolioInBackground() {
+  const refreshId = ++appState.portfolioRefreshId;
+  appState.portfolioRefreshing = true;
+  appState.portfolioStale = false;
+  render();
+  try {
+    const result = await walletApi.refreshPortfolio();
+    if (refreshId !== appState.portfolioRefreshId || appState.session?.locked) return;
+    appState.session = result.session;
+    appState.portfolioStale = result.warnings.length > 0;
+    syncAutoLockTimerWithSession();
+    for (const warning of result.warnings) {
+      pushToast(refreshWarningMessage(warning), "warning");
+    }
+  } catch {
+    // The cached portfolio remains visible until the user requests another refresh.
+    if (refreshId === appState.portfolioRefreshId) appState.portfolioStale = true;
+  } finally {
+    if (refreshId === appState.portfolioRefreshId) {
+      appState.portfolioRefreshing = false;
+      render();
+    }
+  }
+}
+
+function invalidatePortfolioRefresh() {
+  appState.portfolioRefreshId += 1;
+  appState.portfolioRefreshing = false;
+  appState.portfolioStale = false;
 }
 
 async function runCommand(command: SessionCommand, action: () => Promise<WalletSession | null>) {
@@ -369,6 +406,7 @@ async function runRefreshCommand(
   try {
     const result = await action();
     appState.session = result.session;
+    if (command === "refresh_portfolio") appState.portfolioStale = result.warnings.length > 0;
     if (command === "unlock_wallet") {
       appState.lastActivity = Date.now();
     }
@@ -379,6 +417,7 @@ async function runRefreshCommand(
     pushToast(successMessage(command), "success");
     return true;
   } catch (error) {
+    if (command === "refresh_portfolio") appState.portfolioStale = true;
     pushToast(formatError(error), "error");
     return false;
   } finally {

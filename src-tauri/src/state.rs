@@ -28,6 +28,7 @@ pub(crate) struct AppState {
     pub(crate) encryption_key: Option<[u8; 32]>,
     pub(crate) storage_salt: Option<Vec<u8>>,
     pub(crate) bitcoin_account: Option<BitcoinAccountSnapshot>,
+    pub(crate) wallet_generation: u64,
     pub(crate) storage_path: PathBuf,
 }
 
@@ -51,8 +52,13 @@ impl AppState {
             encryption_key: None,
             storage_salt: None,
             bitcoin_account: None,
+            wallet_generation: 0,
             storage_path,
         }
+    }
+
+    pub(crate) fn advance_wallet_generation(&mut self) {
+        self.wallet_generation = self.wallet_generation.wrapping_add(1);
     }
 }
 

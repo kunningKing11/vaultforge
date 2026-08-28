@@ -23,7 +23,7 @@ pub(crate) struct PortfolioRefresh {
 pub(crate) async fn refresh_portfolio(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<WalletRefreshResult, String> {
-    let (addresses, cached_assets, enabled_networks, bitcoin_account) = {
+    let (addresses, cached_assets, enabled_networks, bitcoin_account, wallet_generation) = {
         let state = state.lock().map_err(|_| "State lock failed")?;
         if state.locked {
             return Err("Wallet is locked".to_string());
@@ -37,6 +37,7 @@ pub(crate) async fn refresh_portfolio(
             wallet.assets.clone(),
             wallet.enabled_networks.clone(),
             state.bitcoin_account.clone(),
+            state.wallet_generation,
         )
     };
 
@@ -49,6 +50,9 @@ pub(crate) async fn refresh_portfolio(
     .await;
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
+    if state.locked || state.wallet_generation != wallet_generation {
+        return Err("Wallet changed during refresh".to_string());
+    }
     let wallet = state
         .wallet
         .as_mut()
