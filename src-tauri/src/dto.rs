@@ -51,13 +51,14 @@ mod tests {
     use crate::derivation::derive_addresses_from_mnemonic_filtered;
 
     #[test]
-    fn default_enabled_networks_derives_evm_address() {
+    fn default_enabled_networks_derives_evm_and_tron_addresses() {
         let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
         let enabled_networks = default_enabled_networks();
         let enabled: Vec<&str> = enabled_networks.iter().map(String::as_str).collect();
         let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, &enabled).unwrap();
 
         assert!(addresses.contains_key("evm"));
+        assert!(addresses.contains_key("tron"));
     }
 }
 
