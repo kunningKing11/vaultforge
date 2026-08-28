@@ -38,11 +38,11 @@ export function assetCard(asset: Asset) {
   return `
     <article class="asset-card rounded-3xl border border-white/10 bg-white/[0.04] p-5">
       <div class="flex items-start justify-between gap-4">
-        <div class="asset-card-header"><p class="truncate text-lg font-black">${escapeHtml(asset.symbol)}</p><p class="truncate text-sm font-bold text-slate-500">${escapeHtml(asset.name)} on ${networkDisplayName(asset.network)}</p></div>
+        <div class="asset-card-header"><p class="truncate text-lg font-black">${escapeHtml(asset.symbol)}</p><p class="truncate text-sm font-bold text-slate-500">${escapeHtml(asset.name)} on ${escapeHtml(networkDisplayName(asset.network))}</p></div>
         <span class="asset-change rounded-full ${positive ? "bg-emerald-400/10 text-emerald-300" : "bg-rose-400/10 text-rose-300"} px-3 py-1 text-xs font-bold">${positive ? "+" : ""}${asset.change_24h.toFixed(2)}%</span>
       </div>
       <p class="asset-value mt-5 text-2xl font-black">${money(value)}</p>
-      <p class="mt-1 text-sm font-bold text-slate-400">${formatWei(asset.balance, asset.decimals)} ${escapeHtml(asset.symbol)}</p>
+      <p class="mt-1 text-sm font-bold text-slate-400">${escapeHtml(formatWei(asset.balance, asset.decimals))} ${escapeHtml(asset.symbol)}</p>
       <div class="mt-4">
         <div class="flex justify-between text-xs font-bold text-slate-500"><span>Allocation</span><span>${allocation.toFixed(1)}%</span></div>
         <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-900"><div class="theme-progress-accent h-full rounded-full" style="width: ${Math.max(2, allocation).toFixed(1)}%"></div></div>
@@ -94,7 +94,7 @@ export function activityDetails(item: Activity | null) {
 }
 
 export function assetSelect(name: string, selected = "ETH", attributes = "") {
-  return `<select class="field" name="${name}" ${attributes}>${appState.session?.assets.map((asset) => `<option value="${asset.symbol}" ${asset.symbol === selected ? "selected" : ""}>${asset.symbol} - ${asset.name}</option>`).join("") ?? ""}</select>`;
+  return `<select class="field" name="${escapeHtml(name)}" ${attributes}>${appState.session?.assets.map((asset) => `<option value="${escapeHtml(asset.symbol)}" ${asset.symbol === selected ? "selected" : ""}>${escapeHtml(asset.symbol)} - ${escapeHtml(asset.name)}</option>`).join("") ?? ""}</select>`;
 }
 
 export function sendAssetSelect(selectedAssetId: string) {
@@ -102,7 +102,7 @@ export function sendAssetSelect(selectedAssetId: string) {
     appState.session?.assets
       .map((asset) => {
         const assetId = `${asset.network}:${asset.token_address ?? "native"}`;
-        return `<option value="${escapeHtml(assetId)}" data-symbol="${escapeHtml(asset.symbol)}" ${assetId === selectedAssetId ? "selected" : ""}>${asset.symbol} - ${asset.name} (${networkDisplayName(asset.network)})</option>`;
+        return `<option value="${escapeHtml(assetId)}" data-symbol="${escapeHtml(asset.symbol)}" ${assetId === selectedAssetId ? "selected" : ""}>${escapeHtml(asset.symbol)} - ${escapeHtml(asset.name)} (${escapeHtml(networkDisplayName(asset.network))})</option>`;
       })
       .join("") ?? ""
   }</select>`;
