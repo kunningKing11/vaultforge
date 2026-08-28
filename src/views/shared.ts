@@ -38,7 +38,7 @@ export function assetCard(asset: Asset) {
   return `
     <article class="asset-card rounded-3xl border border-white/10 bg-white/[0.04] p-5">
       <div class="flex items-start justify-between gap-4">
-        <div class="asset-card-header"><p class="truncate text-lg font-black">${escapeHtml(asset.symbol)}</p><p class="truncate text-sm font-bold text-slate-500">${escapeHtml(asset.name)}</p></div>
+        <div class="asset-card-header"><p class="truncate text-lg font-black">${escapeHtml(asset.symbol)}</p><p class="truncate text-sm font-bold text-slate-500">${escapeHtml(asset.name)} on ${networkDisplayName(asset.network)}</p></div>
         <span class="asset-change rounded-full ${positive ? "bg-emerald-400/10 text-emerald-300" : "bg-rose-400/10 text-rose-300"} px-3 py-1 text-xs font-bold">${positive ? "+" : ""}${asset.change_24h.toFixed(2)}%</span>
       </div>
       <p class="asset-value mt-5 text-2xl font-black">${money(value)}</p>
