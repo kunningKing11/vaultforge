@@ -50,7 +50,7 @@ pub(crate) async fn refresh_portfolio(
     .await;
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
-    if state.locked || state.wallet_generation != wallet_generation {
+    if !state.can_commit_refresh(wallet_generation) {
         return Err("Wallet changed during refresh".to_string());
     }
     let wallet = state

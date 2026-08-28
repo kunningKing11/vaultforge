@@ -60,6 +60,10 @@ impl AppState {
     pub(crate) fn advance_wallet_generation(&mut self) {
         self.wallet_generation = self.wallet_generation.wrapping_add(1);
     }
+
+    pub(crate) fn can_commit_refresh(&self, wallet_generation: u64) -> bool {
+        !self.locked && self.wallet.is_some() && self.wallet_generation == wallet_generation
+    }
 }
 
 pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
