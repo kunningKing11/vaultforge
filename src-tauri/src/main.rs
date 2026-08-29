@@ -17,13 +17,14 @@ mod tx;
 mod validation;
 mod webview;
 
+use providers::http::ProviderClients;
 use state::AppState;
 
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
             let icon =
-                tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png"))?.to_owned();
+                tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png"))?.to_owned(); // TODO: upscale
             if let Some(window) = app.get_webview_window("main") {
                 webview::disable_zoom(&window)?;
                 window.set_icon(icon)?;
@@ -34,6 +35,7 @@ fn main() {
                 .app_data_dir()
                 .map_err(|error| format!("failed to resolve app data directory: {error}"))?
                 .join("wallet.json");
+            app.manage(ProviderClients::new()?);
             app.manage(Mutex::new(AppState::from_storage(storage_path)));
             Ok(())
         })

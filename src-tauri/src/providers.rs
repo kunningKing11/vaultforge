@@ -1,3 +1,5 @@
+use reqwest::Client;
+
 use crate::address::bitcoin::validate_address as validate_bitcoin_address;
 use crate::address::evm::validate_address as validate_evm_address;
 use crate::address::filecoin::validate_address as validate_filecoin_address;
@@ -37,6 +39,7 @@ pub(crate) struct PortfolioAssetRefresh {
 }
 
 pub(crate) async fn fetch_portfolio_assets(
+    client: &Client,
     addresses: &HashMap<String, String>,
     cached_assets: &[Asset],
     enabled_networks: &[String],
@@ -52,7 +55,7 @@ pub(crate) async fn fetch_portfolio_assets(
                 continue;
             }
 
-            let refreshed = fetch_evm_assets(config, evm_address, cached_assets).await;
+            let refreshed = fetch_evm_assets(client, config, evm_address, cached_assets).await;
             if refreshed.balance_failed {
                 failed_networks.push(config.name.clone());
             }
@@ -62,7 +65,7 @@ pub(crate) async fn fetch_portfolio_assets(
 
     if enabled_networks.iter().any(|id| id == "solana") {
         if let Some(solana_address) = addresses.get("solana") {
-            let refreshed = fetch_solana_assets(solana_address, cached_assets).await;
+            let refreshed = fetch_solana_assets(client, solana_address, cached_assets).await;
             if refreshed.balance_failed {
                 failed_networks.push("Solana".to_string());
             }
@@ -72,7 +75,7 @@ pub(crate) async fn fetch_portfolio_assets(
 
     if enabled_networks.iter().any(|id| id == "tron") {
         if let Some(tron_address) = addresses.get("tron") {
-            let refreshed = fetch_tron_assets(tron_address, cached_assets).await;
+            let refreshed = fetch_tron_assets(client, tron_address, cached_assets).await;
             if refreshed.balance_failed {
                 failed_networks.push("Tron".to_string());
             }
@@ -83,7 +86,7 @@ pub(crate) async fn fetch_portfolio_assets(
     if enabled_networks.iter().any(|id| id == "bitcoin") {
         if let Some(config) = network_by_id("bitcoin") {
             let refreshed =
-                refresh_bitcoin_account_asset(addresses, bitcoin_account.as_ref()).await;
+                refresh_bitcoin_account_asset(client, addresses, bitcoin_account.as_ref()).await;
             match refreshed {
                 Ok((asset, refreshed_account)) => {
                     assets.push(asset);
@@ -113,6 +116,7 @@ pub(crate) async fn fetch_portfolio_assets(
 }
 
 async fn refresh_bitcoin_account_asset(
+    client: &reqwest::Client,
     addresses: &HashMap<String, String>,
     cached_account: Option<&BitcoinAccountSnapshot>,
 ) -> Result<(Asset, BitcoinAccountSnapshot), String> {
@@ -127,7 +131,7 @@ async fn refresh_bitcoin_account_asset(
         return Err("Bitcoin account does not match the wallet receive address".to_string());
     }
 
-    let refreshed_account = scan_bitcoin_account(cached_account.account()).await?;
+    let refreshed_account = scan_bitcoin_account(client, cached_account.account()).await?;
     let balance = refreshed_account.total_balance()?.to_string();
     let asset = Asset {
         symbol: config.native_asset.symbol.clone(),

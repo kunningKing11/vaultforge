@@ -25,23 +25,26 @@ pub(crate) fn tron_address_to_hex(address: &str) -> Result<String, String> {
     Ok(hex::encode(bytes))
 }
 
-pub(crate) async fn fetch_tron_native_balance(address: &str) -> Result<u128, String> {
+pub(crate) async fn fetch_tron_native_balance(
+    client: &reqwest::Client,
+    address: &str,
+) -> Result<u128, String> {
     let owner_address = tron_address_to_hex(address)?;
     let body = serde_json::json!({
         "address": owner_address,
         "visible": false
     });
-
-    let json = rpc_post(&format!("{}/wallet/getaccount", tron_rpc_url()?), &body).await?;
+    let json = rpc_post(client, &format!("{}/wallet/getaccount", tron_rpc_url()?), &body).await?;
     Ok(json["balance"].as_u64().unwrap_or(0) as u128)
 }
 
 pub(crate) async fn fetch_tron_assets(
+    client: &reqwest::Client,
     address: &str,
     cached_assets: &[Asset],
 ) -> NetworkAssetRefresh {
     let config = tron_config().expect("Tron must exist in the generated network registry");
-    match fetch_tron_native_balance(address).await {
+    match fetch_tron_native_balance(client, address).await {
         Ok(sun) => NetworkAssetRefresh {
             assets: vec![Asset {
                 symbol: config.native_asset.symbol.clone(),
@@ -65,6 +68,7 @@ pub(crate) async fn fetch_tron_assets(
 }
 
 pub(crate) async fn create_tron_transfer(
+    client: &reqwest::Client,
     from: &str,
     to: &str,
     amount_sun: u64,
@@ -79,6 +83,7 @@ pub(crate) async fn create_tron_transfer(
     });
 
     let json = rpc_post(
+        client,
         &format!("{}/wallet/createtransaction", tron_rpc_url()?),
         &body,
     )
@@ -92,8 +97,12 @@ pub(crate) async fn create_tron_transfer(
     Ok(json)
 }
 
-pub(crate) async fn broadcast_tron_transaction(tx: &serde_json::Value) -> Result<String, String> {
+pub(crate) async fn broadcast_tron_transaction(
+    client: &reqwest::Client,
+    tx: &serde_json::Value,
+) -> Result<String, String> {
     let json = rpc_post(
+        client,
         &format!("{}/wallet/broadcasttransaction", tron_rpc_url()?),
         tx,
     )
@@ -111,8 +120,12 @@ pub(crate) async fn broadcast_tron_transaction(tx: &serde_json::Value) -> Result
         .to_string())
 }
 
-pub(crate) async fn fetch_tron_tx_status(txid: &str) -> Result<Option<String>, String> {
+pub(crate) async fn fetch_tron_tx_status(
+    client: &reqwest::Client,
+    txid: &str,
+) -> Result<Option<String>, String> {
     let json = rpc_post(
+        client,
         &format!("{}/wallet/gettransactioninfobyid", tron_rpc_url()?),
         &serde_json::json!({ "value": txid }),
     )

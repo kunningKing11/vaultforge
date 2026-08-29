@@ -24,6 +24,7 @@ pub(crate) fn evm_config_by_id(network_id: &str) -> Option<&'static EvmNetworkCo
 }
 
 pub(crate) async fn fetch_evm_native_balance(
+    client: &reqwest::Client,
     config: &EvmNetworkConfig,
     address: &str,
 ) -> Result<u128, String> {
@@ -34,7 +35,7 @@ pub(crate) async fn fetch_evm_native_balance(
         "id": 1,
     });
 
-    let json = rpc_post(config.rpc_url()?, &body).await?;
+    let json = rpc_post(client, config.rpc_url()?, &body).await?;
     let balance_hex = json["result"]
         .as_str()
         .ok_or_else(|| "RPC response missing result field".to_string())?;
@@ -44,6 +45,7 @@ pub(crate) async fn fetch_evm_native_balance(
 }
 
 pub(crate) async fn fetch_evm_token_balance(
+    client: &reqwest::Client,
     config: &EvmNetworkConfig,
     token: &EvmTokenConfig,
     address: &str,
@@ -66,7 +68,7 @@ pub(crate) async fn fetch_evm_token_balance(
         "id": 1,
     });
 
-    let json = rpc_post(config.rpc_url()?, &body).await?;
+    let json = rpc_post(client, config.rpc_url()?, &body).await?;
     let hex_str = json["result"]
         .as_str()
         .ok_or_else(|| "Token balance RPC missing result".to_string())?;
@@ -76,6 +78,7 @@ pub(crate) async fn fetch_evm_token_balance(
 }
 
 pub(crate) async fn fetch_evm_assets(
+    client: &reqwest::Client,
     config: &EvmNetworkConfig,
     address: &str,
     cached_assets: &[Asset],
@@ -83,7 +86,7 @@ pub(crate) async fn fetch_evm_assets(
     let mut balance_failed = false;
     let mut assets = vec![];
 
-    match fetch_evm_native_balance(config, address).await {
+    match fetch_evm_native_balance(client, config, address).await {
         Ok(wei) => assets.push(Asset {
             symbol: config.native_asset.symbol.clone(),
             name: config.native_asset.name.clone(),
@@ -105,7 +108,7 @@ pub(crate) async fn fetch_evm_assets(
     }
 
     for token in evm_tokens_for_network(&config.id) {
-        match fetch_evm_token_balance(config, token, address).await {
+        match fetch_evm_token_balance(client, config, token, address).await {
             Ok(balance) => {
                 assets.push(Asset {
                     symbol: token.symbol.to_string(),
@@ -134,6 +137,7 @@ pub(crate) async fn fetch_evm_assets(
 }
 
 pub(crate) async fn fetch_evm_nonce(
+    client: &reqwest::Client,
     config: &EvmNetworkConfig,
     address: &str,
 ) -> Result<u64, String> {
@@ -143,7 +147,7 @@ pub(crate) async fn fetch_evm_nonce(
         "params": [address, "pending"],
         "id": 1,
     });
-    let json = rpc_post(config.rpc_url()?, &body).await?;
+    let json = rpc_post(client, config.rpc_url()?, &body).await?;
     let hex_str = json["result"]
         .as_str()
         .ok_or_else(|| "Nonce RPC missing result".to_string())?;
@@ -152,14 +156,14 @@ pub(crate) async fn fetch_evm_nonce(
 }
 
 // Fallback function if the RPC does not support eth_feeHistory, which is used to estimate EIP-1559 fees.
-pub(crate) async fn fetch_evm_gas_price(config: &EvmNetworkConfig) -> Result<u128, String> {
+pub(crate) async fn fetch_evm_gas_price(client: &reqwest::Client, config: &EvmNetworkConfig) -> Result<u128, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "eth_gasPrice",
         "params": [],
         "id": 1,
     });
-    let json = rpc_post(config.rpc_url()?, &body).await?;
+    let json = rpc_post(client, config.rpc_url()?, &body).await?;
     let hex_str = json["result"]
         .as_str()
         .ok_or_else(|| "Gas price RPC missing result".to_string())?;
@@ -168,6 +172,7 @@ pub(crate) async fn fetch_evm_gas_price(config: &EvmNetworkConfig) -> Result<u12
 }
 
 pub(crate) async fn fetch_evm_fee_estimate(
+    client: &reqwest::Client,
     config: &EvmNetworkConfig,
 ) -> Result<EvmFeeEstimate, String> {
     let body = serde_json::json!({
@@ -177,10 +182,10 @@ pub(crate) async fn fetch_evm_fee_estimate(
         "id": 1,
     });
 
-    match rpc_post(config.rpc_url()?, &body).await {
+    match rpc_post(client, config.rpc_url()?, &body).await {
         Ok(json) => parse_evm_fee_history(&json),
         Err(_) => {
-            let gas_price = fetch_evm_gas_price(config).await?;
+            let gas_price = fetch_evm_gas_price(client, config).await?;
             Ok(EvmFeeEstimate {
                 max_priority_fee_per_gas: gas_price,
                 max_fee_per_gas: gas_price,
@@ -227,6 +232,7 @@ pub(crate) fn parse_evm_fee_history(json: &serde_json::Value) -> Result<EvmFeeEs
 }
 
 pub(crate) async fn fetch_evm_estimated_gas(
+    client: &reqwest::Client,
     config: &EvmNetworkConfig,
     from: &str,
     to: &str,
@@ -247,7 +253,7 @@ pub(crate) async fn fetch_evm_estimated_gas(
         "params": [params],
         "id": 1,
     });
-    let json = rpc_post(config.rpc_url()?, &body).await?;
+    let json = rpc_post(client, config.rpc_url()?, &body).await?;
     let hex_str = json["result"]
         .as_str()
         .ok_or_else(|| "Estimate gas RPC missing result".to_string())?;
@@ -256,6 +262,7 @@ pub(crate) async fn fetch_evm_estimated_gas(
 }
 
 pub(crate) async fn broadcast_evm_tx(
+    client: &reqwest::Client,
     config: &EvmNetworkConfig,
     raw_tx_hex: &str,
 ) -> Result<String, String> {
@@ -265,7 +272,7 @@ pub(crate) async fn broadcast_evm_tx(
         "params": [raw_tx_hex],
         "id": 1,
     });
-    let json = rpc_post(config.rpc_url()?, &body).await?;
+    let json = rpc_post(client, config.rpc_url()?, &body).await?;
     json["result"]
         .as_str()
         .map(|s| s.to_string())
@@ -278,6 +285,7 @@ pub(crate) async fn broadcast_evm_tx(
 }
 
 pub(crate) async fn fetch_evm_tx_status(
+    client: &reqwest::Client,
     config: &EvmNetworkConfig,
     tx_hash: &str,
 ) -> Result<Option<String>, String> {
@@ -287,7 +295,7 @@ pub(crate) async fn fetch_evm_tx_status(
         "params": [tx_hash],
         "id": 1,
     });
-    let json = rpc_post(config.rpc_url()?, &body).await?;
+    let json = rpc_post(client, config.rpc_url()?, &body).await?;
 
     if json["result"].is_null() {
         return Ok(None);

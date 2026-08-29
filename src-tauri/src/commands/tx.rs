@@ -14,6 +14,7 @@ use crate::providers::evm::{
     broadcast_evm_tx, evm_config_by_id, fetch_evm_estimated_gas, fetch_evm_fee_estimate,
     fetch_evm_nonce, fetch_evm_tx_status,
 };
+use crate::providers::http::ProviderClients;
 use crate::providers::solana::{
     broadcast_solana_transaction, fetch_solana_mint_decimals, fetch_solana_native_balance,
     fetch_solana_token_account_rent, fetch_solana_token_account_state, fetch_solana_token_accounts,
@@ -70,6 +71,7 @@ pub(crate) fn ensure_native_balance_covers_debit(
 #[tauri::command]
 pub(crate) async fn sign_transaction(
     state: State<'_, Mutex<AppState>>,
+    clients: State<'_, ProviderClients>,
     to: String,
     symbol: String,
     network: String,
@@ -104,6 +106,8 @@ pub(crate) async fn sign_transaction(
     let to = to.trim().to_string();
     let value: u128 = amount.parse().map_err(|_| "Invalid amount".to_string())?;
 
+    let client = clients.http();
+
     let asset = assets
         .iter()
         .find(|asset| {
@@ -134,7 +138,7 @@ pub(crate) async fn sign_transaction(
                 .as_ref()
                 .ok_or_else(|| "Bitcoin account discovery is unavailable".to_string())?;
             let signed_btc =
-                sign_bitcoin_transfer(&mnemonic, &from, &to, amount_sats, bitcoin_account).await?;
+                sign_bitcoin_transfer(client, &mnemonic, &from, &to, amount_sats, bitcoin_account).await?;
 
             Ok(SignedTransaction {
                 from,
@@ -165,21 +169,21 @@ pub(crate) async fn sign_transaction(
             let amount_u64: u64 = value
                 .try_into()
                 .map_err(|_| format!("{symbol} amount is too large"))?;
-            let sol_balance = fetch_solana_native_balance(&from).await?;
+            let sol_balance = fetch_solana_native_balance(client, &from).await?;
             let mut extra_sol_lamports = 0u64;
             let mut source_token_balance = None;
 
-            let signed_sol = if symbol == "SOL" {
-                sign_solana_transfer(&mnemonic, &from, &to, amount_u64).await?
+                let signed_sol = if symbol == "SOL" {
+                sign_solana_transfer(client, &mnemonic, &from, &to, amount_u64).await?
             } else {
                 let mint = asset
                     .token_address
                     .as_deref()
                     .ok_or_else(|| format!("{symbol} mint address is not available"))?;
-                let mint_decimals = fetch_solana_mint_decimals(mint).await?;
+                let mint_decimals = fetch_solana_mint_decimals(client, mint).await?;
                 decimals = u32::from(mint_decimals);
 
-                let source_accounts = fetch_solana_token_accounts(&from).await?;
+                let source_accounts = fetch_solana_token_accounts(client, &from).await?;
                 let (sources, total_balance) = select_solana_token_sources(
                     &from,
                     mint,
@@ -190,14 +194,14 @@ pub(crate) async fn sign_transaction(
                 source_token_balance = Some(total_balance);
 
                 let destination_ata = solana_associated_token_address(&to, mint)?;
-                let ata_exists = fetch_solana_token_account_state(&destination_ata, &to, mint)
+                let ata_exists = fetch_solana_token_account_state(client, &destination_ata, &to, mint)
                     .await?
                     .is_some();
                 if !ata_exists {
-                    extra_sol_lamports = fetch_solana_token_account_rent().await?;
+                    extra_sol_lamports = fetch_solana_token_account_rent(client).await?;
                 }
 
-                sign_solana_token_transfer(&mnemonic, &from, &to, mint, &sources, mint_decimals)
+                sign_solana_token_transfer(client, &mnemonic, &from, &to, mint, &sources, mint_decimals)
                     .await?
             };
 
@@ -222,7 +226,7 @@ pub(crate) async fn sign_transaction(
                 });
             }
 
-            simulate_solana_transaction(&signed_sol.raw_tx_base64).await?;
+            simulate_solana_transaction(client, &signed_sol.raw_tx_base64).await?;
 
             let total_debit = if symbol == "SOL" {
                 required_sol.to_string()
@@ -271,7 +275,7 @@ pub(crate) async fn sign_transaction(
                 .balance
                 .parse()
                 .map_err(|_| "Invalid TRX balance".to_string())?;
-            let signed_trx = sign_tron_transfer(&mnemonic, &from, &to, amount_sun).await?;
+            let signed_trx = sign_tron_transfer(client, &mnemonic, &from, &to, amount_sun).await?;
             let fee_sun = signed_trx.fee_sun as u128;
             let required_trx = required_native_debit(true, value, fee_sun, "TRX")?;
             ensure_native_balance_covers_debit(
@@ -331,12 +335,12 @@ pub(crate) async fn sign_transaction(
                 )
             };
 
-            let nonce = fetch_evm_nonce(config, &address).await?;
-            let fee_estimate = fetch_evm_fee_estimate(config).await?;
+            let nonce = fetch_evm_nonce(client, config, &address).await?;
+            let fee_estimate = fetch_evm_fee_estimate(client, config).await?;
             let gas_limit = if tx_data.is_empty() {
-                fetch_evm_estimated_gas(config, &address, &tx_to, value, &[]).await?
+                fetch_evm_estimated_gas(client, config, &address, &tx_to, value, &[]).await?
             } else {
-                fetch_evm_estimated_gas(config, &address, &tx_to, 0, &tx_data).await?
+                fetch_evm_estimated_gas(client, config, &address, &tx_to, 0, &tx_data).await?
             };
 
             let max_priority_fee_per_gas = fee_estimate.max_priority_fee_per_gas;
@@ -422,6 +426,7 @@ pub(crate) async fn sign_transaction(
 #[tauri::command]
 pub(crate) async fn send_transaction(
     state: State<'_, Mutex<AppState>>,
+    clients: State<'_, ProviderClients>,
     signed: SignedTransaction,
 ) -> Result<WalletSession, String> {
     validate_unlocked(&state)?;
@@ -446,18 +451,22 @@ pub(crate) async fn send_transaction(
         .as_ref()
         .ok_or_else(|| "No raw transaction data".to_string())?;
 
+    let client = clients.http();
+
     let tx_hash = match signed.network.as_str() {
-        "bitcoin" if signed.symbol == "BTC" => broadcast_bitcoin_transaction(raw_tx).await?,
-        "solana" => broadcast_solana_transaction(raw_tx).await?,
+        "bitcoin" if signed.symbol == "BTC" => {
+            broadcast_bitcoin_transaction(client, raw_tx).await?
+        }
+        "solana" => broadcast_solana_transaction(client, raw_tx).await?,
         "tron" if signed.symbol == "TRX" => {
             let tx: serde_json::Value = serde_json::from_str(raw_tx)
                 .map_err(|_| "Invalid signed Tron transaction JSON".to_string())?;
-            broadcast_tron_transaction(&tx).await?
+            broadcast_tron_transaction(client, &tx).await?
         }
         network_id if evm_config_by_id(network_id).is_some() => {
             let config = evm_config_by_id(network_id)
                 .ok_or_else(|| format!("No EVM chain configured for {network_id}"))?;
-            broadcast_evm_tx(config, raw_tx).await?
+            broadcast_evm_tx(client, config, raw_tx).await?
         }
         network_id => return Err(format!("Unsupported network: {network_id}")),
     };
@@ -560,17 +569,19 @@ pub(crate) fn swap_tokens(
 #[tauri::command]
 pub(crate) async fn check_transaction_status(
     _state: State<'_, Mutex<AppState>>,
+    clients: State<'_, ProviderClients>,
     tx_hash: String,
     network: String,
 ) -> Result<Option<String>, String> {
+    let client = clients.http();
     match network.as_str() {
-        "bitcoin" => fetch_bitcoin_tx_status(&tx_hash).await,
-        "solana" => fetch_solana_tx_status(&tx_hash).await,
-        "tron" => fetch_tron_tx_status(&tx_hash).await,
+        "bitcoin" => fetch_bitcoin_tx_status(client, &tx_hash).await,
+        "solana" => fetch_solana_tx_status(client, &tx_hash).await,
+        "tron" => fetch_tron_tx_status(client, &tx_hash).await,
         network_id if evm_config_by_id(network_id).is_some() => {
             let config = evm_config_by_id(network_id)
                 .ok_or_else(|| format!("Unknown network: {}", network))?;
-            fetch_evm_tx_status(config, &tx_hash).await
+            fetch_evm_tx_status(client, config, &tx_hash).await
         }
         _ => Err(format!("Unsupported network: {}", network)),
     }

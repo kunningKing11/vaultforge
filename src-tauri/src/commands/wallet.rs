@@ -12,6 +12,7 @@ use crate::derivation::{
 };
 use crate::dto::{Wallet, WalletRefreshResult, WalletSession};
 use crate::providers::bitcoin::BitcoinAccountSnapshot;
+use crate::providers::http::ProviderClients;
 use crate::state::{
     AppState, StoredWalletMetadata, clear_secret_string, refresh_result_from_state,
     session_from_state,
@@ -59,6 +60,7 @@ pub(crate) fn generate_mnemonic_cmd(word_count: Option<u32>) -> Result<String, S
 #[tauri::command]
 pub(crate) async fn create_wallet(
     state: State<'_, Mutex<AppState>>,
+    clients: State<'_, ProviderClients>,
     name: String,
     wallet_password: String,
     enabled_networks: Vec<String>,
@@ -73,9 +75,14 @@ pub(crate) async fn create_wallet(
     let network_refs: Vec<&str> = enabled_networks.iter().map(|s| s.as_str()).collect();
     let addresses = derive_addresses_from_mnemonic_filtered(&mnemonic, &network_refs)?;
     let bitcoin_account = initialize_bitcoin_account(&mnemonic, &enabled_networks)?;
-    let refreshed =
-        refresh_wallet_portfolio(&addresses, &[], &enabled_networks, bitcoin_account.as_ref())
-            .await;
+    let refreshed = refresh_wallet_portfolio(
+        clients.http(),
+        &addresses,
+        &[],
+        &enabled_networks,
+        bitcoin_account.as_ref(),
+    )
+    .await;
 
     let wallet = Wallet {
         name: clean_name(name),
@@ -109,6 +116,7 @@ pub(crate) async fn create_wallet(
 #[tauri::command]
 pub(crate) async fn import_wallet(
     state: State<'_, Mutex<AppState>>,
+    clients: State<'_, ProviderClients>,
     name: Option<String>,
     mnemonic: String,
     wallet_password: String,
@@ -122,9 +130,14 @@ pub(crate) async fn import_wallet(
     let network_refs: Vec<&str> = enabled_networks.iter().map(|s| s.as_str()).collect();
     let addresses = derive_addresses_from_mnemonic_filtered(&mnemonic, &network_refs)?;
     let bitcoin_account = initialize_bitcoin_account(&mnemonic, &enabled_networks)?;
-    let refreshed =
-        refresh_wallet_portfolio(&addresses, &[], &enabled_networks, bitcoin_account.as_ref())
-            .await;
+    let refreshed = refresh_wallet_portfolio(
+        clients.http(),
+        &addresses,
+        &[],
+        &enabled_networks,
+        bitcoin_account.as_ref(),
+    )
+    .await;
 
     let wallet = Wallet {
         name: clean_name(name.unwrap_or_else(|| "Imported Wallet".to_string())),

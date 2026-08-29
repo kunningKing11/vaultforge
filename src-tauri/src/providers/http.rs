@@ -1,12 +1,29 @@
+use std::time::Duration;
+
+pub(crate) struct ProviderClients {
+    http: reqwest::Client,
+}
+
+impl ProviderClients {
+    pub(crate) fn new() -> Result<Self, String> {
+        let http = reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .build()
+            .map_err(|error| format!("Failed to create HTTP client: {error}"))?;
+
+        Ok(Self { http })
+    }
+
+    pub(crate) fn http(&self) -> &reqwest::Client {
+        &self.http
+    }
+}
+
 pub(crate) async fn rpc_post(
+    client: &reqwest::Client,
     url: &str,
     body: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
-
     let mut last_err = String::new();
     for attempt in 1..=3 {
         let response = match client
@@ -46,18 +63,12 @@ pub(crate) async fn rpc_post(
     Err(last_err)
 }
 
-pub(crate) async fn http_get_json(url: &str) -> Result<serde_json::Value, String> {
-    let client = http_client()?;
-    http_get_json_with_client(&client, url).await
+pub(crate) async fn http_get_json(
+    client: &reqwest::Client,
+    url: &str,
+) -> Result<serde_json::Value, String> {
+    http_get_json_with_client(client, url).await
 }
-
-pub(crate) fn http_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {e}"))
-}
-
 pub(crate) async fn http_get_json_with_client(
     client: &reqwest::Client,
     url: &str,
@@ -113,12 +124,11 @@ fn http_retry_delay(url: &str, attempt: u64, retry_after_secs: Option<u64>) -> s
     std::time::Duration::from_millis(base_ms.saturating_add(jitter_ms))
 }
 
-pub(crate) async fn http_post_text(url: &str, body: &str) -> Result<String, String> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
-
+pub(crate) async fn http_post_text(
+    client: &reqwest::Client,
+    url: &str,
+    body: &str,
+) -> Result<String, String> {
     let mut last_err = String::new();
     for attempt in 1..=3 {
         let response = match client

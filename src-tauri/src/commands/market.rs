@@ -6,6 +6,7 @@ use crate::assets::{cached_asset, cached_asset_by_token_address};
 use crate::dto::{Asset, RefreshWarning, RefreshWarningKind, WalletRefreshResult};
 use crate::providers::bitcoin::BitcoinAccountSnapshot;
 use crate::providers::fetch_portfolio_assets;
+use crate::providers::http::ProviderClients;
 use crate::providers::prices::{
     CoinGeckoPriceResponse, TokenMetadata, fetch_market_prices, fetch_token_metadata,
     price_id_for_asset,
@@ -22,6 +23,7 @@ pub(crate) struct PortfolioRefresh {
 #[tauri::command]
 pub(crate) async fn refresh_portfolio(
     state: State<'_, Mutex<AppState>>,
+    clients: State<'_, ProviderClients>,
 ) -> Result<WalletRefreshResult, String> {
     let (addresses, cached_assets, enabled_networks, bitcoin_account, wallet_generation) = {
         let state = state.lock().map_err(|_| "State lock failed")?;
@@ -42,6 +44,7 @@ pub(crate) async fn refresh_portfolio(
     };
 
     let refreshed = refresh_wallet_portfolio(
+        clients.http(),
         &addresses,
         &cached_assets,
         &enabled_networks,
@@ -64,13 +67,20 @@ pub(crate) async fn refresh_portfolio(
 }
 
 pub(crate) async fn refresh_wallet_portfolio(
+    client: &reqwest::Client,
     addresses: &HashMap<String, String>,
     cached_assets: &[Asset],
     enabled_networks: &[String],
     bitcoin_account: Option<&BitcoinAccountSnapshot>,
 ) -> PortfolioRefresh {
-    let refreshed =
-        fetch_portfolio_assets(addresses, cached_assets, enabled_networks, bitcoin_account).await;
+    let refreshed = fetch_portfolio_assets(
+        client,
+        addresses,
+        cached_assets,
+        enabled_networks,
+        bitcoin_account,
+    )
+    .await;
     let mut assets = refreshed.assets;
     preserve_cached_market_data(&mut assets, cached_assets);
     let mut warnings: Vec<RefreshWarning> = refreshed
@@ -78,7 +88,7 @@ pub(crate) async fn refresh_wallet_portfolio(
         .into_iter()
         .map(balance_warning)
         .collect();
-    warnings.extend(refresh_asset_prices(&mut assets).await);
+    warnings.extend(refresh_asset_prices(client, &mut assets).await);
 
     PortfolioRefresh {
         assets,
@@ -87,7 +97,10 @@ pub(crate) async fn refresh_wallet_portfolio(
     }
 }
 
-pub(crate) async fn refresh_asset_prices(assets: &mut [Asset]) -> Vec<RefreshWarning> {
+pub(crate) async fn refresh_asset_prices(
+    client: &reqwest::Client,
+    assets: &mut [Asset],
+) -> Vec<RefreshWarning> {
     let price_ids = assets.iter().filter_map(price_id_for_asset).fold(
         Vec::<&'static str>::new(),
         |mut ids, id| {
@@ -102,7 +115,7 @@ pub(crate) async fn refresh_asset_prices(assets: &mut [Asset]) -> Vec<RefreshWar
     let prices = if price_ids.is_empty() {
         CoinGeckoPriceResponse::new()
     } else {
-        match fetch_market_prices(&price_ids).await {
+        match fetch_market_prices(client, &price_ids).await {
             Ok(prices) => prices,
             Err(_) => {
                 warnings.push(value_warning("Market prices"));
@@ -121,7 +134,7 @@ pub(crate) async fn refresh_asset_prices(assets: &mut [Asset]) -> Vec<RefreshWar
         let Some(token_address) = asset.token_address.as_deref() else {
             continue;
         };
-        match fetch_token_metadata(&asset.network, token_address).await {
+        match fetch_token_metadata(client, &asset.network, token_address).await {
             Ok(metadata) => {
                 if metadata.price_usd.is_none() {
                     failed_token_networks.insert(asset.network.clone());

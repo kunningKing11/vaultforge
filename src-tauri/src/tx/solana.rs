@@ -120,14 +120,15 @@ fn sign_solana_instructions(draft: SolanaTransferDraft) -> Result<SignedSolanaTr
 }
 
 pub(crate) async fn sign_solana_transfer(
+    client: &reqwest::Client,
     mnemonic: &str,
     from: &str,
     to: &str,
     lamports: u64,
 ) -> Result<SignedSolanaTransfer, String> {
-    let recent_blockhash = fetch_latest_solana_blockhash().await?;
+    let recent_blockhash = fetch_latest_solana_blockhash(client).await?;
     let instructions = native_transfer_instructions(from, to, lamports)?;
-    let fee_lamports = estimate_solana_fee(from, instructions, &recent_blockhash).await?;
+    let fee_lamports = estimate_solana_fee(client, from, instructions, &recent_blockhash).await?;
     sign_solana_transfer_with_blockhash(
         mnemonic,
         from,
@@ -139,6 +140,7 @@ pub(crate) async fn sign_solana_transfer(
 }
 
 pub(crate) async fn sign_solana_token_transfer(
+    client: &reqwest::Client,
     mnemonic: &str,
     from: &str,
     to: &str,
@@ -146,9 +148,9 @@ pub(crate) async fn sign_solana_token_transfer(
     sources: &[SolanaTokenSource],
     decimals: u8,
 ) -> Result<SignedSolanaTransfer, String> {
-    let recent_blockhash = fetch_latest_solana_blockhash().await?;
+    let recent_blockhash = fetch_latest_solana_blockhash(client).await?;
     let instructions = spl_token_transfer_instructions(from, to, mint, sources, decimals)?;
-    let fee_lamports = estimate_solana_fee(from, instructions, &recent_blockhash).await?;
+    let fee_lamports = estimate_solana_fee(client, from, instructions, &recent_blockhash).await?;
 
     sign_solana_token_transfer_with_blockhash(
         mnemonic,
@@ -212,6 +214,7 @@ pub(crate) fn select_solana_token_sources(
 }
 
 async fn estimate_solana_fee(
+    client: &reqwest::Client,
     from: &str,
     instructions: Vec<Instruction>,
     recent_blockhash: &str,
@@ -222,7 +225,7 @@ async fn estimate_solana_fee(
     let message_bytes = wincode::serialize(&message)
         .map_err(|_| "Failed to serialize Solana fee message".to_string())?;
     let message_base64 = base64::engine::general_purpose::STANDARD.encode(message_bytes);
-    fetch_solana_fee_for_message(&message_base64).await
+    fetch_solana_fee_for_message(client, &message_base64).await
 }
 
 fn parse_pubkey(value: &str, label: &str) -> Result<Pubkey, String> {

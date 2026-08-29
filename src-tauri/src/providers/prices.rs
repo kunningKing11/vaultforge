@@ -25,12 +25,15 @@ pub(crate) fn price_id_for_asset(asset: &Asset) -> Option<&'static str> {
         .map(|configured| configured.coin_gecko_id.as_str())
 }
 
-pub(crate) async fn fetch_market_prices(ids: &[&str]) -> Result<CoinGeckoPriceResponse, String> {
+pub(crate) async fn fetch_market_prices(
+    client: &reqwest::Client,
+    ids: &[&str],
+) -> Result<CoinGeckoPriceResponse, String> {
     let ids = ids.join(",");
     let url = format!(
         "https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd&include_24hr_change=true"
     );
-    let response = reqwest::Client::new()
+    let response = client
         .get(url)
         .header("accept", "application/json")
         .header("user-agent", "VaultForge Wallet/0.1.0")
@@ -49,6 +52,7 @@ pub(crate) async fn fetch_market_prices(ids: &[&str]) -> Result<CoinGeckoPriceRe
 }
 
 pub(crate) async fn fetch_token_metadata(
+    client: &reqwest::Client,
     network_id: &str,
     token_address: &str,
 ) -> Result<TokenMetadata, String> {
@@ -61,7 +65,7 @@ pub(crate) async fn fetch_token_metadata(
     let url = format!(
         "https://api.geckoterminal.com/api/v2/networks/{gecko_network}/tokens/{token_address}"
     );
-    let response = reqwest::Client::new()
+    let response = client
         .get(url)
         .header("accept", "application/json")
         .header("user-agent", "VaultForge Wallet/0.1.0")

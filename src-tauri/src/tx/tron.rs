@@ -77,11 +77,12 @@ fn recovery_id_for_signature(
 }
 
 pub(crate) async fn sign_tron_transfer(
+    client: &reqwest::Client,
     mnemonic: &str,
     from: &str,
     to: &str,
     amount_sun: u64,
 ) -> Result<SignedTronTransfer, String> {
-    let unsigned_tx = create_tron_transfer(from, to, amount_sun).await?;
+    let unsigned_tx = create_tron_transfer(client, from, to, amount_sun).await?;
     sign_tron_unsigned_transfer(mnemonic, from, unsigned_tx)
 }

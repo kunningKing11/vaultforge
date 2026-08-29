@@ -29,18 +29,22 @@ pub(crate) struct SolanaTokenAccountState {
     pub(crate) decimals: u8,
 }
 
-pub(crate) async fn fetch_solana_native_balance(address: &str) -> Result<u128, String> {
+pub(crate) async fn fetch_solana_native_balance(
+    client: &reqwest::Client,
+    address: &str,
+) -> Result<u128, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "getBalance",
         "params": [address],
         "id": 1,
     });
-    let json = rpc_post(solana_rpc_url()?, &body).await?;
+    let json = rpc_post(client, solana_rpc_url()?, &body).await?;
     parse_solana_balance(&json)
 }
 
 pub(crate) async fn fetch_solana_token_accounts(
+    client: &reqwest::Client,
     address: &str,
 ) -> Result<Vec<SolanaTokenAccount>, String> {
     let body = serde_json::json!({
@@ -49,11 +53,12 @@ pub(crate) async fn fetch_solana_token_accounts(
         "params": [address, {"programId": SOLANA_TOKEN_PROGRAM_ID}, {"encoding": "jsonParsed"}],
         "id": 1,
     });
-    let json = rpc_post(solana_rpc_url()?, &body).await?;
+    let json = rpc_post(client, solana_rpc_url()?, &body).await?;
     parse_solana_token_accounts(&json, address)
 }
 
 pub(crate) async fn fetch_solana_assets(
+    client: &reqwest::Client,
     address: &str,
     cached_assets: &[Asset],
 ) -> NetworkAssetRefresh {
@@ -61,7 +66,7 @@ pub(crate) async fn fetch_solana_assets(
     let mut balance_failed = false;
     let mut assets = vec![];
 
-    match fetch_solana_native_balance(address).await {
+    match fetch_solana_native_balance(client, address).await {
         Ok(lamports) => assets.push(Asset {
             symbol: config.native_asset.symbol.clone(),
             name: config.native_asset.name.clone(),
@@ -82,7 +87,7 @@ pub(crate) async fn fetch_solana_assets(
         }
     }
 
-    let token_accounts = match fetch_solana_token_accounts(address).await {
+            let token_accounts = match fetch_solana_token_accounts(client, address).await {
         Ok(accounts) => accounts,
         Err(_) => {
             balance_failed = true;
@@ -212,14 +217,17 @@ pub(crate) fn parse_solana_token_accounts(
     Ok(parsed)
 }
 
-pub(crate) async fn broadcast_solana_transaction(raw_tx_base64: &str) -> Result<String, String> {
+pub(crate) async fn broadcast_solana_transaction(
+    client: &reqwest::Client,
+    raw_tx_base64: &str,
+) -> Result<String, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "sendTransaction",
         "params": [raw_tx_base64, {"encoding": "base64"}],
         "id": 1,
     });
-    let json = rpc_post(solana_rpc_url()?, &body).await?;
+    let json = rpc_post(client, solana_rpc_url()?, &body).await?;
     json["result"]
         .as_str()
         .map(|s| s.to_string())
@@ -231,18 +239,22 @@ pub(crate) async fn broadcast_solana_transaction(raw_tx_base64: &str) -> Result<
         })
 }
 
-pub(crate) async fn fetch_solana_tx_status(signature: &str) -> Result<Option<String>, String> {
+pub(crate) async fn fetch_solana_tx_status(
+    client: &reqwest::Client,
+    signature: &str,
+) -> Result<Option<String>, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "getSignatureStatuses",
         "params": [[signature], {"searchTransactionHistory": true}],
         "id": 1,
     });
-    let json = rpc_post(solana_rpc_url()?, &body).await?;
+    let json = rpc_post(client, solana_rpc_url()?, &body).await?;
     parse_solana_tx_status(&json)
 }
 
 pub(crate) async fn fetch_solana_token_account_state(
+    client: &reqwest::Client,
     ata_address: &str,
     expected_owner: &str,
     expected_mint: &str,
@@ -253,18 +265,21 @@ pub(crate) async fn fetch_solana_token_account_state(
         "params": [ata_address, {"encoding": "jsonParsed"}],
         "id": 1,
     });
-    let json = rpc_post(solana_rpc_url()?, &body).await?;
+    let json = rpc_post(client, solana_rpc_url()?, &body).await?;
     parse_solana_token_account_state(&json, expected_owner, expected_mint)
 }
 
-pub(crate) async fn fetch_solana_mint_decimals(mint: &str) -> Result<u8, String> {
+pub(crate) async fn fetch_solana_mint_decimals(
+    client: &reqwest::Client,
+    mint: &str,
+) -> Result<u8, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "getAccountInfo",
         "params": [mint, {"encoding": "jsonParsed"}],
         "id": 1,
     });
-    let json = rpc_post(solana_rpc_url()?, &body).await?;
+    let json = rpc_post(client, solana_rpc_url()?, &body).await?;
     parse_solana_mint_decimals(&json)
 }
 
@@ -349,7 +364,10 @@ pub(crate) fn parse_solana_mint_decimals(json: &serde_json::Value) -> Result<u8,
         .map_err(|_| "Solana token mint decimals are too large".to_string())
 }
 
-pub(crate) async fn simulate_solana_transaction(raw_tx_base64: &str) -> Result<(), String> {
+pub(crate) async fn simulate_solana_transaction(
+    client: &reqwest::Client,
+    raw_tx_base64: &str,
+) -> Result<(), String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "simulateTransaction",
@@ -361,7 +379,7 @@ pub(crate) async fn simulate_solana_transaction(raw_tx_base64: &str) -> Result<(
         }],
         "id": 1,
     });
-    let json = rpc_post(solana_rpc_url()?, &body).await?;
+    let json = rpc_post(client, solana_rpc_url()?, &body).await?;
     parse_solana_simulation(&json)
 }
 
@@ -381,14 +399,16 @@ pub(crate) fn parse_solana_simulation(json: &serde_json::Value) -> Result<(), St
     ))
 }
 
-pub(crate) async fn fetch_solana_token_account_rent() -> Result<u64, String> {
+pub(crate) async fn fetch_solana_token_account_rent(
+    client: &reqwest::Client,
+) -> Result<u64, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "getMinimumBalanceForRentExemption",
         "params": [165],
         "id": 1,
     });
-    let json = rpc_post(solana_rpc_url()?, &body).await?;
+    let json = rpc_post(client, solana_rpc_url()?, &body).await?;
     parse_solana_rent_exemption(&json)
 }
 
@@ -402,14 +422,16 @@ pub(crate) fn parse_solana_rent_exemption(json: &serde_json::Value) -> Result<u6
         .ok_or_else(|| "Solana rent exemption RPC missing result".to_string())
 }
 
-pub(crate) async fn fetch_latest_solana_blockhash() -> Result<String, String> {
+pub(crate) async fn fetch_latest_solana_blockhash(
+    client: &reqwest::Client,
+) -> Result<String, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "getLatestBlockhash",
         "params": [{"commitment": "finalized"}],
         "id": 1,
     });
-    let json = rpc_post(solana_rpc_url()?, &body).await?;
+    let json = rpc_post(client, solana_rpc_url()?, &body).await?;
     parse_latest_solana_blockhash(&json)
 }
 
@@ -444,14 +466,17 @@ pub(crate) fn parse_solana_tx_status(json: &serde_json::Value) -> Result<Option<
 }
 
 #[allow(dead_code)]
-pub(crate) async fn fetch_solana_fee_for_message(message_base64: &str) -> Result<u64, String> {
+pub(crate) async fn fetch_solana_fee_for_message(
+    client: &reqwest::Client,
+    message_base64: &str,
+) -> Result<u64, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "getFeeForMessage",
         "params": [message_base64],
         "id": 1,
     });
-    let json = rpc_post(solana_rpc_url()?, &body).await?;
+    let json = rpc_post(client, solana_rpc_url()?, &body).await?;
     parse_solana_fee_for_message(&json)
 }
 

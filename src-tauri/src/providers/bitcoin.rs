@@ -1,9 +1,7 @@
 use crate::derivation::{
     BITCOIN_BIP84_GAP_LIMIT, BitcoinAccount, BitcoinBranch, BitcoinDerivedAddress, BitcoinKeyOrigin,
 };
-use crate::providers::http::{
-    http_client, http_get_json, http_get_json_with_client, http_post_text,
-};
+use crate::providers::http::{http_get_json, http_get_json_with_client, http_post_text};
 use crate::registry::network_by_id;
 use crate::tx::bitcoin::{BitcoinSignedTransfer, bitcoin_signed_transfer};
 use std::collections::{HashSet, VecDeque};
@@ -177,9 +175,9 @@ fn required_u128(json: &serde_json::Value, field: &str) -> Result<u128, String> 
 }
 
 pub(crate) async fn scan_bitcoin_account(
+    client: &reqwest::Client,
     account: &BitcoinAccount,
 ) -> Result<BitcoinAccountSnapshot, String> {
-    let client = http_client()?;
     let api_url = bitcoin_api_url()?.to_string();
     let mut scans = [
         BitcoinBranchScan::new(BitcoinBranch::External),
@@ -209,7 +207,7 @@ pub(crate) async fn scan_bitcoin_account(
             scan.next_index = end;
         }
 
-        let mut results = fetch_bitcoin_address_batch(&client, &api_url, pending).await?;
+        let mut results = fetch_bitcoin_address_batch(client, &api_url, pending).await?;
         results.sort_by_key(|(derived, _)| derived.origin);
         for (derived, stats) in results {
             let scan = scans
@@ -296,9 +294,9 @@ pub(crate) fn parse_bitcoin_utxos(
 }
 
 async fn fetch_bitcoin_account_utxos(
+    client: &reqwest::Client,
     account: &BitcoinAccountSnapshot,
 ) -> Result<Vec<BitcoinUtxo>, String> {
-    let client = http_client()?;
     let api_url = bitcoin_api_url()?.to_string();
     let mut pending = account.used_addresses().cloned().collect::<VecDeque<_>>();
     let mut tasks = JoinSet::new();
@@ -308,7 +306,7 @@ async fn fetch_bitcoin_account_utxos(
         let Some(owner) = pending.pop_front() else {
             break;
         };
-        spawn_bitcoin_utxo_fetch(&mut tasks, &client, &api_url, owner);
+        spawn_bitcoin_utxo_fetch(&mut tasks, client, &api_url, owner);
     }
 
     while let Some(result) = tasks.join_next().await {
@@ -354,8 +352,10 @@ fn spawn_bitcoin_utxo_fetch(
     });
 }
 
-pub(crate) async fn fetch_bitcoin_fee_rate() -> Result<u64, String> {
-    let json = http_get_json(&format!("{}/fee-estimates", bitcoin_api_url()?)).await?;
+pub(crate) async fn fetch_bitcoin_fee_rate(
+    client: &reqwest::Client,
+) -> Result<u64, String> {
+    let json = http_get_json(client, &format!("{}/fee-estimates", bitcoin_api_url()?)).await?;
     parse_bitcoin_fee_rate(&json)
 }
 
@@ -371,15 +371,21 @@ pub(crate) fn parse_bitcoin_fee_rate(json: &serde_json::Value) -> Result<u64, St
     Err("Bitcoin fee estimate response missing usable fee rate".to_string())
 }
 
-pub(crate) async fn broadcast_bitcoin_transaction(raw_tx_hex: &str) -> Result<String, String> {
-    http_post_text(&format!("{}/tx", bitcoin_api_url()?), raw_tx_hex)
+pub(crate) async fn broadcast_bitcoin_transaction(
+    client: &reqwest::Client,
+    raw_tx_hex: &str,
+) -> Result<String, String> {
+    http_post_text(client, &format!("{}/tx", bitcoin_api_url()?), raw_tx_hex)
         .await
         .map(|txid| txid.trim().to_string())
 }
 
-pub(crate) async fn fetch_bitcoin_tx_status(txid: &str) -> Result<Option<String>, String> {
+pub(crate) async fn fetch_bitcoin_tx_status(
+    client: &reqwest::Client,
+    txid: &str,
+) -> Result<Option<String>, String> {
     let url = format!("{}/tx/{txid}/status", bitcoin_api_url()?);
-    let json = http_get_json(&url).await?;
+    let json = http_get_json(client, &url).await?;
     if json["confirmed"].as_bool().unwrap_or(false) {
         Ok(Some("confirmed".to_string()))
     } else {
@@ -388,6 +394,7 @@ pub(crate) async fn fetch_bitcoin_tx_status(txid: &str) -> Result<Option<String>
 }
 
 pub(crate) async fn sign_bitcoin_transfer(
+    client: &reqwest::Client,
     mnemonic: &str,
     from: &str,
     to: &str,
@@ -399,9 +406,9 @@ pub(crate) async fn sign_bitcoin_transfer(
     }
     // Address discovery can be stale while the displayed next receive address has since
     // received funds. Refresh it before querying the used addresses for spendable UTXOs.
-    let account = scan_bitcoin_account(account.account()).await?;
-    let utxos = fetch_bitcoin_account_utxos(&account).await?;
-    let fee_rate = fetch_bitcoin_fee_rate().await?;
+    let account = scan_bitcoin_account(client, account.account()).await?;
+    let utxos = fetch_bitcoin_account_utxos(client, &account).await?;
+    let fee_rate = fetch_bitcoin_fee_rate(client).await?;
     let change_destination = account.account().primary_address()?;
     bitcoin_signed_transfer(
         mnemonic,
