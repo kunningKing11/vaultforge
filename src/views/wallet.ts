@@ -57,19 +57,21 @@ function dashboardView() {
       "Sign, send, swap, or change networks to build a local activity timeline.",
     );
   const change = portfolioChange();
+  const totalValue = visibleAssets().reduce((sum, asset) => sum + assetValue(asset), 0);
   return `
     <div class="grid gap-5 xl:grid-cols-[1.35fr_0.75fr]">
       <div class="min-w-0 space-y-5">
         <section class="glass min-w-0 overflow-hidden rounded-[2rem] p-6">
           <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div class="min-w-0">
-              <p class="theme-text-accent text-sm font-bold uppercase tracking-[0.3em]">Portfolio</p>
-              <h2 class="mt-3 max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">Multi-asset wallet with transaction controls.</h2>
+              <h2 class="mt-3 max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">Portfolio</h2>
             </div>
             <div class="grid shrink-0 gap-3 sm:grid-cols-1">
               <div class="theme-panel-accent min-w-0 rounded-2xl border p-4 text-right">
-                <p class="text-sm font-bold text-slate-400">Weighted 24h</p>
+                <p class="text-sm font-bold text-slate-400">Weighted 24h change</p>
                 <p class="max-w-full break-words text-2xl font-black leading-none sm:text-3xl ${change >= 0 ? "text-emerald-300" : "text-rose-300"}">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</p>
+                <p class="max-w-full break-words text-sm font-bold text-slate-400">Total value</p>
+                <p class="max-w-full break-words text-sm font-bold text-slate-400">${totalValue.toFixed(2)}</p>
               </div>
             </div>
           </div>
