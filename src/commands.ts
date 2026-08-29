@@ -25,8 +25,8 @@ export async function setupWizard() {
         name: wizard.name || undefined,
         mnemonic,
         walletPassword,
-        enabledNetworks: wizard.enabledNetworks,
-        autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
+        enabledNetworks: appState.enabledNetworks,
+        autoLockTimeoutSecs: appState.autoLockTimeoutSecs,
       }),
     );
     if (imported) clearSetupSecrets();
@@ -46,8 +46,8 @@ export async function setupWizard() {
       walletApi.createWallet({
         name: wizard.name || "Primary Wallet",
         walletPassword,
-        enabledNetworks: wizard.enabledNetworks,
-        autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
+        enabledNetworks: appState.enabledNetworks,
+        autoLockTimeoutSecs: appState.autoLockTimeoutSecs,
         mnemonic: wizard.generatedMnemonic,
       }),
     );

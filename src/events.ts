@@ -166,19 +166,17 @@ export function bindEvents() {
     if (target.matches("[data-wizard-network]")) {
       const id = target.dataset.wizardNetwork!;
       if (target.checked) {
-        if (!appState.setupWizard.enabledNetworks.includes(id)) {
-          appState.setupWizard.enabledNetworks.push(id);
+        if (!appState.enabledNetworks.includes(id)) {
+          appState.enabledNetworks.push(id);
         }
       } else {
-        appState.setupWizard.enabledNetworks = appState.setupWizard.enabledNetworks.filter(
-          (n) => n !== id,
-        );
+        appState.enabledNetworks = appState.enabledNetworks.filter((n) => n !== id);
       }
     }
 
     if (target.matches("[data-wizard-autolock]")) {
       const val = target.value;
-      appState.setupWizard.autoLockTimeoutSecs = val === "0" ? null : Number(val);
+      appState.autoLockTimeoutSecs = val === "0" ? null : Number(val);
     }
 
     if (target.matches("[data-wizard-field='customWordCount']")) {
@@ -226,7 +224,7 @@ async function wizardNext() {
     }
   }
 
-  if (wizard.step === 5 && wizard.enabledNetworks.length === 0) {
+  if (wizard.step === 5 && appState.enabledNetworks.length === 0) {
     pushToast("Enable at least one network.", "error");
     return;
   }

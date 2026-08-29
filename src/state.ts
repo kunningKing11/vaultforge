@@ -15,7 +15,7 @@ export const appState = {
   session: null as WalletSession | null,
   currentView: "dashboard" as View,
   receiveNetworkId: DEFAULT_NETWORK_ID as NetworkId,
-  qrResilience: "M" as QrResilience,
+  enabledNetworks: networks.map((n) => n.id) as string[],
   qrSvg: "",
   qrKey: "",
   qrGeneratingKey: "",
@@ -50,11 +50,10 @@ export const appState = {
     recoveryPhraseVisible: false,
     acknowledgedBackup: false,
     wordCount: 12 as 12 | 15 | 18 | 21 | 24,
-    enabledNetworks: networks.map((n) => n.id) as string[],
-    autoLockTimeoutSecs: null as number | null,
     appearance: "vaultforge" as ThemeName,
   },
   lastActivity: Date.now(),
+  autoLockTimeoutSecs: null as number | null,
   autoLockTimer: null as number | null,
 };
 
