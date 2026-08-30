@@ -71,7 +71,7 @@ function dashboardView() {
                 <p class="text-sm font-bold text-slate-400">Weighted 24h change</p>
                 <p class="max-w-full break-words text-2xl font-black leading-none sm:text-3xl ${change >= 0 ? "text-emerald-300" : "text-rose-300"}">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</p>
                 <p class="max-w-full break-words text-sm font-bold text-slate-400">Total value</p>
-                <p class="max-w-full break-words text-sm font-bold text-slate-400">${totalValue.toFixed(2)}</p>
+                <p class="max-w-full break-words text-sm font-bold text-slate-400">${totalValue.toFixed(2)} ${appState.currency}</p>
               </div>
             </div>
           </div>

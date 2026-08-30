@@ -16,6 +16,7 @@ export const appState = {
   currentView: "dashboard" as View,
   receiveNetworkId: DEFAULT_NETWORK_ID as NetworkId,
   enabledNetworks: networks.map((n) => n.id) as string[],
+  currency: "USD",
   qrSvg: "",
   qrKey: "",
   qrGeneratingKey: "",
