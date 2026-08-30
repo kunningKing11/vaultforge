@@ -352,9 +352,7 @@ fn spawn_bitcoin_utxo_fetch(
     });
 }
 
-pub(crate) async fn fetch_bitcoin_fee_rate(
-    client: &reqwest::Client,
-) -> Result<u64, String> {
+pub(crate) async fn fetch_bitcoin_fee_rate(client: &reqwest::Client) -> Result<u64, String> {
     let json = http_get_json(client, &format!("{}/fee-estimates", bitcoin_api_url()?)).await?;
     parse_bitcoin_fee_rate(&json)
 }

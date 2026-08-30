@@ -138,7 +138,8 @@ pub(crate) async fn sign_transaction(
                 .as_ref()
                 .ok_or_else(|| "Bitcoin account discovery is unavailable".to_string())?;
             let signed_btc =
-                sign_bitcoin_transfer(client, &mnemonic, &from, &to, amount_sats, bitcoin_account).await?;
+                sign_bitcoin_transfer(client, &mnemonic, &from, &to, amount_sats, bitcoin_account)
+                    .await?;
 
             Ok(SignedTransaction {
                 from,
@@ -173,7 +174,7 @@ pub(crate) async fn sign_transaction(
             let mut extra_sol_lamports = 0u64;
             let mut source_token_balance = None;
 
-                let signed_sol = if symbol == "SOL" {
+            let signed_sol = if symbol == "SOL" {
                 sign_solana_transfer(client, &mnemonic, &from, &to, amount_u64).await?
             } else {
                 let mint = asset
@@ -194,15 +195,24 @@ pub(crate) async fn sign_transaction(
                 source_token_balance = Some(total_balance);
 
                 let destination_ata = solana_associated_token_address(&to, mint)?;
-                let ata_exists = fetch_solana_token_account_state(client, &destination_ata, &to, mint)
-                    .await?
-                    .is_some();
+                let ata_exists =
+                    fetch_solana_token_account_state(client, &destination_ata, &to, mint)
+                        .await?
+                        .is_some();
                 if !ata_exists {
                     extra_sol_lamports = fetch_solana_token_account_rent(client).await?;
                 }
 
-                sign_solana_token_transfer(client, &mnemonic, &from, &to, mint, &sources, mint_decimals)
-                    .await?
+                sign_solana_token_transfer(
+                    client,
+                    &mnemonic,
+                    &from,
+                    &to,
+                    mint,
+                    &sources,
+                    mint_decimals,
+                )
+                .await?
             };
 
             let fee_lamports = signed_sol.fee_lamports as u128;

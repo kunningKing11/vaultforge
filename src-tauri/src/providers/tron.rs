@@ -34,7 +34,12 @@ pub(crate) async fn fetch_tron_native_balance(
         "address": owner_address,
         "visible": false
     });
-    let json = rpc_post(client, &format!("{}/wallet/getaccount", tron_rpc_url()?), &body).await?;
+    let json = rpc_post(
+        client,
+        &format!("{}/wallet/getaccount", tron_rpc_url()?),
+        &body,
+    )
+    .await?;
     Ok(json["balance"].as_u64().unwrap_or(0) as u128)
 }
 

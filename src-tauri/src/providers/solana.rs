@@ -87,7 +87,7 @@ pub(crate) async fn fetch_solana_assets(
         }
     }
 
-            let token_accounts = match fetch_solana_token_accounts(client, address).await {
+    let token_accounts = match fetch_solana_token_accounts(client, address).await {
         Ok(accounts) => accounts,
         Err(_) => {
             balance_failed = true;

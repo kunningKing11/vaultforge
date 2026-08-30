@@ -156,7 +156,10 @@ pub(crate) async fn fetch_evm_nonce(
 }
 
 // Fallback function if the RPC does not support eth_feeHistory, which is used to estimate EIP-1559 fees.
-pub(crate) async fn fetch_evm_gas_price(client: &reqwest::Client, config: &EvmNetworkConfig) -> Result<u128, String> {
+pub(crate) async fn fetch_evm_gas_price(
+    client: &reqwest::Client,
+    config: &EvmNetworkConfig,
+) -> Result<u128, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "eth_gasPrice",
