@@ -129,6 +129,9 @@ You can run the same checks manually with `bun run hooks:check -- commit` or `bu
 ### Project Structure
 
 - `src/` contains the TypeScript frontend, including event binding, command calls, app state, formatting, QR handling, the source network registry, and shared types.
+- `src/state.ts` manages the application state.
+- `src/selectors.ts` contains derived wallet and network reads.
+- `src/autoLock.ts` contains the auto-lock timer.
 - `scripts/generate-network-registry.ts` validates and normalizes the network registry for the Rust build.
 - `src/render.ts` composes the current application state into the root UI and coordinates QR refreshes.
 - `src/views/` contains focused TypeScript HTML-template modules for screens, shell layout, shared UI fragments, locked-state UI, and toast markup.

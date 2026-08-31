@@ -18,7 +18,7 @@ export function splashView() {
 }
 
 export function onboardingView() {
-  const wizard = appState.setupWizard;
+  const wizard = appState.onboarding;
   const stepIndicator = (n: number, label: string) =>
     `<div class="flex items-center gap-2 ${wizard.step === n ? "text-white" : "text-slate-500"}">
       <span class="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${wizard.step === n ? "bg-white/20" : "bg-white/5"}">${n}</span>
@@ -88,7 +88,7 @@ function step1() {
 }
 
 function step2() {
-  const wizard = appState.setupWizard;
+  const wizard = appState.onboarding;
   const isImport = wizard.flow === "import";
   const passwordRevealLabel = wizard.walletPasswordVisible
     ? "Hide wallet passwords"
@@ -135,7 +135,7 @@ function step2() {
 }
 
 function step3() {
-  const wizard = appState.setupWizard;
+  const wizard = appState.onboarding;
   const isImport = wizard.flow === "import";
 
   if (isImport) {
@@ -144,7 +144,7 @@ function step3() {
         <p class="text-sm text-slate-300">Enter your recovery phrase exactly as you wrote it down.</p>
         <label class="block space-y-2">
           <span class="text-sm font-bold text-slate-300">Recovery phrase</span>
-          <textarea class="field min-h-28 resize-none" data-wizard-field="mnemonic" placeholder="12, 15, 18, 21, or 24 word phrase">${escapeHtml(wizard.mnemonic)}</textarea>
+          <textarea class="field min-h-28 resize-none" data-wizard-field="mnemonic" placeholder="12, 15, 18, 21, or 24 word phrase">${escapeHtml(wizard.recoveryPhrase)}</textarea>
         </label>
         <div class="flex gap-3 pt-2">
           <button class="btn-secondary flex-1" type="button" data-action="setup-prev">Back</button>
@@ -197,7 +197,7 @@ function step3() {
 }
 
 function step4() {
-  const wizard = appState.setupWizard;
+  const wizard = appState.onboarding;
 
   return `
     <div class="space-y-4">
@@ -223,6 +223,7 @@ function step4() {
 }
 
 function step5() {
+  const wizard = appState.onboarding;
   const autoLockOptions = [
     { label: "Off", value: "0" },
     { label: "5 minutes", value: "300" },
@@ -232,7 +233,7 @@ function step5() {
     { label: "1 hour", value: "3600" },
   ];
   const currentAutoLock =
-    appState.autoLockTimeoutSecs === null ? "0" : String(appState.autoLockTimeoutSecs);
+    wizard.autoLockTimeoutSecs === null ? "0" : String(wizard.autoLockTimeoutSecs);
 
   return `
     <div class="space-y-5">
@@ -243,7 +244,7 @@ function step5() {
             .map(
               (n) => `
             <label class="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm transition hover:bg-white/5 cursor-pointer">
-              <input type="checkbox" data-wizard-network="${n.id}" ${appState.enabledNetworks.includes(n.id) ? "checked" : ""} class="accent-white" />
+              <input type="checkbox" data-wizard-network="${n.id}" ${wizard.enabledNetworks.includes(n.id) ? "checked" : ""} class="accent-white" />
               <span class="font-bold">${n.nickname ?? n.name}</span>
             </label>
           `,
@@ -266,9 +267,9 @@ function step5() {
 }
 
 function step6() {
-  const wizard = appState.setupWizard;
+  const wizard = appState.onboarding;
   const isImport = wizard.flow === "import";
-  const recoveryPhrase = isImport ? wizard.mnemonic : wizard.generatedMnemonic;
+  const recoveryPhrase = wizard.recoveryPhrase;
   const recoveryPhraseDisplay = wizard.recoveryPhraseVisible
     ? recoveryPhrase
     : recoveryPhrase.replace(/\S/g, "•");
@@ -309,8 +310,8 @@ function step6() {
       </div>
       <div class="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
         <p><span class="font-bold text-white">Recovery phrase:</span> ${wizard.wordCount} words</p>
-        <p><span class="font-bold text-white">Networks:</span> ${appState.enabledNetworks.length} enabled</p>
-        <p><span class="font-bold text-white">Auto-lock:</span> ${appState.autoLockTimeoutSecs ? `${appState.autoLockTimeoutSecs / 60} min` : "Off"}</p>
+        <p><span class="font-bold text-white">Networks:</span> ${wizard.enabledNetworks.length} enabled</p>
+        <p><span class="font-bold text-white">Auto-lock:</span> ${wizard.autoLockTimeoutSecs ? `${wizard.autoLockTimeoutSecs / 60} min` : "Off"}</p>
       </div>
       <div class="flex gap-3 pt-2">
         <button class="btn-secondary flex-1" type="button" data-action="setup-prev">Back</button>

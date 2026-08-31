@@ -65,6 +65,8 @@ Keep `src/render.ts` limited to root UI composition, state-based screen selectio
 
 Keep event binding and command behavior in `src/events.ts` and `src/commands.ts`, not view modules. Preserve existing `data-action`, `data-view`, form field names, and escaping of dynamic content when moving or editing templates.
 
+Keep `src/state.ts` as the typed frontend application model. Group local state by responsibility, normalize every backend `WalletSession` through the shared session-to-wallet transition, and represent missing, locked, and unlocked wallets as explicit states instead of combining independent booleans and nullable fields. Keep derived reads in `src/selectors.ts`. Timer handles, request callbacks, and other controller implementation details must remain in their owning modules rather than frontend render state.
+
 ## Backend Module Layout
 
 Keep `src-tauri/src/main.rs` limited to Tauri application setup, managed state registration, module declarations, and `generate_handler!` wiring.

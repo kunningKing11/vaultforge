@@ -12,20 +12,22 @@ import settingsIcon from "../assets/icons/settings.svg?raw";
 import swapIcon from "../assets/icons/swap.svg?raw";
 import { escapeHtml, shortAddress } from "../format";
 import { networkById } from "../networks";
-import { addressKeyForNetwork, appState } from "../state";
+import { addressKeyForNetwork, unlockedWallet } from "../selectors";
+import { appState } from "../state";
 import { inlineIcon } from "./shared";
 import { walletView } from "./wallet";
 
 export function walletShell() {
-  if (!appState.session) return "";
+  const wallet = unlockedWallet();
+  if (!wallet) return "";
   const displayedAddressKeys = new Set<string>();
   let addressCards = "";
-  for (const networkId of appState.session.enabled_networks) {
+  for (const networkId of wallet.enabledNetworks) {
     const network = networkById(networkId);
     if (!network) continue;
 
     const addressKey = addressKeyForNetwork(network);
-    const address = appState.session.addresses?.[addressKey];
+    const address = wallet.addresses[addressKey];
     if (!address || displayedAddressKeys.has(addressKey)) continue;
 
     displayedAddressKeys.add(addressKey);
@@ -37,7 +39,7 @@ export function walletShell() {
       <aside class="glass hidden rounded-[2rem] p-5 lg:sticky lg:top-5 lg:h-[calc(100vh-2.5rem)] lg:flex lg:min-h-0 lg:flex-col">
         <div class="mb-8 flex shrink-0 items-center gap-3">
           <img class="h-12 w-12 rounded-2xl" src="${appLogoUrl}" alt="VaultForge App Logo" />
-          <div><p class="font-black">${escapeHtml(appState.session.wallet_name ?? "")}</p></div>
+          <div><p class="font-black">${escapeHtml(wallet.name)}</p></div>
         </div>
         <div class="sidebar-nav-shell min-h-0 flex-1">
           <nav id="sidebar-nav" class="sidebar-nav min-h-0 flex-1 space-y-2" data-sidebar-scroll tabindex="0" aria-label="Wallet sections">
@@ -62,20 +64,22 @@ export function walletShell() {
 }
 
 function topBar() {
-  if (!appState.session) return "";
-  const portfolioStatus = appState.portfolioRefreshing
-    ? "Updating balances…"
-    : appState.portfolioStale
-      ? "Portfolio data may be out of date. Refresh to retry."
-      : "";
+  const wallet = unlockedWallet();
+  if (!wallet) return "";
+  const portfolioStatus =
+    appState.portfolio.status === "refreshing"
+      ? "Updating balances…"
+      : appState.portfolio.status === "stale"
+        ? "Portfolio data may be out of date. Refresh to retry."
+        : "";
   return `
     <header class="glass flex flex-col gap-4 rounded-[2rem] p-5 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h1 class="mt-1 text-4xl font-black">${escapeHtml(appState.session.wallet_name ?? "")}</h1>
+        <h1 class="mt-1 text-4xl font-black">${escapeHtml(wallet.name)}</h1>
         ${portfolioStatus ? `<p class="mt-2 text-sm font-bold text-slate-400" role="status">${portfolioStatus}</p>` : ""}
       </div>
       <div class="flex flex-wrap gap-3">
-        <button class="btn-secondary inline-flex items-center gap-2" data-action="refresh" type="button" ${appState.portfolioRefreshing ? "disabled" : ""}>
+        <button class="btn-secondary inline-flex items-center gap-2" data-action="refresh" type="button" ${appState.portfolio.status === "refreshing" ? "disabled" : ""}>
           ${inlineIcon({ svg: refreshIcon })}
           Refresh
         </button>
@@ -93,7 +97,7 @@ function topBar() {
 }
 
 function navButton({ view, label, icon }: NavigationItem) {
-  return `<button class="nav-item inline-flex items-center gap-2 ${appState.currentView === view ? "active" : ""}" data-view="${view}" type="button">${inlineIcon({ svg: icon })}${label}</button>`;
+  return `<button class="nav-item inline-flex items-center gap-2 ${appState.navigation.currentView === view ? "active" : ""}" data-view="${view}" type="button">${inlineIcon({ svg: icon })}${label}</button>`;
 }
 
 function mobileNav() {
@@ -105,7 +109,7 @@ function mobileNav() {
 }
 
 function mobileNavButton({ view, label, icon }: NavigationItem) {
-  return `<button class="mobile-nav-item ${appState.currentView === view ? "active" : ""}" data-view="${view}" type="button" aria-label="${label}">${inlineIcon({ svg: icon, sizeClass: "mobile-nav-icon" })}<span>${label}</span></button>`;
+  return `<button class="mobile-nav-item ${appState.navigation.currentView === view ? "active" : ""}" data-view="${view}" type="button" aria-label="${label}">${inlineIcon({ svg: icon, sizeClass: "mobile-nav-icon" })}<span>${label}</span></button>`;
 }
 
 interface NavigationItem {

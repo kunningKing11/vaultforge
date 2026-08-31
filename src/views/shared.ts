@@ -1,6 +1,7 @@
 import { escapeHtml, formatWei, money, weiToNumber } from "../format";
 import { networkDisplayName, networks } from "../networks";
-import { appState, networkDetail } from "../state";
+import { networkLabel, unlockedWallet } from "../selectors";
+import { appState } from "../state";
 import type { Activity, Asset, NetworkId, QrResilienceOption } from "../types";
 import { walletPasswordStrength } from "../walletPassword";
 
@@ -31,9 +32,7 @@ export function inlineIcon({
 export function assetCard(asset: Asset) {
   const value = assetValue(asset);
   const positive = asset.change_24h >= 0;
-  const total = appState.session
-    ? appState.session.assets.reduce((sum, item) => sum + assetValue(item), 0)
-    : 0;
+  const total = unlockedWallet()?.assets.reduce((sum, item) => sum + assetValue(item), 0) ?? 0;
   const allocation = total ? (value / total) * 100 : 0;
   return `
     <article class="asset-card rounded-3xl border border-white/10 bg-white/[0.04] p-5">
@@ -61,7 +60,7 @@ export function emptyState(title: string, body: string) {
 
 export function activityRow(item: Activity) {
   return `
-    <article class="flex cursor-pointer flex-col gap-3 rounded-2xl border ${appState.selectedActivityId === item.id ? "theme-activity-selected" : "border-white/10 bg-white/[0.035]"} p-4 sm:flex-row sm:items-center sm:justify-between" data-action="select-activity" data-activity-id="${escapeHtml(item.id)}">
+    <article class="flex cursor-pointer flex-col gap-3 rounded-2xl border ${appState.navigation.selectedActivityId === item.id ? "theme-activity-selected" : "border-white/10 bg-white/[0.035]"} p-4 sm:flex-row sm:items-center sm:justify-between" data-action="select-activity" data-activity-id="${escapeHtml(item.id)}">
       <div><p class="font-black">${escapeHtml(item.title)}</p><p class="mt-1 text-sm font-bold text-slate-500">${escapeHtml(item.subtitle)} - ${new Date(item.timestamp).toLocaleString()}</p></div>
       <div class="text-left sm:text-right"><p class="font-mono font-bold">${escapeHtml(item.amount ?? "")}</p><p class="theme-text-accent text-xs uppercase tracking-[0.2em]">${escapeHtml(item.status)}</p></div>
     </article>
@@ -94,13 +93,20 @@ export function activityDetails(item: Activity | null) {
 }
 
 export function assetSelect(name: string, selected = "ETH", attributes = "") {
-  return `<select class="field" name="${escapeHtml(name)}" ${attributes}>${appState.session?.assets.map((asset) => `<option value="${escapeHtml(asset.symbol)}" ${asset.symbol === selected ? "selected" : ""}>${escapeHtml(asset.symbol)} - ${escapeHtml(asset.name)}</option>`).join("") ?? ""}</select>`;
+  return `<select class="field" name="${escapeHtml(name)}" ${attributes}>${
+    unlockedWallet()
+      ?.assets.map(
+        (asset) =>
+          `<option value="${escapeHtml(asset.symbol)}" ${asset.symbol === selected ? "selected" : ""}>${escapeHtml(asset.symbol)} - ${escapeHtml(asset.name)}</option>`,
+      )
+      .join("") ?? ""
+  }</select>`;
 }
 
 export function sendAssetSelect(selectedAssetId: string) {
   return `<select class="field" name="asset" data-send-asset>${
-    appState.session?.assets
-      .map((asset) => {
+    unlockedWallet()
+      ?.assets.map((asset) => {
         const assetId = `${asset.network}:${asset.token_address ?? "native"}`;
         return `<option value="${escapeHtml(assetId)}" data-symbol="${escapeHtml(asset.symbol)}" ${assetId === selectedAssetId ? "selected" : ""}>${escapeHtml(asset.symbol)} - ${escapeHtml(asset.name)} (${escapeHtml(networkDisplayName(asset.network))})</option>`;
       })
@@ -110,9 +116,9 @@ export function sendAssetSelect(selectedAssetId: string) {
 
 export function decimalsForAsset(symbol: string, network: NetworkId, fallback: number) {
   return (
-    appState.session?.assets.find((asset) => asset.symbol === symbol && asset.network === network)
+    unlockedWallet()?.assets.find((asset) => asset.symbol === symbol && asset.network === network)
       ?.decimals ??
-    appState.session?.assets.find((asset) => asset.symbol === symbol)?.decimals ??
+    unlockedWallet()?.assets.find((asset) => asset.symbol === symbol)?.decimals ??
     fallback
   );
 }
@@ -136,11 +142,11 @@ export function addressPlaceholder(symbol: string) {
 }
 
 export function receiveNetworkSelect() {
-  return `<select class="field" data-receive-network-id>${networks.map((network) => `<option value="${network.id}" ${network.id === appState.receiveNetworkId ? "selected" : ""}>${network.name} - ${networkDetail(network)}</option>`).join("")}</select>`;
+  return `<select class="field" data-receive-network-id>${networks.map((network) => `<option value="${network.id}" ${network.id === appState.receive.networkId ? "selected" : ""}>${network.name} - ${networkLabel(network)}</option>`).join("")}</select>`;
 }
 
 export function qrResilienceSelect() {
-  return `<select class="field" data-receive-resilience>${qrResilienceOptions.map((option) => `<option value="${option.value}" ${option.value === appState.qrResilience ? "selected" : ""}>${option.label} (${option.value}) - ${option.detail}</option>`).join("")}</select>`;
+  return `<select class="field" data-receive-resilience>${qrResilienceOptions.map((option) => `<option value="${option.value}" ${option.value === appState.receive.qrResilience ? "selected" : ""}>${option.label} (${option.value}) - ${option.detail}</option>`).join("")}</select>`;
 }
 
 export function detailRow(label: string, value: string) {

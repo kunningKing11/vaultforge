@@ -10,7 +10,7 @@ import { syncHorizontalScrollbars, syncVerticalScrollbar } from "./scrollbars";
 export function render() {
   appRoot.innerHTML = `
     <main class="noise min-h-screen px-4 py-5 text-slate-100 sm:px-6 lg:px-8">
-      ${appState.busy ? loadingBar() : ""}
+      ${appState.operation.busy ? loadingBar() : ""}
       ${renderBody()}
       ${lockedDeleteWalletModal()}
     </main>
@@ -26,9 +26,9 @@ export function render() {
 }
 
 function renderBody() {
-  if (!appState.session && appState.busy) return splashView();
-  if (!appState.session?.has_wallet) return onboardingView();
-  if (appState.session?.locked) return lockedWalletView();
+  if (appState.operation.busy && appState.wallet.status === "missing") return splashView();
+  if (appState.wallet.status === "missing") return onboardingView();
+  if (appState.wallet.status === "locked") return lockedWalletView();
   return walletShell();
 }
 

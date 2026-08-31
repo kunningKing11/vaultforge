@@ -1,18 +1,23 @@
 import { formatError, toWei } from "./format";
 import { networkById } from "./networks";
 import { render } from "./render";
-import { appState, addressForNetwork, selectedNetwork } from "./state";
+import { recordWalletActivity, stopAutoLock, syncAutoLock } from "./autoLock";
+import { addressForNetwork, selectedNetwork, unlockedWallet } from "./selectors";
+import { applyWalletSession, appState, resetOnboarding, resetSendFlow } from "./state";
 import { pushToast } from "./toasts";
 import type { RefreshWarning, SessionCommand, WalletRefreshResult, WalletSession } from "./types";
 import { walletApi } from "./walletApi";
 import { walletPasswordStrength } from "./walletPassword";
 
 const BIP39_WORD_COUNTS = new Set([12, 15, 18, 21, 24]);
+let lockedDeleteTimer: number | null = null;
+let pendingTxTimer: number | null = null;
+let portfolioRefreshId = 0;
 
 export async function setupWizard() {
-  const wizard = appState.setupWizard;
+  const wizard = appState.onboarding;
   const walletPassword = wizard.walletPassword;
-  const mnemonic = wizard.mnemonic.trim();
+  const mnemonic = wizard.recoveryPhrase.trim();
 
   if (wizard.flow === "import") {
     if (!mnemonic) {
@@ -25,8 +30,8 @@ export async function setupWizard() {
         name: wizard.name || undefined,
         mnemonic,
         walletPassword,
-        enabledNetworks: appState.enabledNetworks,
-        autoLockTimeoutSecs: appState.autoLockTimeoutSecs,
+        enabledNetworks: wizard.enabledNetworks,
+        autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
       }),
     );
     if (imported) clearSetupSecrets();
@@ -38,17 +43,16 @@ export async function setupWizard() {
       );
       return;
     }
-    if (!wizard.generatedMnemonic) {
-      wizard.generatedMnemonic = await walletApi.generateMnemonic(wizard.wordCount);
+    if (!wizard.recoveryPhrase) {
+      wizard.recoveryPhrase = await walletApi.generateMnemonic(wizard.wordCount);
     }
-    wizard.mnemonic = "";
     const created = await runRefreshCommand("create_wallet", () =>
       walletApi.createWallet({
         name: wizard.name || "Primary Wallet",
         walletPassword,
-        enabledNetworks: appState.enabledNetworks,
-        autoLockTimeoutSecs: appState.autoLockTimeoutSecs,
-        mnemonic: wizard.generatedMnemonic,
+        enabledNetworks: wizard.enabledNetworks,
+        autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
+        mnemonic: wizard.recoveryPhrase,
       }),
     );
     if (created) clearSetupSecrets();
@@ -57,11 +61,10 @@ export async function setupWizard() {
 
 // Drop temporary onboarding secrets after a successful create or import.
 function clearSetupSecrets() {
-  const wizard = appState.setupWizard;
+  const wizard = appState.onboarding;
   wizard.walletPassword = "";
   wizard.confirmWalletPassword = "";
-  wizard.mnemonic = "";
-  wizard.generatedMnemonic = "";
+  wizard.recoveryPhrase = "";
   wizard.recoveryPhraseVisible = false;
   wizard.acknowledgedBackup = false;
 }
@@ -93,7 +96,7 @@ export async function signTransaction(form: HTMLFormElement) {
     networkById(network)?.kind === "evm"
       ? left.toLowerCase() === right.toLowerCase()
       : left === right;
-  const asset = appState.session?.assets.find(
+  const asset = unlockedWallet()?.assets.find(
     (candidate) =>
       candidate.network === network &&
       (tokenAddress === null
@@ -106,7 +109,7 @@ export async function signTransaction(form: HTMLFormElement) {
     return;
   }
 
-  appState.sendDraft = {
+  appState.send.draft = {
     to: String(formData.get("to") || ""),
     symbol: asset.symbol,
     network,
@@ -114,67 +117,61 @@ export async function signTransaction(form: HTMLFormElement) {
     amount: String(formData.get("amount") || ""),
     note: String(formData.get("note") || ""),
   };
-  appState.busy = true;
+  appState.operation.busy = true;
   render();
   try {
     const decimals = asset.decimals;
-    appState.signedTransaction = await walletApi.signTransaction({
-      to: appState.sendDraft.to,
-      symbol: appState.sendDraft.symbol,
-      network: appState.sendDraft.network,
-      tokenAddress: appState.sendDraft.token_address,
-      amount: toWei(appState.sendDraft.amount || "0", decimals),
-      note: appState.sendDraft.note,
+    const signedTransaction = await walletApi.signTransaction({
+      to: appState.send.draft.to,
+      symbol: appState.send.draft.symbol,
+      network: appState.send.draft.network,
+      tokenAddress: appState.send.draft.token_address,
+      amount: toWei(appState.send.draft.amount || "0", decimals),
+      note: appState.send.draft.note,
     });
+    if (appState.wallet.status !== "unlocked") return;
+    appState.send.signedTransaction = signedTransaction;
     pushToast(successMessage("sign_transaction"), "success");
   } catch (error) {
     pushToast(formatError(error), "error");
   } finally {
-    appState.busy = false;
+    appState.operation.busy = false;
     render();
   }
 }
 
 export async function broadcastSignedTransaction() {
-  if (!appState.signedTransaction) return;
+  if (!appState.send.signedTransaction) return;
   if (!window.confirm("Broadcast this signed transaction to the chain RPC?")) return;
 
   const ok = await runCommand("send_transaction", () =>
-    walletApi.sendTransaction({ signed: appState.signedTransaction! }),
+    walletApi.sendTransaction({ signed: appState.send.signedTransaction! }),
   );
   if (ok) {
-    appState.signedTransaction = null;
-    appState.sendDraft = {
-      to: "",
-      symbol: "ETH",
-      network: "ethereum",
-      token_address: null,
-      amount: "",
-      note: "",
-    };
+    resetSendFlow();
     startPendingTxPolling();
+    render();
   }
 }
 
 function startPendingTxPolling() {
   stopPendingTxPolling();
-  appState.pendingTxTimer = window.setInterval(() => {
+  pendingTxTimer = window.setInterval(() => {
     void pollPendingTransactions();
   }, 10_000);
 }
 
 function stopPendingTxPolling() {
-  if (appState.pendingTxTimer !== null) {
-    window.clearInterval(appState.pendingTxTimer);
-    appState.pendingTxTimer = null;
+  if (pendingTxTimer !== null) {
+    window.clearInterval(pendingTxTimer);
+    pendingTxTimer = null;
   }
 }
 
 async function pollPendingTransactions() {
-  if (!appState.session) return;
-  const pending = appState.session.activity.filter(
-    (a) => a.status === "pending" && a.hash && a.network,
-  );
+  const wallet = unlockedWallet();
+  if (!wallet) return;
+  const pending = wallet.activity.filter((a) => a.status === "pending" && a.hash && a.network);
   if (pending.length === 0) {
     stopPendingTxPolling();
     return;
@@ -197,7 +194,7 @@ async function pollPendingTransactions() {
   }
 
   if (updated) {
-    appState.session = { ...appState.session, activity: [...appState.session.activity] };
+    wallet.activity = [...wallet.activity];
     render();
   }
 }
@@ -205,7 +202,7 @@ async function pollPendingTransactions() {
 export async function swapTokens(form: HTMLFormElement) {
   const formData = new FormData(form);
   const fromSymbol = String(formData.get("fromSymbol") || "ETH");
-  const asset = appState.session?.assets.find((a) => a.symbol === fromSymbol);
+  const asset = unlockedWallet()?.assets.find((a) => a.symbol === fromSymbol);
   const decimals = asset?.decimals ?? 18;
   await runCommand("swap_tokens", () =>
     walletApi.swapTokens({
@@ -218,21 +215,21 @@ export async function swapTokens(form: HTMLFormElement) {
 
 export async function lockWallet() {
   invalidatePortfolioRefresh();
-  appState.busy = true;
-  appState.unlockPasswordVisible = false;
+  appState.operation.busy = true;
+  appState.dialogs.unlockPasswordVisible = false;
   render();
   try {
-    stopAutoLockTimer();
+    stopAutoLock();
     await walletApi.lockWallet();
     stopPendingTxPolling();
-    appState.session = await walletApi.getWallet();
-    appState.currentView = "dashboard";
+    applyWalletSession(await walletApi.getWallet());
+    appState.navigation.currentView = "dashboard";
     pushToast(successMessage("lock_wallet"), "success");
   } catch (error) {
     pushToast(formatError(error), "error");
   } finally {
-    syncAutoLockTimerWithSession();
-    appState.busy = false;
+    syncAutoLock(appState.wallet, () => void lockWallet());
+    appState.operation.busy = false;
     render();
   }
 }
@@ -254,23 +251,17 @@ async function deleteStoredWallet() {
   const ok = await runCommand("clear_wallet", () => walletApi.clearWallet());
   if (ok) {
     stopPendingTxPolling();
-    appState.currentView = "dashboard";
-    appState.signedTransaction = null;
-    appState.sendDraft = {
-      to: "",
-      symbol: "ETH",
-      network: "ethereum",
-      token_address: null,
-      amount: "",
-      note: "",
-    };
+    appState.navigation.currentView = "dashboard";
+    resetOnboarding();
+    resetSendFlow();
+    render();
   }
 }
 
 export function showLockedDeleteWallet() {
   stopLockedDeleteTimer();
-  appState.lockedDeleteStep = "confirm";
-  appState.lockedDeleteRemaining = 10;
+  appState.dialogs.deleteWallet.step = "confirm";
+  appState.dialogs.deleteWallet.secondsRemaining = 10;
   render();
 }
 
@@ -281,19 +272,19 @@ export function cancelLockedDeleteWallet() {
 }
 
 function resetLockedDeleteWallet() {
-  appState.lockedDeleteStep = "idle";
-  appState.lockedDeleteRemaining = 10;
+  appState.dialogs.deleteWallet.step = "idle";
+  appState.dialogs.deleteWallet.secondsRemaining = 10;
 }
 
 export function startLockedDeleteWalletCountdown() {
   stopLockedDeleteTimer();
-  appState.lockedDeleteStep = "countdown";
-  appState.lockedDeleteRemaining = 10;
+  appState.dialogs.deleteWallet.step = "countdown";
+  appState.dialogs.deleteWallet.secondsRemaining = 10;
   render();
 
-  appState.lockedDeleteTimer = window.setInterval(() => {
-    appState.lockedDeleteRemaining -= 1;
-    if (appState.lockedDeleteRemaining <= 0) {
+  lockedDeleteTimer = window.setInterval(() => {
+    appState.dialogs.deleteWallet.secondsRemaining -= 1;
+    if (appState.dialogs.deleteWallet.secondsRemaining <= 0) {
       void deleteStoredWallet();
       return;
     }
@@ -302,89 +293,56 @@ export function startLockedDeleteWalletCountdown() {
 }
 
 function stopLockedDeleteTimer() {
-  if (appState.lockedDeleteTimer !== null) {
-    window.clearInterval(appState.lockedDeleteTimer);
-    appState.lockedDeleteTimer = null;
+  if (lockedDeleteTimer !== null) {
+    window.clearInterval(lockedDeleteTimer);
+    lockedDeleteTimer = null;
   }
-}
-
-function stopAutoLockTimer() {
-  if (appState.autoLockTimer !== null) {
-    window.clearTimeout(appState.autoLockTimer);
-    appState.autoLockTimer = null;
-  }
-}
-
-function startAutoLockTimer() {
-  stopAutoLockTimer();
-  const timeout = appState.session?.auto_lock_timeout_secs;
-  if (!timeout) return;
-  const check = () => {
-    const remaining = timeout * 1000 - (Date.now() - appState.lastActivity);
-    if (remaining <= 0) {
-      void lockWallet();
-      return;
-    }
-    appState.autoLockTimer = window.setTimeout(check, remaining);
-  };
-  check();
-}
-
-function syncAutoLockTimerWithSession() {
-  if (!appState.session || appState.session.locked) {
-    stopAutoLockTimer();
-    return;
-  }
-  startAutoLockTimer();
 }
 
 export async function refreshPortfolio() {
-  if (appState.portfolioRefreshing) return;
+  if (appState.portfolio.status === "refreshing") return;
+  appState.portfolio.status = "refreshing";
   await runRefreshCommand("refresh_portfolio", () => walletApi.refreshPortfolio());
 }
 
 async function refreshPortfolioInBackground() {
-  const refreshId = ++appState.portfolioRefreshId;
-  appState.portfolioRefreshing = true;
-  appState.portfolioStale = false;
+  const refreshId = ++portfolioRefreshId;
+  appState.portfolio.status = "refreshing";
   render();
   try {
     const result = await walletApi.refreshPortfolio();
-    if (refreshId !== appState.portfolioRefreshId || appState.session?.locked) return;
-    appState.session = result.session;
-    appState.portfolioStale = result.warnings.length > 0;
-    syncAutoLockTimerWithSession();
+    if (refreshId !== portfolioRefreshId || appState.wallet.status === "locked") return;
+    applyWalletSession(result.session);
+    appState.portfolio.status = result.warnings.length > 0 ? "stale" : "idle";
+    syncAutoLock(appState.wallet, () => void lockWallet());
     for (const warning of result.warnings) {
       pushToast(refreshWarningMessage(warning), "warning");
     }
   } catch {
     // The cached portfolio remains visible until the user requests another refresh.
-    if (refreshId === appState.portfolioRefreshId) appState.portfolioStale = true;
+    if (refreshId === portfolioRefreshId) appState.portfolio.status = "stale";
   } finally {
-    if (refreshId === appState.portfolioRefreshId) {
-      appState.portfolioRefreshing = false;
+    if (refreshId === portfolioRefreshId) {
+      if (appState.portfolio.status === "refreshing") appState.portfolio.status = "idle";
       render();
     }
   }
 }
 
 function invalidatePortfolioRefresh() {
-  appState.portfolioRefreshId += 1;
-  appState.portfolioRefreshing = false;
-  appState.portfolioStale = false;
+  portfolioRefreshId += 1;
+  appState.portfolio.status = "idle";
 }
 
 async function runCommand(command: SessionCommand, action: () => Promise<WalletSession | null>) {
-  appState.busy = true;
+  appState.operation.busy = true;
   render();
   try {
     const result = await action();
     if (result) {
-      appState.session = result;
-      if (command === "unlock_wallet") {
-        appState.lastActivity = Date.now();
-      }
-      syncAutoLockTimerWithSession();
+      applyWalletSession(result);
+      if (command === "unlock_wallet") recordWalletActivity();
+      syncAutoLock(appState.wallet, () => void lockWallet());
     }
     pushToast(successMessage(command), "success");
     return true;
@@ -392,7 +350,7 @@ async function runCommand(command: SessionCommand, action: () => Promise<WalletS
     pushToast(formatError(error), "error");
     return false;
   } finally {
-    appState.busy = false;
+    appState.operation.busy = false;
     render();
   }
 }
@@ -401,27 +359,29 @@ async function runRefreshCommand(
   command: SessionCommand,
   action: () => Promise<WalletRefreshResult>,
 ) {
-  appState.busy = true;
+  appState.operation.busy = true;
   render();
   try {
     const result = await action();
-    appState.session = result.session;
-    if (command === "refresh_portfolio") appState.portfolioStale = result.warnings.length > 0;
-    if (command === "unlock_wallet") {
-      appState.lastActivity = Date.now();
+    applyWalletSession(result.session);
+    if (["create_wallet", "import_wallet", "unlock_wallet"].includes(command)) {
+      recordWalletActivity();
     }
-    syncAutoLockTimerWithSession();
+    if (command === "refresh_portfolio") {
+      appState.portfolio.status = result.warnings.length > 0 ? "stale" : "idle";
+    }
+    syncAutoLock(appState.wallet, () => void lockWallet());
     for (const warning of result.warnings) {
       pushToast(refreshWarningMessage(warning), "warning");
     }
     pushToast(successMessage(command), "success");
     return true;
   } catch (error) {
-    if (command === "refresh_portfolio") appState.portfolioStale = true;
+    if (command === "refresh_portfolio") appState.portfolio.status = "stale";
     pushToast(formatError(error), "error");
     return false;
   } finally {
-    appState.busy = false;
+    appState.operation.busy = false;
     render();
   }
 }
@@ -437,11 +397,11 @@ export async function copyReceiveAddress() {
 }
 
 export async function copyQrPayload() {
-  if (!appState.qrSvg) {
+  if (!appState.receive.qrSvg) {
     pushToast("QR code is still generating.", "error");
     return;
   }
-  await copyText(appState.qrSvg, "QR SVG copied.");
+  await copyText(appState.receive.qrSvg, "QR SVG copied.");
 }
 
 export async function copyText(value: string, message: string) {

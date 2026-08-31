@@ -4,12 +4,13 @@ import { escapeHtml, formatWei, money, shortAddress } from "../format";
 import { networkDisplayName } from "../networks";
 import {
   addressForNetwork,
-  appState,
-  networkDetail,
+  networkLabel,
   receivePayload,
   selectedActivity,
   selectedNetwork,
-} from "../state";
+  unlockedWallet,
+} from "../selectors";
+import { appState } from "../state";
 import type { SignedTransaction } from "../types";
 import {
   activityDetails,
@@ -29,29 +30,30 @@ import {
 const MIN_VISIBLE_ASSET_VALUE_USD = 1;
 
 function visibleAssets() {
-  return (appState.session?.assets ?? []).filter(
+  return (unlockedWallet()?.assets ?? []).filter(
     (asset) => asset.price_usd <= 0 || assetValue(asset) >= MIN_VISIBLE_ASSET_VALUE_USD,
   );
 }
 
 export function walletView() {
-  if (appState.currentView === "send") return sendView();
-  if (appState.currentView === "receive") return receiveView();
-  if (appState.currentView === "swap") return swapView();
-  if (appState.currentView === "assets") return assetsView();
-  if (appState.currentView === "activity") return activityView();
-  if (appState.currentView === "settings") return settingsView();
+  if (appState.navigation.currentView === "send") return sendView();
+  if (appState.navigation.currentView === "receive") return receiveView();
+  if (appState.navigation.currentView === "swap") return swapView();
+  if (appState.navigation.currentView === "assets") return assetsView();
+  if (appState.navigation.currentView === "activity") return activityView();
+  if (appState.navigation.currentView === "settings") return settingsView();
   return dashboardView();
 }
 
 function dashboardView() {
-  if (!appState.session) return "";
+  const wallet = unlockedWallet();
+  if (!wallet) return "";
   const topAssets = [...visibleAssets()]
     .sort((left, right) => assetValue(right) - assetValue(left))
     .map(assetCard)
     .join("");
   const recent =
-    appState.session.activity.slice(0, 5).map(activityRow).join("") ||
+    wallet.activity.slice(0, 5).map(activityRow).join("") ||
     emptyState(
       "No recent activity",
       "Sign, send, swap, or change networks to build a local activity timeline.",
@@ -71,7 +73,7 @@ function dashboardView() {
                 <p class="text-sm font-bold text-slate-400">Weighted 24h change</p>
                 <p class="max-w-full break-words text-2xl font-black leading-none sm:text-3xl ${change >= 0 ? "text-emerald-300" : "text-rose-300"}">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</p>
                 <p class="max-w-full break-words text-sm font-bold text-slate-400">Total value</p>
-                <p class="max-w-full break-words text-sm font-bold text-slate-400">${totalValue.toFixed(2)} ${appState.currency}</p>
+                <p class="max-w-full break-words text-sm font-bold text-slate-400">${totalValue.toFixed(2)} ${appState.preferences.currency}</p>
               </div>
             </div>
           </div>
@@ -95,9 +97,10 @@ function dashboardView() {
 }
 
 function sendView() {
-  if (appState.signedTransaction) return signedTransactionView(appState.signedTransaction);
-  const selectedSymbol = appState.sendDraft.symbol || "ETH";
-  const selectedAssetId = `${appState.sendDraft.network || "ethereum"}:${appState.sendDraft.token_address ?? "native"}`;
+  if (appState.send.signedTransaction)
+    return signedTransactionView(appState.send.signedTransaction);
+  const selectedSymbol = appState.send.draft.symbol || "ETH";
+  const selectedAssetId = `${appState.send.draft.network || "ethereum"}:${appState.send.draft.token_address ?? "native"}`;
 
   return `
     <section class="glass max-w-3xl rounded-[2rem] p-6">
@@ -105,12 +108,12 @@ function sendView() {
       <h2 class="mt-2 text-3xl font-black">Send crypto</h2>
       <p class="mt-3 text-sm font-bold leading-6 text-slate-400">Transactions are signed locally before being broadcast to the chain RPC. Review the signature before funds leave your balance.</p>
       <form data-action="sign-transaction" class="mt-6 grid gap-4">
-        <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Recipient address</span><input class="field" name="to" data-recipient-address placeholder="${addressPlaceholder(selectedSymbol)}" value="${escapeHtml(appState.sendDraft.to)}" required /></label>
+        <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Recipient address</span><input class="field" name="to" data-recipient-address placeholder="${addressPlaceholder(selectedSymbol)}" value="${escapeHtml(appState.send.draft.to)}" required /></label>
         <div class="grid gap-4 sm:grid-cols-2">
           <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Asset</span>${sendAssetSelect(selectedAssetId)}</label>
-          <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" value="${escapeHtml(appState.sendDraft.amount)}" required /></label>
+          <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" value="${escapeHtml(appState.send.draft.amount)}" required /></label>
         </div>
-        <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Note</span><input class="field" name="note" placeholder="Optional transaction memo" value="${escapeHtml(appState.sendDraft.note)}" /></label>
+        <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Note</span><input class="field" name="note" placeholder="Optional transaction memo" value="${escapeHtml(appState.send.draft.note)}" /></label>
         <button class="btn-primary justify-self-start" type="submit">Sign transaction</button>
       </form>
     </section>
@@ -119,12 +122,7 @@ function sendView() {
 
 function signedTransactionView(signed: SignedTransaction) {
   const feeDecimals = decimalsForAsset(signed.feeSymbol, signed.network, signed.decimals);
-  const chainReferenceLabel =
-    signed.network === "bitcoin"
-      ? "Input model"
-      : signed.network === "solana"
-        ? "Blockhash"
-        : "Nonce";
+  const chainReferenceLabel = transactionReferenceLabel(signed.network);
   return `
     <section class="glass max-w-4xl rounded-[2rem] p-6">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -164,7 +162,7 @@ function receiveView() {
   const address = addressForNetwork(network);
   const payload = receivePayload();
   const qrContent = payload
-    ? appState.qrSvg ||
+    ? appState.receive.qrSvg ||
       `<span class="text-sm font-bold font-bold text-slate-500">Generating QR...</span>`
     : `<span class="text-sm font-bold font-bold text-slate-500">Receive is not available for this network yet.</span>`;
   const qrActionsDisabled = payload ? "" : "disabled";
@@ -185,7 +183,7 @@ function receiveView() {
         <div class="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-left">
           <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <p class="font-black">${escapeHtml(network.name)} receive payload</p>
-            <span class="text-sm font-bold text-slate-400">${escapeHtml(networkDetail(network))}</span>
+            <span class="text-sm font-bold text-slate-400">${escapeHtml(networkLabel(network))}</span>
           </div>
           <p class="mt-3 break-all font-mono text-xs text-slate-400">${escapeHtml(payload)}</p>
         </div>
@@ -225,11 +223,12 @@ function assetsView() {
 
 function activityView() {
   const selected = selectedActivity();
+  const activity = unlockedWallet()?.activity ?? [];
   return `
     <div class="grid gap-5 xl:grid-cols-[1fr_0.85fr]">
       <section class="glass rounded-[2rem] p-6">
         <h2 class="text-2xl font-black">Activity</h2>
-        <div class="mt-5 space-y-3">${appState.session?.activity.map(activityRow).join("") || emptyState("No activity yet", "Your signed sends, swaps, and network changes will appear here.")}</div>
+        <div class="mt-5 space-y-3">${activity.map(activityRow).join("") || emptyState("No activity yet", "Your signed sends, swaps, and network changes will appear here.")}</div>
       </section>
       ${activityDetails(selected)}
     </div>
@@ -251,7 +250,7 @@ function settingsView() {
           ${securityTile("Storage", "AES-GCM encrypted")}
           ${securityTile("Key derivation", "Argon2 wallet password key")}
           ${securityTile("Mode", "ECDSA signing (EIP-1559)")}
-          ${securityTile("Lock state", appState.session?.locked ? "Locked" : "Unlocked")}
+          ${securityTile("Lock state", appState.wallet.status === "locked" ? "Locked" : "Unlocked")}
         </div>
         <div class="mt-6 rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4">
           <h3 class="font-black text-rose-100">Danger zone</h3>
@@ -290,8 +289,15 @@ function securityTile(label: string, value: string) {
 }
 
 function portfolioChange() {
-  const assets = appState.session?.assets ?? [];
+  const assets = unlockedWallet()?.assets ?? [];
   const total = assets.reduce((sum, asset) => sum + assetValue(asset), 0);
   if (!total) return 0;
   return assets.reduce((sum, asset) => sum + asset.change_24h * (assetValue(asset) / total), 0);
+}
+
+function transactionReferenceLabel(network: SignedTransaction["network"]): string {
+  if (network === "bitcoin") return "Transaction model";
+  if (network === "solana") return "Recent blockhash";
+  if (network === "tron") return "Resource model";
+  return "Nonce";
 }

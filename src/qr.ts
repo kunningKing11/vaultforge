@@ -1,39 +1,44 @@
 import QRCode from "qrcode";
 import { pushToast } from "./toasts";
 import { formatError, shortAddress } from "./format";
-import { addressForNetwork, appState, receivePayload, selectedNetwork } from "./state";
+import { addressForNetwork, receivePayload, selectedNetwork } from "./selectors";
+import { appState } from "./state";
 import { getSelectedTheme, themes } from "./theme";
+
+let qrKey = "";
+let qrGeneratingKey = "";
 
 export async function ensureReceiveQr(): Promise<boolean> {
   const theme = themes[getSelectedTheme()];
 
-  if (appState.currentView !== "receive" || appState.session?.locked) return false;
+  if (appState.navigation.currentView !== "receive" || appState.wallet.status !== "unlocked")
+    return false;
 
   const payload = receivePayload();
   if (!payload) {
-    if (appState.qrSvg || appState.qrKey || appState.qrGeneratingKey) {
+    if (appState.receive.qrSvg || qrKey || qrGeneratingKey) {
       resetQr();
       return true;
     }
     return false;
   }
 
-  const nextQrKey = `${payload}:${appState.qrResilience}`;
-  if ((appState.qrKey === nextQrKey && appState.qrSvg) || appState.qrGeneratingKey === nextQrKey)
+  const nextQrKey = `${payload}:${appState.receive.qrResilience}`;
+  if ((qrKey === nextQrKey && appState.receive.qrSvg) || qrGeneratingKey === nextQrKey)
     return false;
 
-  appState.qrGeneratingKey = nextQrKey;
+  qrGeneratingKey = nextQrKey;
   try {
     const svg = await QRCode.toString(payload, {
       type: "svg",
       margin: 2,
-      errorCorrectionLevel: appState.qrResilience,
+      errorCorrectionLevel: appState.receive.qrResilience,
       color: { dark: theme.colors.qrDark, light: theme.colors.qrLight },
     });
 
-    if (appState.qrGeneratingKey === nextQrKey) {
-      appState.qrKey = nextQrKey;
-      appState.qrSvg = svg;
+    if (qrGeneratingKey === nextQrKey && appState.wallet.status === "unlocked") {
+      qrKey = nextQrKey;
+      appState.receive.qrSvg = svg;
       return true;
     }
     return false;
@@ -42,22 +47,23 @@ export async function ensureReceiveQr(): Promise<boolean> {
     resetQr();
     return true;
   } finally {
-    if (appState.qrGeneratingKey === nextQrKey) appState.qrGeneratingKey = "";
+    if (qrGeneratingKey === nextQrKey) qrGeneratingKey = "";
   }
 }
 
 export function resetQr(): void {
-  appState.qrSvg = "";
-  appState.qrKey = "";
+  appState.receive.qrSvg = "";
+  qrKey = "";
+  qrGeneratingKey = "";
 }
 
 export function downloadQrSvg(): void {
-  if (!appState.qrSvg) return;
+  if (!appState.receive.qrSvg) return;
 
   const net = selectedNetwork();
   const address = addressForNetwork(net);
   if (!address) return;
-  const blob = new Blob([appState.qrSvg], { type: "image/svg+xml;charset=utf-8" });
+  const blob = new Blob([appState.receive.qrSvg], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

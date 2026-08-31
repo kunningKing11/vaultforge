@@ -18,10 +18,11 @@ import {
 } from "./commands";
 import { formatError } from "./format";
 import { normalizeNetworkId } from "./networks";
-import { downloadQrSvg } from "./qr";
+import { downloadQrSvg, resetQr } from "./qr";
 import { render, updateRecipientPlaceholder } from "./render";
 import { installScrollbarBehavior } from "./scrollbars";
-import { appState } from "./state";
+import { recordWalletActivity, syncAutoLock } from "./autoLock";
+import { applyWalletSession, appState, selectSetupFlow } from "./state";
 import { applyTheme, ThemeName, themes } from "./theme";
 import { pushToast } from "./toasts";
 import type { QrResilience, View } from "./types";
@@ -35,7 +36,7 @@ export function bindEvents() {
     const view = target.closest<HTMLElement>("[data-view]")?.dataset.view as View | undefined;
 
     if (view) {
-      appState.currentView = view;
+      appState.navigation.currentView = view;
       render();
       return;
     }
@@ -57,11 +58,11 @@ export function bindEvents() {
     if (action === "download-qr") downloadQrSvg();
     if (action === "broadcast-signed-transaction") void broadcastSignedTransaction();
     if (action === "edit-signed-transaction") {
-      appState.signedTransaction = null;
+      appState.send.signedTransaction = null;
       render();
     }
     if (action === "select-activity") {
-      appState.selectedActivityId =
+      appState.navigation.selectedActivityId =
         target.closest<HTMLElement>("[data-activity-id]")?.dataset.activityId ?? "";
       render();
     }
@@ -73,31 +74,29 @@ export function bindEvents() {
     if (action === "setup-prev") wizardPrev();
     if (action === "setup-next") wizardNext();
     if (action === "setup-create") {
-      appState.setupWizard.flow = "create";
-      appState.setupWizard.step = 2;
+      selectSetupFlow("create");
       render();
     }
     if (action === "setup-import") {
-      appState.setupWizard.flow = "import";
-      appState.setupWizard.step = 2;
+      selectSetupFlow("import");
       render();
     }
     if (action === "toggle-wallet-password-visibility") {
-      appState.setupWizard.walletPasswordVisible = !appState.setupWizard.walletPasswordVisible;
+      appState.onboarding.walletPasswordVisible = !appState.onboarding.walletPasswordVisible;
       render();
     }
     if (action === "toggle-recovery-phrase") {
-      appState.setupWizard.recoveryPhraseVisible = !appState.setupWizard.recoveryPhraseVisible;
+      appState.onboarding.recoveryPhraseVisible = !appState.onboarding.recoveryPhraseVisible;
       render();
     }
     if (action === "toggle-unlock-password-visibility") {
-      appState.unlockPasswordVisible = !appState.unlockPasswordVisible;
+      appState.dialogs.unlockPasswordVisible = !appState.dialogs.unlockPasswordVisible;
       render();
     }
     if (action === "setup-wordcount") {
       const wc = Number(target.closest<HTMLElement>("[data-wordcount]")?.dataset.wordcount);
       if (wc) {
-        appState.setupWizard.wordCount = wc as 12 | 15 | 18 | 21 | 24;
+        appState.onboarding.wordCount = wc as 12 | 15 | 18 | 21 | 24;
         render();
       }
     }
@@ -105,7 +104,7 @@ export function bindEvents() {
       const id = target.closest<HTMLElement>("[data-theme]")?.dataset.theme;
 
       if (id && id in themes) {
-        appState.setupWizard.appearance = id as ThemeName;
+        appState.onboarding.appearance = id as ThemeName;
         applyTheme(id as ThemeName);
         render();
       }
@@ -127,16 +126,14 @@ export function bindEvents() {
     const target = event.target as HTMLSelectElement;
 
     if (target.matches("[data-receive-network-id]")) {
-      appState.receiveNetworkId = normalizeNetworkId(target.value);
-      appState.qrSvg = "";
-      appState.qrKey = "";
+      appState.receive.networkId = normalizeNetworkId(target.value);
+      resetQr();
       render();
     }
 
     if (target.matches("[data-receive-resilience]")) {
-      appState.qrResilience = target.value as QrResilience;
-      appState.qrSvg = "";
-      appState.qrKey = "";
+      appState.receive.qrResilience = target.value as QrResilience;
+      resetQr();
       render();
     }
 
@@ -151,12 +148,12 @@ export function bindEvents() {
 
     if (target.matches("[data-wizard-field]")) {
       const field = target.dataset.wizardField;
-      if (field === "name") appState.setupWizard.name = target.value;
-      if (field === "walletPassword") appState.setupWizard.walletPassword = target.value;
+      if (field === "name") appState.onboarding.name = target.value;
+      if (field === "walletPassword") appState.onboarding.walletPassword = target.value;
       if (field === "confirmWalletPassword")
-        appState.setupWizard.confirmWalletPassword = target.value;
-      if (field === "mnemonic") appState.setupWizard.mnemonic = target.value;
-      if (field === "acknowledgedBackup") appState.setupWizard.acknowledgedBackup = target.checked;
+        appState.onboarding.confirmWalletPassword = target.value;
+      if (field === "mnemonic") appState.onboarding.recoveryPhrase = target.value;
+      if (field === "acknowledgedBackup") appState.onboarding.acknowledgedBackup = target.checked;
     }
   });
 
@@ -164,25 +161,27 @@ export function bindEvents() {
     const target = event.target as HTMLInputElement;
 
     if (target.matches("[data-wizard-network]")) {
-      const id = target.dataset.wizardNetwork!;
+      const id = normalizeNetworkId(target.dataset.wizardNetwork ?? "");
       if (target.checked) {
-        if (!appState.enabledNetworks.includes(id)) {
-          appState.enabledNetworks.push(id);
+        if (!appState.onboarding.enabledNetworks.includes(id)) {
+          appState.onboarding.enabledNetworks.push(id);
         }
       } else {
-        appState.enabledNetworks = appState.enabledNetworks.filter((n) => n !== id);
+        appState.onboarding.enabledNetworks = appState.onboarding.enabledNetworks.filter(
+          (network) => network !== id,
+        );
       }
     }
 
     if (target.matches("[data-wizard-autolock]")) {
       const val = target.value;
-      appState.autoLockTimeoutSecs = val === "0" ? null : Number(val);
+      appState.onboarding.autoLockTimeoutSecs = val === "0" ? null : Number(val);
     }
 
     if (target.matches("[data-wizard-field='customWordCount']")) {
       const val = Number(target.value);
       if (val) {
-        appState.setupWizard.wordCount = val as 12 | 15 | 18 | 21 | 24;
+        appState.onboarding.wordCount = val as 12 | 15 | 18 | 21 | 24;
         render();
       }
     }
@@ -204,7 +203,7 @@ export function bindEvents() {
 }
 
 async function wizardNext() {
-  const wizard = appState.setupWizard;
+  const wizard = appState.onboarding;
   const walletPassword = wizard.walletPassword;
 
   if (wizard.step === 2) {
@@ -224,7 +223,7 @@ async function wizardNext() {
     }
   }
 
-  if (wizard.step === 5 && appState.enabledNetworks.length === 0) {
+  if (wizard.step === 5 && wizard.enabledNetworks.length === 0) {
     pushToast("Enable at least one network.", "error");
     return;
   }
@@ -234,9 +233,9 @@ async function wizardNext() {
 
     if (wizard.step === 6) wizard.recoveryPhraseVisible = false;
 
-    if (wizard.step === 6 && wizard.flow === "create" && !wizard.generatedMnemonic) {
+    if (wizard.step === 6 && wizard.flow === "create" && !wizard.recoveryPhrase) {
       try {
-        wizard.generatedMnemonic = await walletApi.generateMnemonic(wizard.wordCount);
+        wizard.recoveryPhrase = await walletApi.generateMnemonic(wizard.wordCount);
       } catch {
         pushToast("Failed to generate recovery phrase.", "error");
         wizard.step--;
@@ -251,35 +250,9 @@ async function wizardNext() {
 }
 
 function wizardPrev() {
-  if (appState.setupWizard.step > 1) {
-    appState.setupWizard.step--;
+  if (appState.onboarding.step > 1) {
+    appState.onboarding.step--;
     render();
-  }
-}
-
-function startAutoLockTimer() {
-  stopAutoLockTimer();
-  const timeout = appState.session?.auto_lock_timeout_secs;
-  if (!timeout) return;
-  appState.autoLockTimer = window.setInterval(() => {
-    if (Date.now() - appState.lastActivity > timeout * 1000) {
-      void lockWallet();
-    }
-  }, 30_000);
-}
-
-function syncAutoLockTimerWithSession() {
-  if (!appState.session || appState.session.locked) {
-    stopAutoLockTimer();
-    return;
-  }
-  startAutoLockTimer();
-}
-
-function stopAutoLockTimer() {
-  if (appState.autoLockTimer !== null) {
-    window.clearInterval(appState.autoLockTimer);
-    appState.autoLockTimer = null;
   }
 }
 
@@ -287,11 +260,12 @@ const MINIMUM_SPLASH_DURATION_MS = 650;
 
 async function loadSession() {
   const splashStartedAt = performance.now();
-  appState.busy = true;
+  appState.operation.busy = true;
   render();
   try {
-    appState.session = await walletApi.getWallet();
-    syncAutoLockTimerWithSession();
+    applyWalletSession(await walletApi.getWallet());
+    recordWalletActivity();
+    syncAutoLock(appState.wallet, () => void lockWallet());
   } catch (error) {
     pushToast(formatError(error), "error");
   } finally {
@@ -299,7 +273,7 @@ async function loadSession() {
     if (remainingSplashTime > 0) {
       await new Promise<void>((resolve) => window.setTimeout(resolve, remainingSplashTime));
     }
-    appState.busy = false;
+    appState.operation.busy = false;
     render();
   }
 }
@@ -308,12 +282,12 @@ export async function boot() {
   await loadSession();
   bindEvents();
   installScrollbarBehavior();
-  syncAutoLockTimerWithSession();
+  syncAutoLock(appState.wallet, () => void lockWallet());
 
   document.addEventListener("click", () => {
-    appState.lastActivity = Date.now();
+    recordWalletActivity();
   });
   document.addEventListener("keydown", () => {
-    appState.lastActivity = Date.now();
+    recordWalletActivity();
   });
 }

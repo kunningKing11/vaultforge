@@ -4,11 +4,11 @@ import { inlineIcon } from "./shared";
 import { appState } from "../state";
 
 export function lockedWalletView() {
-  const revealLabel = appState.unlockPasswordVisible
+  const revealLabel = appState.dialogs.unlockPasswordVisible
     ? "Hide wallet password"
     : "Show wallet password";
 
-  const passwordIcon = appState.unlockPasswordVisible ? eyeOffIcon : eyeIcon;
+  const passwordIcon = appState.dialogs.unlockPasswordVisible ? eyeOffIcon : eyeIcon;
 
   return `
     <section class="mx-auto flex min-h-[88vh] max-w-xl items-center justify-center">
@@ -21,8 +21,8 @@ export function lockedWalletView() {
           <label class="block space-y-2">
             <span class="text-sm font-bold font-bold text-slate-300">Wallet password</span>
             <div class="relative">
-              <input class="field pr-12" name="walletPassword" type="${appState.unlockPasswordVisible ? "text" : "password"}" required />
-              <button class="absolute right-3 top-1/2 -translate-y-1/2" type="button" data-action="toggle-unlock-password-visibility" aria-label="${revealLabel}" aria-pressed="${appState.unlockPasswordVisible}">
+              <input class="field pr-12" name="walletPassword" type="${appState.dialogs.unlockPasswordVisible ? "text" : "password"}" required />
+              <button class="absolute right-3 top-1/2 -translate-y-1/2" type="button" data-action="toggle-unlock-password-visibility" aria-label="${revealLabel}" aria-pressed="${appState.dialogs.unlockPasswordVisible}">
                 ${inlineIcon({ svg: passwordIcon })}
               </button>
             </div>
@@ -39,9 +39,10 @@ export function lockedWalletView() {
 }
 
 export function lockedDeleteWalletModal() {
-  if (!appState.session?.locked || appState.lockedDeleteStep === "idle") return "";
+  if (appState.wallet.status !== "locked" || appState.dialogs.deleteWallet.step === "idle")
+    return "";
 
-  if (appState.lockedDeleteStep === "confirm") {
+  if (appState.dialogs.deleteWallet.step === "confirm") {
     return `
       <div class="destructive-modal fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-md">
         <section class="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-slate-950/95 p-6 text-left text-slate-100 shadow-[0_30px_120px_rgba(2,6,23,0.72)] sm:p-8">
@@ -63,7 +64,7 @@ export function lockedDeleteWalletModal() {
       <section class="w-full max-w-md rounded-[2rem] border border-rose-400/50 bg-rose-950/90 p-6 text-center text-rose-100 shadow-[0_30px_120px_rgba(127,29,29,0.55)] sm:p-8">
         <p class="text-xs font-black uppercase tracking-[0.3em] text-rose-300">Deletion Pending</p>
         <h2 class="mt-3 text-2xl font-black text-rose-50">Deleting wallet files in</h2>
-        <p class="mt-5 text-7xl font-black text-rose-50">${appState.lockedDeleteRemaining}</p>
+        <p class="mt-5 text-7xl font-black text-rose-50">${appState.dialogs.deleteWallet.secondsRemaining}</p>
         <p class="mt-5 text-sm font-bold leading-6 text-rose-100/80">This will permanently remove the encrypted local wallet from this device.</p>
         <button class="btn-secondary mt-6 w-full" data-action="cancel-locked-delete-wallet" type="button">Cancel</button>
       </section>

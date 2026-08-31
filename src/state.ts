@@ -1,7 +1,7 @@
 import type { ThemeName } from "./theme";
 import type {
   Activity,
-  Network,
+  Asset,
   NetworkId,
   QrResilience,
   SendDraft,
@@ -11,83 +11,186 @@ import type {
 } from "./types";
 import { DEFAULT_NETWORK_ID, networks } from "./networks";
 
-export const appState = {
-  session: null as WalletSession | null,
-  currentView: "dashboard" as View,
-  receiveNetworkId: DEFAULT_NETWORK_ID as NetworkId,
-  enabledNetworks: networks.map((n) => n.id) as string[],
-  currency: "USD",
-  qrSvg: "",
-  qrKey: "",
-  qrGeneratingKey: "",
-  signedTransaction: null as SignedTransaction | null,
-  sendDraft: {
+export type WalletState =
+  | { status: "missing" }
+  | { status: "locked"; name: string }
+  | {
+      status: "unlocked";
+      name: string;
+      addresses: Record<string, string>;
+      assets: Asset[];
+      activity: Activity[];
+      enabledNetworks: NetworkId[];
+      autoLockTimeoutSecs: number | null;
+    };
+
+type SetupWizardState = {
+  step: number;
+  flow: "create" | "import";
+  name: string;
+  walletPassword: string;
+  confirmWalletPassword: string;
+  walletPasswordVisible: boolean;
+  recoveryPhrase: string;
+  recoveryPhraseVisible: boolean;
+  acknowledgedBackup: boolean;
+  wordCount: 12 | 15 | 18 | 21 | 24;
+  appearance: ThemeName;
+  enabledNetworks: NetworkId[];
+  autoLockTimeoutSecs: number | null;
+};
+
+type AppState = {
+  wallet: WalletState;
+  navigation: {
+    currentView: View;
+    selectedActivityId: string;
+  };
+  onboarding: SetupWizardState;
+  send: {
+    draft: SendDraft;
+    signedTransaction: SignedTransaction | null;
+  };
+  receive: {
+    networkId: NetworkId;
+    qrResilience: QrResilience;
+    qrSvg: string;
+  };
+  portfolio: {
+    status: "idle" | "refreshing" | "stale";
+  };
+  dialogs: {
+    unlockPasswordVisible: boolean;
+    deleteWallet: {
+      step: "idle" | "confirm" | "countdown";
+      secondsRemaining: number;
+    };
+  };
+  operation: {
+    busy: boolean;
+  };
+  preferences: {
+    currency: string;
+  };
+};
+
+export function emptySendDraft(): SendDraft {
+  return {
     to: "",
     symbol: "ETH",
     network: "ethereum",
     token_address: null,
     amount: "",
     note: "",
-  } as SendDraft,
-  selectedActivityId: "",
-  busy: false,
-  portfolioRefreshing: false,
-  portfolioStale: false,
-  portfolioRefreshId: 0,
-  unlockPasswordVisible: false,
-  lockedDeleteStep: "idle" as "idle" | "confirm" | "countdown",
-  lockedDeleteRemaining: 10,
-  lockedDeleteTimer: null as number | null,
-  pendingTxTimer: null as number | null,
-  setupWizard: {
+  };
+}
+
+export const appState: AppState = {
+  wallet: { status: "missing" },
+  navigation: {
+    currentView: "dashboard",
+    selectedActivityId: "",
+  },
+  onboarding: {
     step: 1,
-    flow: "create" as "create" | "import",
+    flow: "create",
     name: "",
     walletPassword: "",
     confirmWalletPassword: "",
     walletPasswordVisible: false,
-    mnemonic: "",
-    generatedMnemonic: "",
+    recoveryPhrase: "",
     recoveryPhraseVisible: false,
     acknowledgedBackup: false,
-    wordCount: 12 as 12 | 15 | 18 | 21 | 24,
-    appearance: "vaultforge" as ThemeName,
+    wordCount: 12,
+    appearance: "vaultforge",
+    enabledNetworks: networks.map((network) => network.id),
+    autoLockTimeoutSecs: null,
   },
-  lastActivity: Date.now(),
-  autoLockTimeoutSecs: null as number | null,
-  autoLockTimer: null as number | null,
+  send: {
+    draft: emptySendDraft(),
+    signedTransaction: null,
+  },
+  receive: {
+    networkId: DEFAULT_NETWORK_ID,
+    qrResilience: "M",
+    qrSvg: "",
+  },
+  portfolio: {
+    status: "idle",
+  },
+  dialogs: {
+    unlockPasswordVisible: false,
+    deleteWallet: {
+      step: "idle",
+      secondsRemaining: 10,
+    },
+  },
+  operation: {
+    busy: false,
+  },
+  preferences: {
+    currency: "USD",
+  },
 };
 
-export function selectedNetwork(): Network {
-  return networks.find((n) => n.id === appState.receiveNetworkId) ?? networks[0];
+export function walletStateFromSession(session: WalletSession): WalletState {
+  if (!session.has_wallet) return { status: "missing" };
+
+  if (session.locked) {
+    return {
+      status: "locked",
+      name: session.wallet_name ?? "Wallet",
+    };
+  }
+
+  return {
+    status: "unlocked",
+    name: session.wallet_name ?? "Wallet",
+    addresses: session.addresses ?? {},
+    assets: session.assets,
+    activity: session.activity,
+    enabledNetworks: session.enabled_networks.flatMap((id) => {
+      const network = networks.find((candidate) => candidate.id === id);
+      return network ? [network.id] : [];
+    }),
+    autoLockTimeoutSecs: session.auto_lock_timeout_secs,
+  };
 }
 
-export function networkDetail(network: Network, short = true): string {
-  if (network.kind === "evm")
-    return `${network.ticker}${short ? "" : ` - Chain ID ${network.chainId}`}`;
-  if (network.kind === "bitcoin") return network.ticker;
-  return network.ticker;
+export function applyWalletSession(session: WalletSession): void {
+  appState.wallet = walletStateFromSession(session);
+  if (appState.wallet.status !== "unlocked") {
+    resetSendFlow();
+    appState.receive.qrSvg = "";
+    appState.navigation.selectedActivityId = "";
+  }
 }
 
-export function addressKeyForNetwork(network: Network): string {
-  return network.kind === "svm" ? "solana" : network.kind;
+export function selectSetupFlow(flow: SetupWizardState["flow"]): void {
+  appState.onboarding.flow = flow;
+  appState.onboarding.step = 2;
+  appState.onboarding.recoveryPhrase = "";
+  appState.onboarding.recoveryPhraseVisible = false;
+  appState.onboarding.acknowledgedBackup = false;
 }
 
-export function addressForNetwork(network: Network): string {
-  return appState.session?.addresses?.[addressKeyForNetwork(network)] ?? "";
+export function resetSendFlow(): void {
+  appState.send.draft = emptySendDraft();
+  appState.send.signedTransaction = null;
 }
 
-export function receivePayload(): string {
-  const network = selectedNetwork();
-  const addr = addressForNetwork(network);
-  if (!addr) return "";
-  if (network.kind === "bitcoin") return `bitcoin:${addr}`;
-  if (network.kind === "evm") return `ethereum:${addr}@${network.chainId}`;
-  if (network.kind === "svm") return `solana:${addr}`;
-  return addr;
-}
-
-export function selectedActivity(): Activity | null {
-  const activity = appState.session?.activity ?? [];
-  return activity.find((item) => item.id === appState.selectedActivityId) ?? activity[0] ?? null;
+export function resetOnboarding(): void {
+  const wizard = appState.onboarding;
+  wizard.step = 1;
+  wizard.flow = "create";
+  wizard.name = "";
+  wizard.walletPassword = "";
+  wizard.confirmWalletPassword = "";
+  wizard.walletPasswordVisible = false;
+  wizard.recoveryPhrase = "";
+  wizard.recoveryPhraseVisible = false;
+  wizard.acknowledgedBackup = false;
+  wizard.wordCount = 12;
+  wizard.enabledNetworks = networks.map((network) => network.id);
+  wizard.autoLockTimeoutSecs = null;
 }
