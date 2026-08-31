@@ -4,11 +4,11 @@ set -euo pipefail
 
 case "${1:-}" in
   "")
-    npm run check
+    bun run check
     ;;
   --fix)
-    npm run lint:fix
-    npm run check
+    bun run lint:fix
+    bun run check
     ;;
   *)
     printf 'Usage: %s [--fix]\n' "$0" >&2

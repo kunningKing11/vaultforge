@@ -4,9 +4,9 @@
   "version": "../package.json",
   "identifier": "com.vaultforge.wallet",
   "build": {
-    "beforeDevCommand": "npm run prepare-tauri && npm run dev",
+    "beforeDevCommand": "bun run prepare-tauri && bun run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run prepare-tauri && npm run build",
+    "beforeBuildCommand": "bun run prepare-tauri && bun run build",
     "frontendDist": "../dist"
   },
   "app": {

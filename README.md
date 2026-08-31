@@ -76,15 +76,9 @@ The table distinguishes implemented backend paths from network entries that are 
 
 ### Setup
 
+This project requires a minimum `bun` version `v1.4.0`, although it's very likely that older versions will work just as well.
+
 **Install dependencies:**
-
-With `npm`:
-
-```bash
-npm install
-```
-
-With `bun`:
 
 ```bash
 bun install
@@ -92,27 +86,11 @@ bun install
 
 **Run the web frontend:**
 
-With `npm`:
-
-```bash
-npm run dev
-```
-
-With `bun`:
-
 ```bash
 bun run dev
 ```
 
 **Run the Tauri desktop app:**
-
-With `npm`:
-
-```bash
-npx tauri dev
-```
-
-With `bun`:
 
 ```bash
 bunx tauri dev
@@ -120,43 +98,17 @@ bunx tauri dev
 
 **Build the frontend:**
 
-With `npm`:
-
-```bash
-npm run build
-```
-
-With `bun`:
-
 ```bash
 bun run build
 ```
 
 Build the desktop bundle:
 
-With `npm`:
-
-```bash
-npx tauri build
-```
-
-With `bun`:
-
 ```bash
 bunx tauri build
 ```
 
 **Check and fix frontend quality:**
-
-With `npm`:
-
-```bash
-npm run check
-npm run lint:fix
-npm run format
-```
-
-With `bun`:
 
 ```bash
 bun run check
@@ -168,11 +120,9 @@ bun run format
 
 Every commit checks 72-character commit-message lines, syncs Cargo's version from `package.json`, runs dependency installs, and stages the package and Cargo manifests/lockfiles. It then runs Oxlint, Oxfmt, TypeScript, and `cargo check`. Before every push, Lefthook runs Rust Analyzer analysis and the full Rust test suite. Each hook runs every command in its group before printing a pass/fail summary; a failed command blocks its commit or push.
 
-You can run the same checks manually with `npm run hooks:check -- commit` or `npm run hooks:check -- push`. After cloning or installing dependencies, `npm install` installs the Git hooks through the `prepare` script; run `npm run prepare` in an already-installed checkout.
+You can run the same checks manually with `bun run hooks:check -- commit` or `bun run hooks:check -- push`. After cloning or installing dependencies, `bun install` installs the Git hooks through the `prepare` script; run `bun run prepare` in an already-installed checkout.
 
 **NOTE: Rust Analyzer must be installed in the active Rust toolchain (for example, `rustup component add rust-analyzer`) or its check will fail and block the commit.**
-
-**NOTE: Cargo and Rust Analyzer also require `bun` on `PATH`. The Tauri build script uses Bun to normalize `src/networks.json` through the same TypeScript registry code used by the frontend before embedding it in the Rust binary.**
 
 `src/networks.json` is the source of truth for network identities, provider URLs, native assets, configured ERC-20 assets, decimals, and CoinGecko identifiers.
 

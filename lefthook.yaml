@@ -6,12 +6,12 @@ commit-msg:
       priority: 1
       fail_text: "Commit blocked: keep every commit-message line to 72 characters or fewer."
     run-fast-checks:
-      run: npm run hooks:check -- commit
+      run: bun run hooks:check -- commit
       priority: 2
       fail_text: "Commit blocked: one or more quality checks failed. See the summary above."
 
 pre-push:
   jobs:
     - name: run full Rust validation
-      run: npm run hooks:check -- push
+      run: bun run hooks:check -- push
       fail_text: "Push blocked: one or more Rust validation checks failed. See the summary above."
