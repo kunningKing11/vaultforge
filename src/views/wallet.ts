@@ -64,17 +64,15 @@ function dashboardView() {
     <div class="grid gap-5 xl:grid-cols-[1.35fr_0.75fr]">
       <div class="min-w-0 space-y-5">
         <section class="glass min-w-0 overflow-hidden rounded-[2rem] p-6">
-          <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div class="flex gap-6 md:flex-row md:items-center md:justify-between">
             <div class="min-w-0">
-              <h2 class="mt-3 max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">Portfolio</h2>
+              <h2 class="max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">Portfolio</h2>
             </div>
             <div class="grid shrink-0 gap-3 sm:grid-cols-1">
-              <div class="theme-panel-accent min-w-0 rounded-2xl border p-4 text-right">
-                <p class="text-sm font-bold text-slate-400">Weighted 24h change</p>
-                <p class="max-w-full break-words text-2xl font-black leading-none sm:text-3xl ${change >= 0 ? "text-emerald-300" : "text-rose-300"}">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</p>
-                <p class="max-w-full break-words text-sm font-bold text-slate-400">Total value</p>
-                <p class="max-w-full break-words text-sm font-bold text-slate-400">${totalValue.toFixed(2)} ${appState.preferences.currency}</p>
-              </div>
+              <p class="-mb-2 text-right text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Total value</p>
+              <p class="max-w-full break-words text-right text-2xl font-black leading-none text-slate-100 sm:text-3xl">${totalValue.toFixed(2)} ${appState.preferences.currency}</p>
+              <p class="-mb-2 text-right text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Weighted 24h change</p>
+              <p class="max-w-full break-words text-right text-2xl font-black leading-none text-slate-100 sm:text-3xl ${change >= 0 ? "text-emerald-300" : "text-rose-300"}">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</p>
             </div>
           </div>
           <div class="asset-carousel mt-6">
