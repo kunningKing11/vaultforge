@@ -311,3 +311,7 @@ pub(crate) async fn fetch_evm_tx_status(
         Ok(Some("failed".to_string()))
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/providers/evm.rs"]
+mod tests;

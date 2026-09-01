@@ -305,3 +305,7 @@ fn spl_token_transfer_instructions(
     }
     Ok(instructions)
 }
+
+#[cfg(test)]
+#[path = "../tests/tx/solana.rs"]
+mod tests;

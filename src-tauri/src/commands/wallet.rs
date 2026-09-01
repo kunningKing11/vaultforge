@@ -288,3 +288,7 @@ pub(crate) fn clear_wallet(state: State<'_, Mutex<AppState>>) -> Result<WalletSe
     state.advance_wallet_generation();
     Ok(session_from_state(&state))
 }
+
+#[cfg(test)]
+#[path = "../tests/commands/wallet.rs"]
+mod tests;

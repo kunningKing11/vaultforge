@@ -434,3 +434,7 @@ fn bitcoin_signing_context(
     private_key.zeroize();
     result
 }
+
+#[cfg(test)]
+#[path = "../tests/tx/bitcoin.rs"]
+mod tests;

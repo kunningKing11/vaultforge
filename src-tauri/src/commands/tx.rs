@@ -600,3 +600,7 @@ pub(crate) async fn check_transaction_status(
         _ => Err(format!("Unsupported network: {}", network)),
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/commands/tx.rs"]
+mod tests;

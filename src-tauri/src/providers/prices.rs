@@ -153,15 +153,5 @@ pub(crate) fn parse_token_metadata(json: &serde_json::Value) -> Result<TokenMeta
 }
 
 #[cfg(test)]
-mod tests {
-    use super::validate_exchange_rate;
-
-    #[test]
-    fn exchange_rates_must_be_finite_and_positive() {
-        assert_eq!(validate_exchange_rate(0.92).unwrap(), 0.92);
-        assert!(validate_exchange_rate(0.0).is_err());
-        assert!(validate_exchange_rate(-0.92).is_err());
-        assert!(validate_exchange_rate(f64::NAN).is_err());
-        assert!(validate_exchange_rate(f64::INFINITY).is_err());
-    }
-}
+#[path = "../tests/providers/prices.rs"]
+mod tests;

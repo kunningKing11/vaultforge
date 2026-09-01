@@ -122,3 +122,7 @@ pub(crate) fn validate_address_for_network(address: &str, network: &str) -> Resu
         _ => Err(format!("Unsupported network {network}")),
     }
 }
+
+#[cfg(test)]
+#[path = "tests/validation.rs"]
+mod tests;

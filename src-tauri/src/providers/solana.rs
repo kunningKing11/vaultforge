@@ -488,3 +488,7 @@ pub(crate) fn parse_solana_fee_for_message(json: &serde_json::Value) -> Result<u
         .as_u64()
         .ok_or_else(|| "Solana fee RPC missing result.value".to_string())
 }
+
+#[cfg(test)]
+#[path = "../tests/providers/solana.rs"]
+mod tests;

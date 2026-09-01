@@ -151,3 +151,6 @@ pub(crate) fn derive_storage_key(
         .map_err(|_| "Failed to derive wallet encryption key")?;
     Ok((key, salt))
 }
+#[cfg(test)]
+#[path = "tests/storage.rs"]
+mod tests;

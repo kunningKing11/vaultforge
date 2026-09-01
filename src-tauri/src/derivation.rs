@@ -403,3 +403,7 @@ pub(crate) fn bech32_account_address(private_key: &[u8; 32], hrp: &str) -> Resul
     let hrp = Hrp::parse(hrp).map_err(|_| "Invalid bech32 prefix".to_string())?;
     bech32::encode::<Bech32>(hrp, &payload).map_err(|_| "Failed to encode address".to_string())
 }
+
+#[cfg(test)]
+#[path = "tests/derivation.rs"]
+mod tests;

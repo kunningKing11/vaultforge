@@ -81,23 +81,6 @@ fn default_enabled_networks() -> Vec<String> {
     ]
 }
 
-#[cfg(test)]
-mod tests {
-    use super::default_enabled_networks;
-    use crate::derivation::derive_addresses_from_mnemonic_filtered;
-
-    #[test]
-    fn default_enabled_networks_derives_evm_and_tron_addresses() {
-        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-        let enabled_networks = default_enabled_networks();
-        let enabled: Vec<&str> = enabled_networks.iter().map(String::as_str).collect();
-        let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, &enabled).unwrap();
-
-        assert!(addresses.contains_key("evm"));
-        assert!(addresses.contains_key("tron"));
-    }
-}
-
 #[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct Asset {
     pub(crate) symbol: String,
@@ -187,3 +170,7 @@ pub(crate) struct SignedTransaction {
     pub(crate) raw_tx: Option<String>,
     pub(crate) tx_hash: Option<String>,
 }
+
+#[cfg(test)]
+#[path = "tests/dto.rs"]
+mod tests;

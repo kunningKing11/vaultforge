@@ -118,3 +118,7 @@ pub(crate) fn sign_eip1559_transfer(
 
     Ok((signed_data, tx_hash, raw_tx_hex, r_hex, s_hex))
 }
+
+#[cfg(test)]
+#[path = "../tests/tx/evm.rs"]
+mod tests;

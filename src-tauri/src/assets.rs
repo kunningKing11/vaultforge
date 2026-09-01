@@ -35,3 +35,7 @@ pub(crate) fn cached_asset_by_token_address(
         })
         .cloned()
 }
+
+#[cfg(test)]
+#[path = "tests/assets.rs"]
+mod tests;

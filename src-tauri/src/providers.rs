@@ -279,3 +279,7 @@ pub(crate) fn get_provider(symbol: &str) -> Option<Box<dyn ChainProvider>> {
         _ => Some(Box::new(EvmProvider)),
     }
 }
+
+#[cfg(test)]
+#[path = "tests/providers.rs"]
+mod tests;
