@@ -1,7 +1,9 @@
+import { DEFAULT_NETWORK_ID, networks } from "./networks";
 import type { ThemeName } from "./theme";
 import type {
   Activity,
   Asset,
+  FiatCurrency,
   NetworkId,
   QrResilience,
   SendDraft,
@@ -9,7 +11,6 @@ import type {
   View,
   WalletSession,
 } from "./types";
-import { DEFAULT_NETWORK_ID, networks } from "./networks";
 
 export type WalletState =
   | { status: "missing" }
@@ -18,6 +19,8 @@ export type WalletState =
       status: "unlocked";
       name: string;
       addresses: Record<string, string>;
+      fiatCurrency: FiatCurrency;
+      usdExchangeRate: number;
       assets: Asset[];
       activity: Activity[];
       enabledNetworks: NetworkId[];
@@ -68,9 +71,6 @@ type AppState = {
   };
   operation: {
     busy: boolean;
-  };
-  preferences: {
-    currency: string;
   };
 };
 
@@ -128,9 +128,6 @@ export const appState: AppState = {
   operation: {
     busy: false,
   },
-  preferences: {
-    currency: "USD",
-  },
 };
 
 export function walletStateFromSession(session: WalletSession): WalletState {
@@ -147,6 +144,8 @@ export function walletStateFromSession(session: WalletSession): WalletState {
     status: "unlocked",
     name: session.wallet_name ?? "Wallet",
     addresses: session.addresses ?? {},
+    fiatCurrency: session.fiat_currency ?? "USD",
+    usdExchangeRate: session.usd_exchange_rate ?? 1,
     assets: session.assets,
     activity: session.activity,
     enabledNetworks: session.enabled_networks.flatMap((id) => {

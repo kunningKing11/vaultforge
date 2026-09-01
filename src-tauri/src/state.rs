@@ -1,9 +1,10 @@
-use crate::dto::{RefreshWarning, Wallet, WalletRefreshResult, WalletSession};
-use crate::providers::bitcoin::BitcoinAccountSnapshot;
-use crate::storage::read_stored_wallet;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::State;
+
+use crate::dto::{RefreshWarning, Wallet, WalletRefreshResult, WalletSession};
+use crate::providers::bitcoin::BitcoinAccountSnapshot;
+use crate::storage::read_stored_wallet;
 
 pub(crate) fn clear_secret_string(s: &mut str) {
     let buf = unsafe { s.as_bytes_mut() };
@@ -74,6 +75,8 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
                 locked: true,
                 wallet_name: Some(stored_wallet.wallet_name.clone()),
                 addresses: None,
+                fiat_currency: None,
+                usd_exchange_rate: None,
                 assets: vec![],
                 activity: vec![],
                 enabled_networks: vec![],
@@ -86,6 +89,8 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
             locked: false,
             wallet_name: None,
             addresses: None,
+            fiat_currency: None,
+            usd_exchange_rate: None,
             assets: vec![],
             activity: vec![],
             enabled_networks: vec![],
@@ -99,6 +104,8 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
             locked: true,
             wallet_name: Some(wallet.name.clone()),
             addresses: None,
+            fiat_currency: None,
+            usd_exchange_rate: None,
             assets: vec![],
             activity: vec![],
             enabled_networks: vec![],
@@ -120,6 +127,8 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
         locked: false,
         wallet_name: Some(wallet.name.clone()),
         addresses: Some(addresses),
+        fiat_currency: Some(wallet.fiat_currency),
+        usd_exchange_rate: Some(wallet.usd_exchange_rate),
         assets: wallet.assets.clone(),
         activity: wallet.activity.clone(),
         enabled_networks: wallet.enabled_networks.clone(),
@@ -140,7 +149,7 @@ pub(crate) fn refresh_result_from_state(
 #[cfg(test)]
 mod tests {
     use super::{AppState, session_from_state};
-    use crate::dto::{Asset, Wallet};
+    use crate::dto::{Asset, FiatCurrency, Wallet};
     use std::collections::HashMap;
     use std::path::PathBuf;
 
@@ -155,6 +164,8 @@ mod tests {
                 "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH".to_string(),
             )]),
             wallet_password_hash: "password hash".to_string(),
+            fiat_currency: FiatCurrency::Usd,
+            usd_exchange_rate: 1.0,
             assets: vec![Asset {
                 symbol: "TRX".to_string(),
                 name: "TRON".to_string(),
@@ -189,6 +200,8 @@ mod tests {
         assert_eq!(session.assets.len(), 1);
         assert_eq!(session.assets[0].symbol, "TRX");
         assert_eq!(session.assets[0].price_usd, 0.12);
+        assert_eq!(session.fiat_currency, Some(FiatCurrency::Usd));
+        assert_eq!(session.usd_exchange_rate, Some(1.0));
     }
 
     #[test]

@@ -43,6 +43,7 @@ fn main() {
             commands::wallet::get_wallet,
             commands::wallet::generate_mnemonic_cmd,
             commands::market::refresh_portfolio,
+            commands::market::set_fiat_currency,
             commands::wallet::create_wallet,
             commands::wallet::import_wallet,
             commands::wallet::unlock_wallet,

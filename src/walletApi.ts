@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { NetworkId, SignedTransaction, WalletRefreshResult, WalletSession } from "./types";
+import type {
+  FiatCurrency,
+  NetworkId,
+  SignedTransaction,
+  WalletRefreshResult,
+  WalletSession,
+} from "./types";
 
 export const walletApi = {
   getWallet: () => invoke<WalletSession>("get_wallet"),
@@ -24,6 +30,8 @@ export const walletApi = {
     invoke<WalletRefreshResult>("unlock_wallet", args),
   lockWallet: () => invoke<null>("lock_wallet"),
   clearWallet: () => invoke<WalletSession>("clear_wallet"),
+  setFiatCurrency: (currency: FiatCurrency) =>
+    invoke<WalletSession>("set_fiat_currency", { currency }),
   signTransaction: (args: {
     to: string;
     symbol: string;

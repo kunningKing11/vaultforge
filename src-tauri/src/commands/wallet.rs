@@ -10,7 +10,7 @@ use crate::derivation::{
     BitcoinAccount, derive_addresses_from_mnemonic_filtered, generate_mnemonic,
     validate_recovery_phrase_word_count,
 };
-use crate::dto::{Wallet, WalletRefreshResult, WalletSession};
+use crate::dto::{FiatCurrency, Wallet, WalletRefreshResult, WalletSession};
 use crate::providers::bitcoin::BitcoinAccountSnapshot;
 use crate::providers::http::ProviderClients;
 use crate::state::{
@@ -81,6 +81,8 @@ pub(crate) async fn create_wallet(
         &[],
         &enabled_networks,
         bitcoin_account.as_ref(),
+        FiatCurrency::Usd,
+        1.0,
     )
     .await;
 
@@ -90,6 +92,8 @@ pub(crate) async fn create_wallet(
         created_at: Utc::now().to_rfc3339(),
         addresses,
         wallet_password_hash: hash_secret(&wallet_password),
+        fiat_currency: FiatCurrency::Usd,
+        usd_exchange_rate: refreshed.usd_exchange_rate,
         assets: refreshed.assets,
         activity: vec![activity(
             "system",
@@ -136,6 +140,8 @@ pub(crate) async fn import_wallet(
         &[],
         &enabled_networks,
         bitcoin_account.as_ref(),
+        FiatCurrency::Usd,
+        1.0,
     )
     .await;
 
@@ -145,6 +151,8 @@ pub(crate) async fn import_wallet(
         created_at: Utc::now().to_rfc3339(),
         addresses,
         wallet_password_hash: hash_secret(&wallet_password),
+        fiat_currency: FiatCurrency::Usd,
+        usd_exchange_rate: refreshed.usd_exchange_rate,
         assets: refreshed.assets,
         activity: vec![activity(
             "import",

@@ -1,6 +1,7 @@
 import copyIcon from "../assets/icons/copy.svg?raw";
 import downloadIcon from "../assets/icons/download.svg?raw";
-import { escapeHtml, formatWei, money, shortAddress } from "../format";
+import { escapeHtml, formatWei, money, shortAddress, usdToFiat } from "../format";
+import { fiatCurrencies } from "../currencies";
 import { networkDisplayName } from "../networks";
 import {
   addressForNetwork,
@@ -18,7 +19,7 @@ import {
   addressPlaceholder,
   assetCard,
   assetSelect,
-  assetValue,
+  assetValueUsd,
   decimalsForAsset,
   emptyState,
   inlineIcon,
@@ -31,7 +32,7 @@ const MIN_VISIBLE_ASSET_VALUE_USD = 1;
 
 function visibleAssets() {
   return (unlockedWallet()?.assets ?? []).filter(
-    (asset) => asset.price_usd <= 0 || assetValue(asset) >= MIN_VISIBLE_ASSET_VALUE_USD,
+    (asset) => asset.price_usd <= 0 || assetValueUsd(asset) >= MIN_VISIBLE_ASSET_VALUE_USD,
   );
 }
 
@@ -49,7 +50,7 @@ function dashboardView() {
   const wallet = unlockedWallet();
   if (!wallet) return "";
   const topAssets = [...visibleAssets()]
-    .sort((left, right) => assetValue(right) - assetValue(left))
+    .sort((left, right) => assetValueUsd(right) - assetValueUsd(left))
     .map(assetCard)
     .join("");
   const recent =
@@ -59,7 +60,8 @@ function dashboardView() {
       "Sign, send, swap, or change networks to build a local activity timeline.",
     );
   const change = portfolioChange();
-  const totalValue = visibleAssets().reduce((sum, asset) => sum + assetValue(asset), 0);
+  const totalValueUsd = visibleAssets().reduce((sum, asset) => sum + assetValueUsd(asset), 0);
+  const totalValue = usdToFiat(totalValueUsd, wallet.usdExchangeRate);
   return `
     <div class="grid gap-5 xl:grid-cols-[1.35fr_0.75fr]">
       <div class="min-w-0 space-y-5">
@@ -70,7 +72,7 @@ function dashboardView() {
             </div>
             <div class="grid shrink-0 gap-3 sm:grid-cols-1">
               <p class="-mb-2 text-right text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Total value</p>
-              <p class="max-w-full break-words text-right text-2xl font-black leading-none text-slate-100 sm:text-3xl">${totalValue.toFixed(2)} ${appState.preferences.currency}</p>
+              <p class="max-w-full break-words text-right text-2xl font-black leading-none text-slate-100 sm:text-3xl">${money(totalValue, wallet.fiatCurrency)}</p>
               <p class="-mb-2 text-right text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Weighted 24h change</p>
               <p class="max-w-full break-words text-right text-2xl font-black leading-none text-slate-100 sm:text-3xl ${change >= 0 ? "text-emerald-300" : "text-rose-300"}">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</p>
             </div>
@@ -122,6 +124,7 @@ function sendView() {
 }
 
 function signedTransactionView(signed: SignedTransaction) {
+  const wallet = unlockedWallet();
   const feeDecimals = decimalsForAsset(signed.feeSymbol, signed.network, signed.decimals);
   const chainReferenceLabel = transactionReferenceLabel(signed.network);
   return `
@@ -141,7 +144,7 @@ function signedTransactionView(signed: SignedTransaction) {
         ${signedDetail("Network fee", `${formatWei(signed.feeAmount, feeDecimals)} ${signed.feeSymbol}`)}
         ${signedDetail("Total debit", `${formatWei(signed.totalDebit, signed.decimals)} ${signed.symbol}`)}
         ${signedDetail("Post-send balance", `${formatWei(signed.postBalance, signed.decimals)} ${signed.symbol}`)}
-        ${signedDetail("Estimated value", money(signed.fiatValue))}
+        ${signedDetail("Estimated value", money(usdToFiat(signed.fiatValue, wallet?.usdExchangeRate ?? 1), wallet?.fiatCurrency ?? "USD"))}
         ${signedDetail("Network", networkDisplayName(signed.network))}
         ${signedDetail(chainReferenceLabel, signed.nonce)}
         ${signedDetail("Signed", new Date(signed.signedAt).toLocaleString())}
@@ -237,11 +240,24 @@ function activityView() {
 }
 
 function settingsView() {
+  const wallet = unlockedWallet();
+  if (!wallet) return "";
   return `
     <div class="grid gap-5 xl:grid-cols-[0.95fr_1fr]">
       <section class="glass rounded-[2rem] p-6">
         <p class="text-sm font-bold uppercase tracking-[0.3em] text-slate-500">Preferences</p>
         <h2 class="mt-2 text-3xl font-black">Wallet settings</h2>
+        <label class="mt-6 block space-y-2">
+          <span class="text-sm font-bold text-slate-300">Display currency</span>
+          <select class="field" data-fiat-currency>
+            ${fiatCurrencies
+              .map(
+                ({ code, label }) =>
+                  `<option value="${escapeHtml(code)}" ${code === wallet.fiatCurrency ? "selected" : ""}>${escapeHtml(label)} (${escapeHtml(code)})</option>`,
+              )
+              .join("")}
+          </select>
+        </label>
         <div class="mt-6 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm font-bold text-amber-100">This build simulates balances and transactions. Connect audited chain clients and hardware-backed signing before using real funds.</div>
       </section>
       <section class="glass rounded-[2rem] p-6">
@@ -291,9 +307,9 @@ function securityTile(label: string, value: string) {
 
 function portfolioChange() {
   const assets = unlockedWallet()?.assets ?? [];
-  const total = assets.reduce((sum, asset) => sum + assetValue(asset), 0);
+  const total = assets.reduce((sum, asset) => sum + assetValueUsd(asset), 0);
   if (!total) return 0;
-  return assets.reduce((sum, asset) => sum + asset.change_24h * (assetValue(asset) / total), 0);
+  return assets.reduce((sum, asset) => sum + asset.change_24h * (assetValueUsd(asset) / total), 0);
 }
 
 function transactionReferenceLabel(network: SignedTransaction["network"]): string {

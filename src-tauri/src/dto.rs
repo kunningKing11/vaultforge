@@ -1,6 +1,34 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "UPPERCASE")]
+pub(crate) enum FiatCurrency {
+    Usd,
+    Eur,
+    Gbp,
+    Jpy,
+}
+
+impl FiatCurrency {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Usd => "USD",
+            Self::Eur => "EUR",
+            Self::Gbp => "GBP",
+            Self::Jpy => "JPY",
+        }
+    }
+}
+
+fn default_fiat_currency() -> FiatCurrency {
+    FiatCurrency::Usd
+}
+
+fn default_usd_exchange_rate() -> f64 {
+    1.0
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct Wallet {
     pub(crate) name: String,
@@ -9,6 +37,10 @@ pub(crate) struct Wallet {
     pub(crate) addresses: HashMap<String, String>,
     #[serde(alias = "passphrase_hash")]
     pub(crate) wallet_password_hash: String,
+    #[serde(default = "default_fiat_currency")]
+    pub(crate) fiat_currency: FiatCurrency,
+    #[serde(default = "default_usd_exchange_rate")]
+    pub(crate) usd_exchange_rate: f64,
     pub(crate) assets: Vec<Asset>,
     pub(crate) activity: Vec<Activity>,
     #[serde(default = "default_enabled_networks")]
@@ -25,6 +57,10 @@ pub(crate) struct WalletPayload {
     pub(crate) addresses: HashMap<String, String>,
     #[serde(alias = "passphrase_hash")]
     pub(crate) wallet_password_hash: String,
+    #[serde(default = "default_fiat_currency")]
+    pub(crate) fiat_currency: FiatCurrency,
+    #[serde(default = "default_usd_exchange_rate")]
+    pub(crate) usd_exchange_rate: f64,
     pub(crate) assets: Vec<Asset>,
     pub(crate) activity: Vec<Activity>,
     #[serde(default = "default_enabled_networks")]
@@ -99,6 +135,8 @@ pub(crate) struct WalletSession {
     pub(crate) locked: bool,
     pub(crate) wallet_name: Option<String>,
     pub(crate) addresses: Option<HashMap<String, String>>,
+    pub(crate) fiat_currency: Option<FiatCurrency>,
+    pub(crate) usd_exchange_rate: Option<f64>,
     pub(crate) assets: Vec<Asset>,
     pub(crate) activity: Vec<Activity>,
     #[serde(default)]

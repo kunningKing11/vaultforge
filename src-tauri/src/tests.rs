@@ -15,7 +15,7 @@ use crate::derivation::{
     derive_addresses_from_mnemonic_filtered, secp256k1_private_key_from_mnemonic,
     signing_key_from_private_key, validate_recovery_phrase_word_count,
 };
-use crate::dto::{Asset, Wallet, WalletPayload};
+use crate::dto::{Asset, FiatCurrency, Wallet, WalletPayload};
 use crate::providers::bitcoin::{
     BitcoinUtxo, parse_bitcoin_address_stats, parse_bitcoin_fee_rate, parse_bitcoin_utxos,
 };
@@ -33,8 +33,9 @@ use crate::storage::{decrypt_wallet, derive_storage_key, encrypt_wallet};
 use crate::tx::bitcoin::{bitcoin_estimated_vbytes, bitcoin_select_coins, bitcoin_signed_transfer};
 use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
 use crate::tx::solana::{
-    SolanaTokenSource, select_solana_token_sources, sign_solana_token_transfer_with_blockhash,
-    sign_solana_transfer_with_blockhash, solana_associated_token_address,
+    SolanaTokenSource, SolanaTokenTransferDraft, select_solana_token_sources,
+    sign_solana_token_transfer_with_blockhash, sign_solana_transfer_with_blockhash,
+    solana_associated_token_address,
 };
 use crate::validation::{validate_address_for_network, validate_transfer};
 
@@ -121,6 +122,8 @@ fn decrypts_legacy_wallet_password_hash_payloads() {
     .unwrap();
 
     assert_eq!(payload.wallet_password_hash, "legacy-hash");
+    assert_eq!(payload.fiat_currency, FiatCurrency::Usd);
+    assert_eq!(payload.usd_exchange_rate, 1.0);
 }
 
 #[test]
@@ -223,6 +226,8 @@ fn unlock_migrates_legacy_filecoin_addresses() {
             "f1fFXqnEMPFe1NoAajxRKukEBLwshG1LQQC".to_string(),
         )]),
         wallet_password_hash: "unused".to_string(),
+        fiat_currency: FiatCurrency::Usd,
+        usd_exchange_rate: 1.0,
         assets: vec![],
         activity: vec![],
         enabled_networks: vec!["filecoin".to_string()],
@@ -243,6 +248,8 @@ fn validates_solana_token_transfer_recipient_as_solana_address() {
         created_at: "2025-01-01T00:00:00Z".to_string(),
         addresses: HashMap::new(),
         wallet_password_hash: "deadbeef".to_string(),
+        fiat_currency: FiatCurrency::Usd,
+        usd_exchange_rate: 1.0,
         assets: vec![Asset {
             symbol: "SPL-So1111".to_string(),
             name: "So11111111111111111111111111111111111111112".to_string(),
@@ -279,6 +286,8 @@ fn token_transfer_validation_uses_contract_or_mint_identity() {
         created_at: Utc::now().to_rfc3339(),
         addresses: HashMap::new(),
         wallet_password_hash: "deadbeef".to_string(),
+        fiat_currency: FiatCurrency::Usd,
+        usd_exchange_rate: 1.0,
         assets: vec![
             Asset {
                 symbol: "DUP".to_string(),
@@ -378,6 +387,8 @@ fn transfer_validation_rejects_malformed_amounts_and_mints() {
         created_at: "2025-01-01T00:00:00Z".to_string(),
         addresses: HashMap::new(),
         wallet_password_hash: "unused".to_string(),
+        fiat_currency: FiatCurrency::Usd,
+        usd_exchange_rate: 1.0,
         assets: vec![Asset {
             symbol: "SPL".to_string(),
             name: "SPL".to_string(),
@@ -923,16 +934,16 @@ fn signs_solana_spl_token_transfer() {
         .unwrap(),
         amount: 1_000_000,
     };
-    let signed = sign_solana_token_transfer_with_blockhash(
+    let signed = sign_solana_token_transfer_with_blockhash(SolanaTokenTransferDraft {
         mnemonic,
         from,
-        "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
-        "So11111111111111111111111111111111111111112",
-        &[source],
-        9,
-        "11111111111111111111111111111111",
-        5000,
-    )
+        to: "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
+        mint: "So11111111111111111111111111111111111111112",
+        sources: &[source],
+        decimals: 9,
+        recent_blockhash: "11111111111111111111111111111111",
+        fee_lamports: 5000,
+    })
     .unwrap();
 
     assert!(!signed.signature.is_empty());
@@ -982,16 +993,16 @@ fn combines_classic_spl_token_accounts_with_ata_priority() {
     );
     assert!(select_solana_token_sources(owner, mint, 9, 11, &accounts).is_err());
 
-    let signed = sign_solana_token_transfer_with_blockhash(
+    let signed = sign_solana_token_transfer_with_blockhash(SolanaTokenTransferDraft {
         mnemonic,
-        owner,
-        "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
+        from: owner,
+        to: "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
         mint,
-        &sources,
-        9,
-        "11111111111111111111111111111111",
-        5000,
-    )
+        sources: &sources,
+        decimals: 9,
+        recent_blockhash: "11111111111111111111111111111111",
+        fee_lamports: 5000,
+    })
     .unwrap();
     let raw = base64::engine::general_purpose::STANDARD
         .decode(signed.raw_tx_base64)
@@ -1105,6 +1116,8 @@ fn locked_session_does_not_expose_secrets() {
         created_at: "2025-01-01T00:00:00Z".to_string(),
         addresses: HashMap::new(),
         wallet_password_hash: "deadbeef".to_string(),
+        fiat_currency: FiatCurrency::Usd,
+        usd_exchange_rate: 1.0,
         assets: vec![],
         activity: vec![],
         enabled_networks: vec![],
@@ -1116,9 +1129,11 @@ fn locked_session_does_not_expose_secrets() {
         wallet_name: "Secret Wallet".to_string(),
     });
     let session = session_from_state(&state);
-    assert_eq!(session.has_wallet, true);
-    assert_eq!(session.locked, true);
+    assert!(session.has_wallet);
+    assert!(session.locked);
     assert!(session.addresses.is_none());
+    assert!(session.fiat_currency.is_none());
+    assert!(session.usd_exchange_rate.is_none());
     assert!(session.assets.is_empty());
     assert!(session.activity.is_empty());
 }
@@ -1251,6 +1266,8 @@ fn encrypts_and_decrypts_wallet_payload() {
         created_at: Utc::now().to_rfc3339(),
         addresses: HashMap::new(),
         wallet_password_hash: hash_secret(wallet_password),
+        fiat_currency: FiatCurrency::Usd,
+        usd_exchange_rate: 1.0,
         assets: starter_assets("ethereum"),
         activity: vec![activity("system", "Created", "Local", "1")],
         enabled_networks: vec!["evm".to_string(), "bitcoin".to_string()],
@@ -1258,12 +1275,14 @@ fn encrypts_and_decrypts_wallet_payload() {
     };
     let (key, salt) = derive_storage_key(wallet_password, None).unwrap();
     let stored = encrypt_wallet(&wallet, &key, &salt).unwrap();
-    assert_eq!(stored.version, 4);
+    assert_eq!(stored.version, 5);
 
     let decrypted = decrypt_wallet(&stored, wallet_password).unwrap();
     assert_eq!(decrypted.name, wallet.name);
     assert_eq!(decrypted.mnemonic, wallet.mnemonic);
     assert_eq!(decrypted.created_at, wallet.created_at);
+    assert_eq!(decrypted.fiat_currency, wallet.fiat_currency);
+    assert_eq!(decrypted.usd_exchange_rate, wallet.usd_exchange_rate);
     assert_eq!(decrypted.enabled_networks, wallet.enabled_networks);
     assert_eq!(
         decrypted.auto_lock_timeout_secs,

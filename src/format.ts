@@ -1,3 +1,5 @@
+import type { FiatCurrency } from "./types";
+
 export function toWei(amount: string, decimals: number): string {
   const parts = amount.split(".");
   const intPart = parts[0] || "0";
@@ -18,12 +20,16 @@ export function weiToNumber(wei: string, decimals: number): number {
   return Number(formatWei(wei, decimals, decimals));
 }
 
-export function money(value: number) {
-  return new Intl.NumberFormat("en-US", {
+export function money(value: number, currency: FiatCurrency) {
+  return new Intl.NumberFormat(undefined, {
     style: "currency",
-    currency: "USD",
+    currency,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+export function usdToFiat(usdValue: number, usdExchangeRate: number): number {
+  return usdValue * usdExchangeRate;
 }
 
 export function shortAddress(address: string | null) {

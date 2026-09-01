@@ -1,3 +1,5 @@
+export type FiatCurrency = "USD" | "EUR" | "GBP" | "JPY";
+
 export type Asset = {
   symbol: string;
   name: string;
@@ -31,6 +33,8 @@ export type WalletSession = {
   locked: boolean;
   wallet_name: string | null;
   addresses?: Record<string, string> | null;
+  fiat_currency: FiatCurrency | null;
+  usd_exchange_rate: number | null;
   assets: Asset[];
   activity: Activity[];
   enabled_networks: string[];
@@ -81,6 +85,7 @@ export type SessionCommand =
   | "create_wallet"
   | "import_wallet"
   | "unlock_wallet"
+  | "set_fiat_currency"
   | "send_transaction"
   | "swap_tokens"
   | "clear_wallet"

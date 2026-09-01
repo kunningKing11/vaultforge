@@ -314,7 +314,7 @@ async fn fetch_bitcoin_account_utxos(
             result.map_err(|error| format!("Bitcoin UTXO task failed: {error}"))??;
         utxos.append(&mut fetched);
         if let Some(owner) = pending.pop_front() {
-            spawn_bitcoin_utxo_fetch(&mut tasks, &client, &api_url, owner);
+            spawn_bitcoin_utxo_fetch(&mut tasks, client, &api_url, owner);
         }
     }
 

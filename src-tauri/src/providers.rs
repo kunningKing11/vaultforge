@@ -63,24 +63,24 @@ pub(crate) async fn fetch_portfolio_assets(
         }
     }
 
-    if enabled_networks.iter().any(|id| id == "solana") {
-        if let Some(solana_address) = addresses.get("solana") {
-            let refreshed = fetch_solana_assets(client, solana_address, cached_assets).await;
-            if refreshed.balance_failed {
-                failed_networks.push("Solana".to_string());
-            }
-            assets.extend(refreshed.assets);
+    if enabled_networks.iter().any(|id| id == "solana")
+        && let Some(solana_address) = addresses.get("solana")
+    {
+        let refreshed = fetch_solana_assets(client, solana_address, cached_assets).await;
+        if refreshed.balance_failed {
+            failed_networks.push("Solana".to_string());
         }
+        assets.extend(refreshed.assets);
     }
 
-    if enabled_networks.iter().any(|id| id == "tron") {
-        if let Some(tron_address) = addresses.get("tron") {
-            let refreshed = fetch_tron_assets(client, tron_address, cached_assets).await;
-            if refreshed.balance_failed {
-                failed_networks.push("Tron".to_string());
-            }
-            assets.extend(refreshed.assets);
+    if enabled_networks.iter().any(|id| id == "tron")
+        && let Some(tron_address) = addresses.get("tron")
+    {
+        let refreshed = fetch_tron_assets(client, tron_address, cached_assets).await;
+        if refreshed.balance_failed {
+            failed_networks.push("Tron".to_string());
         }
+        assets.extend(refreshed.assets);
     }
 
     if enabled_networks.iter().any(|id| id == "bitcoin") {

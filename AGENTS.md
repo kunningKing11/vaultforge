@@ -153,6 +153,8 @@ type WalletSession = {
   locked: boolean;
   wallet_name: string | null;
   addresses?: Record<string, string> | null;
+  fiat_currency: "USD" | "EUR" | "GBP" | "JPY" | null;
+  usd_exchange_rate: number | null;
   assets: Asset[];
   activity: Activity[];
   enabled_networks: string[];

@@ -5,7 +5,13 @@ import { recordWalletActivity, stopAutoLock, syncAutoLock } from "./autoLock";
 import { addressForNetwork, selectedNetwork, unlockedWallet } from "./selectors";
 import { applyWalletSession, appState, resetOnboarding, resetSendFlow } from "./state";
 import { pushToast } from "./toasts";
-import type { RefreshWarning, SessionCommand, WalletRefreshResult, WalletSession } from "./types";
+import type {
+  FiatCurrency,
+  RefreshWarning,
+  SessionCommand,
+  WalletRefreshResult,
+  WalletSession,
+} from "./types";
 import { walletApi } from "./walletApi";
 import { walletPasswordStrength } from "./walletPassword";
 
@@ -80,6 +86,10 @@ export async function unlockWallet(form: HTMLFormElement) {
     resetLockedDeleteWallet();
     void refreshPortfolioInBackground();
   }
+}
+
+export async function changeFiatCurrency(currency: FiatCurrency) {
+  await runCommand("set_fiat_currency", () => walletApi.setFiatCurrency(currency));
 }
 
 export async function signTransaction(form: HTMLFormElement) {
@@ -432,6 +442,7 @@ function successMessage(command: string) {
     create_wallet: "Wallet created. Recovery phrase was generated in the Rust backend.",
     import_wallet: "Wallet imported successfully.",
     unlock_wallet: "Wallet unlocked.",
+    set_fiat_currency: "Display currency updated.",
     lock_wallet: "Wallet locked.",
     clear_wallet: "Local wallet cleared.",
     sign_transaction: "Transaction signed locally.",

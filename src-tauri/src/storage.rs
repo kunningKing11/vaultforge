@@ -5,7 +5,7 @@ use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 
-use crate::dto::{Wallet, WalletPayload};
+use crate::dto::{FiatCurrency, Wallet, WalletPayload};
 use crate::state::{AppState, StoredWalletMetadata};
 
 #[derive(Deserialize, Serialize)]
@@ -66,6 +66,8 @@ pub(crate) fn encrypt_wallet(
         created_at: wallet.created_at.clone(),
         addresses: wallet.addresses.clone(),
         wallet_password_hash: wallet.wallet_password_hash.clone(),
+        fiat_currency: wallet.fiat_currency,
+        usd_exchange_rate: wallet.usd_exchange_rate,
         assets: wallet.assets.clone(),
         activity: wallet.activity.clone(),
         enabled_networks: wallet.enabled_networks.clone(),
@@ -78,7 +80,7 @@ pub(crate) fn encrypt_wallet(
         .map_err(|_| "Failed to encrypt wallet")?;
 
     Ok(StoredWalletFile {
-        version: 4,
+        version: 5,
         wallet_name: wallet.name.clone(),
         network: "ethereum".to_string(),
         salt: BASE64.encode(salt),
@@ -91,7 +93,7 @@ pub(crate) fn decrypt_wallet(
     stored: &StoredWalletFile,
     wallet_password: &str,
 ) -> Result<Wallet, String> {
-    if stored.version != 2 && stored.version != 3 && stored.version != 4 {
+    if stored.version != 2 && stored.version != 3 && stored.version != 4 && stored.version != 5 {
         return Err("Unsupported wallet version".to_string());
     }
     let salt = BASE64
@@ -117,6 +119,16 @@ pub(crate) fn decrypt_wallet(
         created_at: payload.created_at,
         addresses: payload.addresses,
         wallet_password_hash: payload.wallet_password_hash,
+        fiat_currency: if stored.version == 5 {
+            payload.fiat_currency
+        } else {
+            FiatCurrency::Usd
+        },
+        usd_exchange_rate: if stored.version == 5 {
+            payload.usd_exchange_rate
+        } else {
+            1.0
+        },
         assets: payload.assets,
         activity: payload.activity,
         enabled_networks: payload.enabled_networks,

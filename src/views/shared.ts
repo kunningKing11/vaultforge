@@ -1,4 +1,4 @@
-import { escapeHtml, formatWei, money, weiToNumber } from "../format";
+import { escapeHtml, formatWei, money, usdToFiat, weiToNumber } from "../format";
 import { networkDisplayName, networks } from "../networks";
 import { networkLabel, unlockedWallet } from "../selectors";
 import { appState } from "../state";
@@ -30,17 +30,19 @@ export function inlineIcon({
 }
 
 export function assetCard(asset: Asset) {
-  const value = assetValue(asset);
+  const wallet = unlockedWallet();
+  const valueUsd = assetValueUsd(asset);
   const positive = asset.change_24h >= 0;
-  const total = unlockedWallet()?.assets.reduce((sum, item) => sum + assetValue(item), 0) ?? 0;
-  const allocation = total ? (value / total) * 100 : 0;
+  const totalUsd = wallet?.assets.reduce((sum, item) => sum + assetValueUsd(item), 0) ?? 0;
+  const allocation = totalUsd ? (valueUsd / totalUsd) * 100 : 0;
+  const displayValue = usdToFiat(valueUsd, wallet?.usdExchangeRate ?? 1);
   return `
     <article class="asset-card rounded-3xl border border-white/10 bg-white/[0.04] p-5">
       <div class="flex items-start justify-between gap-4">
         <div class="asset-card-header"><p class="truncate text-lg font-black">${escapeHtml(asset.symbol)}</p><p class="truncate text-sm font-bold text-slate-500">${escapeHtml(asset.name)} on ${escapeHtml(networkDisplayName(asset.network))}</p></div>
         <span class="asset-change rounded-full ${positive ? "bg-emerald-400/10 text-emerald-300" : "bg-rose-400/10 text-rose-300"} px-3 py-1 text-xs font-bold">${positive ? "+" : ""}${asset.change_24h.toFixed(2)}%</span>
       </div>
-      <p class="asset-value mt-5 text-2xl font-black">${money(value)}</p>
+      <p class="asset-value mt-5 text-2xl font-black">${money(displayValue, wallet?.fiatCurrency ?? "USD")}</p>
       <p class="mt-1 text-sm font-bold text-slate-400">${escapeHtml(formatWei(asset.balance, asset.decimals))} ${escapeHtml(asset.symbol)}</p>
       <div class="mt-4">
         <div class="flex justify-between text-xs font-bold text-slate-500"><span>Allocation</span><span>${allocation.toFixed(1)}%</span></div>
@@ -50,7 +52,7 @@ export function assetCard(asset: Asset) {
   `;
 }
 
-export function assetValue(asset: Asset) {
+export function assetValueUsd(asset: Asset) {
   return weiToNumber(asset.balance, asset.decimals) * asset.price_usd;
 }
 

@@ -69,6 +69,10 @@ pub(crate) fn ensure_native_balance_covers_debit(
 }
 
 #[tauri::command]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Tauri exposes these fields as the existing flat frontend command contract"
+)]
 pub(crate) async fn sign_transaction(
     state: State<'_, Mutex<AppState>>,
     clients: State<'_, ProviderClients>,

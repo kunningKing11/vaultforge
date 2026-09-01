@@ -14,6 +14,7 @@ import {
   copyReceiveAddress,
   copyQrPayload,
   copyText,
+  changeFiatCurrency,
   updateWalletPasswordStrength,
 } from "./commands";
 import { formatError } from "./format";
@@ -25,7 +26,7 @@ import { recordWalletActivity, syncAutoLock } from "./autoLock";
 import { applyWalletSession, appState, selectSetupFlow } from "./state";
 import { applyTheme, ThemeName, themes } from "./theme";
 import { pushToast } from "./toasts";
-import type { QrResilience, View } from "./types";
+import type { FiatCurrency, QrResilience, View } from "./types";
 import { walletApi } from "./walletApi";
 import { walletPasswordStrength } from "./walletPassword";
 
@@ -139,6 +140,10 @@ export function bindEvents() {
 
     if (target.matches("[data-send-asset]")) {
       updateRecipientPlaceholder(target.selectedOptions[0]?.dataset.symbol ?? "");
+    }
+
+    if (target.matches("[data-fiat-currency]")) {
+      void changeFiatCurrency(target.value as FiatCurrency);
     }
   });
 

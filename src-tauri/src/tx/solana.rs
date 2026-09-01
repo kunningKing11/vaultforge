@@ -42,6 +42,17 @@ pub(crate) struct SolanaTransferDraft<'a> {
     pub(crate) instructions: Vec<Instruction>,
 }
 
+pub(crate) struct SolanaTokenTransferDraft<'a> {
+    pub(crate) mnemonic: &'a str,
+    pub(crate) from: &'a str,
+    pub(crate) to: &'a str,
+    pub(crate) mint: &'a str,
+    pub(crate) sources: &'a [SolanaTokenSource],
+    pub(crate) decimals: u8,
+    pub(crate) recent_blockhash: &'a str,
+    pub(crate) fee_lamports: u64,
+}
+
 fn solana_keypair_from_mnemonic(mnemonic: &str) -> Result<Keypair, String> {
     let secret = solana_secret_key_from_mnemonic(mnemonic)?;
     keypair_from_seed(&secret).map_err(|_| "Failed to create Solana keypair".to_string())
@@ -66,22 +77,21 @@ pub(crate) fn sign_solana_transfer_with_blockhash(
 }
 
 pub(crate) fn sign_solana_token_transfer_with_blockhash(
-    mnemonic: &str,
-    from: &str,
-    to: &str,
-    mint: &str,
-    sources: &[SolanaTokenSource],
-    decimals: u8,
-    recent_blockhash: &str,
-    fee_lamports: u64,
+    draft: SolanaTokenTransferDraft<'_>,
 ) -> Result<SignedSolanaTransfer, String> {
-    let instructions = spl_token_transfer_instructions(from, to, mint, sources, decimals)?;
+    let instructions = spl_token_transfer_instructions(
+        draft.from,
+        draft.to,
+        draft.mint,
+        draft.sources,
+        draft.decimals,
+    )?;
 
     sign_solana_instructions(SolanaTransferDraft {
-        mnemonic,
-        from,
-        recent_blockhash,
-        fee_lamports,
+        mnemonic: draft.mnemonic,
+        from: draft.from,
+        recent_blockhash: draft.recent_blockhash,
+        fee_lamports: draft.fee_lamports,
         instructions,
     })
 }
@@ -152,16 +162,16 @@ pub(crate) async fn sign_solana_token_transfer(
     let instructions = spl_token_transfer_instructions(from, to, mint, sources, decimals)?;
     let fee_lamports = estimate_solana_fee(client, from, instructions, &recent_blockhash).await?;
 
-    sign_solana_token_transfer_with_blockhash(
+    sign_solana_token_transfer_with_blockhash(SolanaTokenTransferDraft {
         mnemonic,
         from,
         to,
         mint,
         sources,
         decimals,
-        &recent_blockhash,
+        recent_blockhash: &recent_blockhash,
         fee_lamports,
-    )
+    })
 }
 
 pub(crate) fn select_solana_token_sources(

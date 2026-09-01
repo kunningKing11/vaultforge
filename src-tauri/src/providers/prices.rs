@@ -1,7 +1,48 @@
-use crate::dto::Asset;
-use crate::registry::{configured_asset, network_by_id};
 use serde::Deserialize;
 use std::collections::HashMap;
+
+use crate::dto::{Asset, FiatCurrency};
+use crate::registry::{configured_asset, network_by_id};
+
+#[derive(serde::Deserialize)]
+struct ExchangeRateResponse {
+    rate: f64,
+}
+
+pub(crate) async fn fetch_usd_exchange_rate(
+    client: &reqwest::Client,
+    currency: FiatCurrency,
+) -> Result<f64, String> {
+    if currency == FiatCurrency::Usd {
+        return Ok(1.0);
+    }
+
+    let url = format!(
+        "https://api.frankfurter.dev/v2/rate/USD/{}",
+        currency.as_str()
+    );
+
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|error| format!("failed to fetch exchange rate: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("exchange rate API returned an error: {error}"))?
+        .json::<ExchangeRateResponse>()
+        .await
+        .map_err(|error| format!("invalid exchange rate response: {error}"))?;
+
+    validate_exchange_rate(response.rate)
+}
+
+fn validate_exchange_rate(rate: f64) -> Result<f64, String> {
+    if rate.is_finite() && rate > 0.0 {
+        Ok(rate)
+    } else {
+        Err("exchange rate response contains an invalid rate".to_string())
+    }
+}
 
 #[derive(Deserialize)]
 pub(crate) struct CoinGeckoPrice {
@@ -109,4 +150,18 @@ pub(crate) fn parse_token_metadata(json: &serde_json::Value) -> Result<TokenMeta
         decimals,
         price_usd,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_exchange_rate;
+
+    #[test]
+    fn exchange_rates_must_be_finite_and_positive() {
+        assert_eq!(validate_exchange_rate(0.92).unwrap(), 0.92);
+        assert!(validate_exchange_rate(0.0).is_err());
+        assert!(validate_exchange_rate(-0.92).is_err());
+        assert!(validate_exchange_rate(f64::NAN).is_err());
+        assert!(validate_exchange_rate(f64::INFINITY).is_err());
+    }
 }
