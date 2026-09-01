@@ -83,7 +83,10 @@ function dashboardView() {
           </div>
         </section>
         <section class="glass rounded-[2rem] p-6">
-          <div class="mb-5 flex items-center justify-between"><h2 class="text-xl font-black">Recent activity</h2><button class="theme-text-accent text-sm font-bold font-bold" data-view="activity">View all</button></div>
+          <div class="mb-5 flex items-center justify-between">
+            <h2 class="text-xl font-black">Recent activity</h2>
+            <button class="theme-text-accent text-sm font-bold font-bold" data-view="activity">View all</button>
+          </div>
           <div class="space-y-3">${recent}</div>
         </section>
       </div>
