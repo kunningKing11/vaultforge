@@ -1,151 +1,66 @@
 # VaultForge Wallet Agent Instructions
 
-## Project Goal
+## Product Direction
 
-VaultForge must become a real, production-grade, multichain self-custody wallet. Do not design new work around simulated balances, fake fees, fake signatures, or local-only transaction mutation. Existing simulator behavior is temporary legacy scaffolding and may be skipped or replaced directly when implementing coherent real-wallet functionality.
+VaultForge is a production-grade, multichain, self-custody desktop wallet. New work must use real chain-backed balances, fees, transaction formats, signatures, broadcasts, and status tracking. Existing simulator behavior is temporary scaffolding and may be removed when the same area gains coherent real-wallet behavior.
 
-The target product is a desktop wallet that can create/import a wallet, derive real addresses, fetch real balances, estimate real fees, sign real transactions, broadcast them through chain RPCs, and track transaction status.
+Non-negotiable rules:
 
-## Real Wallet Principles
+- Keep wallet identity, encrypted secrets, derivation, providers, portfolio snapshots, transaction stages, signing, broadcast/status tracking, and frontend DTOs separate.
+- Treat RPC/provider data as the source of truth for funds. Never invent starter balances or mutate local balances as though a transaction moved real funds.
+- Store authoritative crypto amounts as integer base units, never `f64`.
+- Keep signing and secret handling in Rust. Prefer maintained, audited cryptographic primitives and zeroization-capable secret types.
+- Keep mnemonics, seeds, private keys, and signing material inside encrypted storage and authenticated runtime boundaries. Add hardware-wallet support before recommending larger real-fund use.
+- Preserve compilation and frontend/backend contracts while replacing legacy behavior.
+- Implement chain-specific rules behind clear interfaces; do not force non-EVM chains into EVM assumptions.
+- Do not claim support for a chain until derivation, validation, balances, fees, signing, broadcast, and status tracking exist or are explicitly marked unavailable.
 
-- Prefer real chain-backed behavior over simulator compatibility.
-- Preserve compileability and frontend/backend contracts while replacing fake behavior.
-- Use audited, maintained wallet and cryptography primitives where practical.
-- Store and process crypto amounts as integer base units, not `f64`.
-- Treat private keys, mnemonics, seeds, and signing material as high-risk secrets.
-- Avoid claiming support for a chain until address derivation, balance reads, fee estimation, signing, broadcasting, and status tracking are implemented or intentionally marked unavailable.
-- Implement production wallet behavior chain-by-chain behind clear interfaces instead of mixing unrelated chain rules into one generic path.
+## Current Chain Scope
 
-## Supported Chain Scope
+The architecture must support Bitcoin; Ethereum, Monad, Polygon, Arbitrum One, Base, Optimism, and Avalanche C-Chain; Filecoin; Injective; Solana; Tron; and Zcash.
 
-The frontend currently defines or exposes these network families and assets. Backend architecture should support this scope, even if implementation lands incrementally.
+Implemented transfer paths are currently basic Bitcoin, EVM native/ERC-20, Solana native/classic SPL, and Tron native transfers. Treat other exposed chains as address/portfolio scaffolding unless their full provider and transaction paths exist.
 
-- Bitcoin
-- EVM: Ethereum, Monad, Polygon, Arbitrum One, Base, Optimism, Avalanche C-Chain
-- Filecoin
-- Injective
-- Solana
-- Tron
-- Zcash
+For new chain work, establish shared account/provider boundaries first, then prioritize EVM, Bitcoin, Solana, and finally Injective, Filecoin, and Zcash with chain-specific correctness.
 
-Current implemented transfer paths are basic Bitcoin, EVM native/ERC-20, Solana native/classic SPL, and Tron native transfers. Treat other exposed chains as address/portfolio scaffolding unless their provider, fee, signing, broadcast, and status paths are present.
+Lightning has frontend types but is absent from `rawNetworks`. Do not claim Lightning support without a real node/LSP, channel, invoice, payment, and liquidity strategy. Do not imply Zcash shielded support without viewing keys, note scanning, proving, and shielded transaction construction.
 
-Lightning has frontend type definitions but is not currently present in `rawNetworks`. Do not claim Lightning support until there is a real node, LSP, channel, invoice, payment, and liquidity strategy.
+## Code Organization
 
-## Architecture Boundary
+Keep code DRY, but share only genuinely common plumbing. Chain-specific validation, fee, signing, and encoding behavior must remain explicit.
 
-Keep these concerns separate:
+### Frontend
 
-- Wallet identity and encrypted secrets
-- Chain account derivation
-- Chain RPC/provider clients
-- Portfolio balance snapshots
-- Transaction drafts and simulations
-- Signing
-- Broadcast and transaction status tracking
-- Frontend session DTOs
+- `src/render.ts`: root composition, screen selection, and post-render coordination only.
+- `src/views/onboarding.ts` and `locked.ts`: lifecycle and locked screens.
+- `src/views/shell.ts`: desktop/mobile navigation and unlocked shell.
+- `src/views/wallet.ts`: wallet screens.
+- `src/views/shared.ts`: reusable templates, selectors, formatting, and loading UI.
+- `src/views/toast.ts`: toast markup only; timing and DOM lifecycle stay in `src/toasts.ts`.
+- `src/events.ts` and `src/commands.ts`: event binding and command behavior. Preserve existing `data-action`, `data-view`, form names, and escaping when editing templates.
+- `src/state.ts`: typed application state. Model missing, locked, and unlocked wallets explicitly and normalize every backend session through the shared session-to-wallet transition.
+- `src/selectors.ts`: derived reads.
 
-Do not let local UI state or simulator state become the source of truth for real funds.
+Keep timer handles, callbacks, and controller details in their owning modules, not render state.
 
-## Code Organization Discipline
+### Backend
 
-Keep code DRY. Repeated business logic, command orchestration, provider parsing, validation, derivation, signing setup, and frontend formatting should be extracted into the narrowest shared helper or module that preserves clarity.
+- `src-tauri/src/main.rs`: module declarations, managed state, Tauri setup, and `generate_handler!` wiring only.
+- `commands/wallet.rs`: create, import, unlock, lock, clear, and session commands.
+- `commands/tx.rs`: signing, broadcast, compatibility swap flows, and transaction status.
+- `commands/market.rs`: market data and provider-backed portfolio refresh.
 
-Avoid copy-pasting wallet, transaction, provider, or DTO logic across chains or UI flows. If two implementations look similar but have chain-specific rules, share only the common plumbing and keep the chain-specific behavior explicit.
+Command modules orchestrate domain modules. Keep storage, encryption, derivation, validation, providers, and transaction formats in focused modules rather than command handlers or `main.rs`.
 
-## Frontend Module Layout
+## Wallet Data And Security Contracts
 
-Keep `src/render.ts` limited to root UI composition, state-based screen selection, and post-render coordination such as QR refreshes. Place HTML template functions under `src/views/` by screen or layout responsibility:
+- `Wallet`: unlocked in-memory identity, encrypted-wallet metadata, derived accounts, active selections, and provider-derived cached portfolio/activity. It must not treat cached assets as authoritative funds.
+- `WalletPayload`: encrypted persisted name, timestamp, mnemonic/seed, account and derivation metadata, and persistent preferences. Cached balances are allowed only as explicitly stale snapshots. Any shape change must intentionally handle `StoredWalletFile.version`.
+- `StoredWalletFile`: unencrypted envelope containing only version, wallet name, active network, salt, nonce, and ciphertext unless another plaintext field has a documented security reason.
+- `StoredWalletMetadata`: minimal locked summary such as wallet name, active network, and storage version. It must not expose decrypted wallet or provider data.
+- `WalletSession`: frontend DTO. It must match the frontend type in the same patch.
 
-- `views/onboarding.ts` and `views/locked.ts` for wallet lifecycle screens and locked-state UI.
-- `views/shell.ts` for desktop/mobile navigation and the unlocked wallet shell.
-- `views/wallet.ts` for dashboard, send, receive, swap, assets, activity, and settings screens.
-- `views/shared.ts` for reusable template fragments, selectors, formatting helpers, and loading UI.
-- `views/toast.ts` for toast markup only; keep timing, animation, and DOM lifecycle behavior in `src/toasts.ts`.
-
-Keep event binding and command behavior in `src/events.ts` and `src/commands.ts`, not view modules. Preserve existing `data-action`, `data-view`, form field names, and escaping of dynamic content when moving or editing templates.
-
-Keep `src/state.ts` as the typed frontend application model. Group local state by responsibility, normalize every backend `WalletSession` through the shared session-to-wallet transition, and represent missing, locked, and unlocked wallets as explicit states instead of combining independent booleans and nullable fields. Keep derived reads in `src/selectors.ts`. Timer handles, request callbacks, and other controller implementation details must remain in their owning modules rather than frontend render state.
-
-## Backend Module Layout
-
-Keep `src-tauri/src/main.rs` limited to Tauri application setup, managed state registration, module declarations, and `generate_handler!` wiring.
-
-Place Tauri command handlers under `src-tauri/src/commands/` by responsibility:
-
-- `commands/wallet.rs` for wallet lifecycle commands such as create, import, unlock, lock, clear, and session reads.
-- `commands/tx.rs` for signing, broadcasting, swap compatibility flows, and transaction status commands.
-- `commands/market.rs` for market-data and provider-backed portfolio refresh commands.
-
-Command modules may orchestrate domain modules, but core wallet, storage, derivation, provider, validation, and transaction-format logic should stay in their dedicated modules. Do not grow `main.rs` or a single command file into a catch-all.
-
-## Backend Data Model Contract
-
-The backend should have distinct data shapes for persistent encrypted wallet data, unlocked runtime wallet data, derived chain accounts, chain-backed balances, transaction drafts, signed transactions, and frontend sessions.
-
-### `Wallet`
-
-`Wallet` is the unlocked in-memory domain model. It should represent identity, encrypted-wallet metadata, and derived accounts. It should not treat fake starter balances as authoritative funds.
-
-Expected responsibilities:
-
-- Wallet display name
-- Wallet creation/import timestamp
-- Encrypted mnemonic or seed material after unlock only
-- Chain account metadata
-- Active account/network selection
-- Cached portfolio and activity snapshots derived from providers
-
-If `Wallet` includes `assets` or `activity`, those fields must be treated as provider-derived cache or temporary compatibility data, not as the source of truth for real funds.
-
-### `WalletPayload`
-
-`WalletPayload` is the encrypted persisted wallet payload.
-
-It should contain sensitive and stateful data required to reconstruct an unlocked wallet:
-
-- Wallet name
-- Created/imported timestamp
-- Mnemonic or seed material
-- Account indexes and derivation metadata
-- User labels/preferences that need persistence
-
-It should not contain fake balances as permanent truth. Balance snapshots may be cached only if clearly treated as stale cache and refreshed from RPC before financial decisions.
-
-Any `WalletPayload` shape change must intentionally handle `StoredWalletFile.version`.
-
-### `StoredWalletFile`
-
-`StoredWalletFile` is the outer unencrypted storage envelope.
-
-Allowed plaintext metadata:
-
-- Storage version
-- Wallet display name
-- Active network
-- Encryption salt
-- Encryption nonce
-- Ciphertext
-
-Avoid storing addresses, balances, activity, mnemonics, seeds, or derivation data outside ciphertext unless there is a documented product/security reason.
-
-### `StoredWalletMetadata`
-
-`StoredWalletMetadata` is the minimal locked-state summary available before unlock.
-
-It may include:
-
-- Wallet name
-- Active network
-- Storage version
-
-It must not pretend that full wallet, address, balance, or activity data is available while locked unless that data was intentionally stored in plaintext.
-
-### `WalletSession`
-
-`WalletSession` is the frontend-facing DTO returned by Tauri commands. It must match `src/main.ts` exactly or the frontend type must be updated in the same patch.
-
-Current frontend contract:
+Current `WalletSession` contract:
 
 ```ts
 type WalletSession = {
@@ -162,235 +77,61 @@ type WalletSession = {
 };
 ```
 
-Current frontend `Asset` contract includes optional `token_address?: string | null`. Native assets must use `None`/`null`; ERC-20 assets must use the contract address; Solana SPL assets must use the mint address. Token signing must use this explicit identifier instead of display `name`.
+`Asset.token_address` is optional and nullable. Native assets use `null`; ERC-20 assets use the contract; SPL assets use the mint. Signing must use this identifier, never the display name.
 
-Session rules:
+Session states:
 
-- No wallet: return `has_wallet = false`, `locked = false`, no addresses, empty assets, and empty activity.
-- Locked wallet: return `has_wallet = true`, `locked = true`, wallet name if available, no decrypted secrets, and no provider data unless intentionally persisted as plaintext cache.
-- Unlocked wallet: return real derived addresses and provider-derived portfolio/activity data.
+- No wallet: `has_wallet = false`, `locked = false`, no addresses, and empty assets/activity.
+- Locked: `has_wallet = true`, `locked = true`, optional wallet name, no secrets, and no provider data unless deliberately persisted as plaintext cache.
+- Unlocked: real derived addresses and provider-derived portfolio/activity.
 
-Never return a `WalletSession` missing fields expected by the frontend.
+Never omit fields required by the frontend.
 
 ## Wallet Lifecycle
 
-### Create Wallet
+- Create: validate the password policy, generate a secure BIP39 mnemonic, derive documented chain paths, encrypt and persist the payload, initialize provider refresh, and return a complete session. Never use custom mnemonic word lists.
+- Import: validate BIP39 word count and checksum, validate the password, derive and retain accounts, persist the encrypted payload, refresh providers, and return a complete session.
+- Unlock: derive the key from the stored salt, decrypt and validate the payload, reconstruct runtime state, refresh or schedule provider data, and return a complete session. An already-loaded wallet still requires password validation or an explicit authenticated-session policy.
+- Lock: zeroize and remove decrypted mnemonic/seed/key material, mark the app locked, and retain only minimal metadata.
+- Clear: delete encrypted storage, clear runtime secrets and wallet-specific provider caches, and return a no-wallet session.
 
-Real `create_wallet` behavior must:
+## Providers, Balances, And Transactions
 
-1. Validate wallet-password policy.
-2. Generate a valid BIP39 mnemonic using cryptographically secure randomness.
-3. Derive chain accounts using documented derivation paths.
-4. Persist encrypted wallet payload.
-5. Initialize provider-backed portfolio refresh.
-6. Return a complete `WalletSession`.
+Each chain family should expose address validation, native/token balance reads, fee estimation, unsigned draft construction, signed broadcast, and transaction status through a common provider boundary.
 
-Do not generate mnemonics from custom word lists.
+Chain-specific requirements:
 
-### Import Wallet
+- EVM: chain ID, RPC URL, native currency, token contracts, pending nonce, gas estimation, EIP-1559 where available, raw broadcast, and receipts. Current sends use `eth_feeHistory` with `eth_gasPrice` fallback but have no nonce reservation manager or user priority-fee policy.
+- Bitcoin: UTXO discovery, fee rates, coin selection/PSBT or transaction construction, signing, broadcast, and confirmations.
+- Solana: recent blockhash, native/SPL balances, associated token accounts, recipient ATA rent, construction, signing, send, and confirmation. Current token support is classic SPL, not Token-2022.
+- Filecoin, Injective, Tron, and Zcash: use their native derivation, address, fee, signing, and broadcast rules.
 
-Real `import_wallet` behavior must:
+Represent amounts in base units: wei/token units, satoshis, lamports/SPL units, zatoshis, attoFIL, and chain denomination units. Convert to decimal display strings only at the UI edge.
 
-1. Validate mnemonic word count and checksum.
-2. Validate wallet-password policy.
-3. Derive chain accounts using documented derivation paths.
-4. Persist encrypted wallet payload.
-5. Refresh balances from chain providers.
-6. Return a complete `WalletSession`.
+Model transaction stages explicitly: draft, estimated, approved, signed, broadcast, pending, confirmed, and failed/dropped/replaced. Records must retain enough chain-specific information to audit what was signed and sent, including network, accounts, asset identifier, base-unit amount, fees, nonce/sequence/blockhash/UTXOs, digest, signatures, broadcast ID, and confirmation status.
 
-Do not derive addresses and discard them.
+After broadcast, refresh provider balances and track pending state separately. Never create fake hashes, signatures, confirmations, fees, or local-only send/swap accounting in production paths.
 
-### Unlock Wallet
+Keep any simulator-only behavior isolated to explicit test fixtures.
 
-Real `unlock_wallet` behavior must:
+## Verification
 
-1. Read stored wallet envelope.
-2. Derive decryption key from wallet password and stored salt.
-3. Decrypt and validate wallet payload.
-4. Reconstruct unlocked wallet/account state.
-5. Refresh or schedule refresh of balances and activity from providers.
-6. Return a complete `WalletSession`.
-
-Unlocking an already-loaded wallet must still validate the wallet password or use an explicit authenticated session policy.
-
-### Lock Wallet
-
-Real `lock_wallet` behavior must:
-
-1. Remove decrypted mnemonic/seed/key material from memory.
-2. Remove encryption key material from memory.
-3. Mark the app locked.
-4. Preserve only minimal locked metadata.
-
-### Clear Wallet
-
-Real `clear_wallet` behavior must:
-
-1. Delete the encrypted wallet file.
-2. Clear in-memory wallet state and key material.
-3. Clear provider caches if they expose wallet-specific data.
-4. Return a no-wallet `WalletSession`.
-
-## Chain Provider And RPC Architecture
-
-Each chain family should have a provider implementation behind a common trait or interface.
-
-Provider responsibilities:
-
-- Validate addresses for that chain.
-- Fetch native balances.
-- Fetch supported token balances.
-- Estimate transaction fees.
-- Build unsigned transaction drafts.
-- Broadcast signed transactions.
-- Fetch transaction status and receipts.
-
-EVM providers must support chain ID, RPC URL, native currency, token contracts, nonce retrieval, gas estimation, EIP-1559 where available, raw transaction broadcast, and receipt polling. Current EVM sends fetch pending nonces and use `eth_feeHistory` with `eth_gasPrice` fallback for fee estimates, but do not yet maintain a local nonce reservation manager or user priority fee policy.
-
-Bitcoin providers must support UTXO discovery, fee rate estimation, PSBT or transaction construction, signing strategy, broadcast, and confirmation tracking.
-
-Solana providers must support recent blockhash retrieval, account balance reads, SPL token account reads, associated token account derivation, recipient ATA rent checks, transaction construction, signing, send, and confirmation tracking. Current SPL support targets classic SPL Token accounts, not Token-2022 extensions.
-
-Zcash support must explicitly distinguish transparent and shielded support. Do not imply shielded support unless viewing keys, note scanning, proving, and transaction construction are implemented.
-
-Filecoin and Injective support must use chain-appropriate derivation, address formats, fee models, signing formats, and broadcast APIs.
-
-## Balance Model
-
-Real balances must come from chain RPCs or trusted provider APIs.
-
-Do not use starter balances for real wallet state. Do not mutate local balances as if funds moved. After a transaction broadcasts, refresh balances from providers and track pending state separately.
-
-Represent amounts as integer base units:
-
-- EVM native and ERC-20: wei/token base units with decimals metadata
-- Bitcoin: satoshis
-- Solana: lamports and SPL base units
-- Zcash: zatoshis
-- Filecoin: attoFIL
-- Injective: chain denomination base units
-
-UI formatting can convert integer base units to decimal strings at the edge.
-
-## Transaction Model
-
-Separate transaction states:
-
-- Draft
-- Simulated/estimated
-- User-approved
-- Signed
-- Broadcast
-- Pending
-- Confirmed
-- Failed/dropped/replaced
-
-Do not use fake payload hashes or fake signatures for production transaction flow.
-
-Transaction records should store enough chain-specific data to audit what was signed and broadcast:
-
-- Chain/network ID
-- From account/address
-- To address
-- Asset/token identifier
-- Amount in base units
-- Fee parameters
-- Nonce/sequence/blockhash/UTXO inputs as applicable
-- Unsigned transaction digest where applicable
-- Signature(s)
-- Broadcast transaction hash/signature
-- Status and confirmation metadata
-
-## Signing And Key Management
-
-Signing must use real chain transaction formats.
-
-Required direction:
-
-- Use real BIP39 mnemonic generation/import.
-- Use documented derivation paths per chain.
-- Avoid keeping secrets in plain strings longer than necessary.
-- Prefer zeroization-capable types for secret material.
-- Keep signing logic in backend/Rust, not frontend JavaScript.
-- Add hardware wallet support before recommending real funds at larger value.
-
-Fake signatures based on hashing wallet metadata are not acceptable for production paths.
-
-## Frontend Contract
-
-The frontend may keep `assets` and `activity` in `WalletSession`, but backend values must represent real provider-derived portfolio and transaction data, or explicitly unavailable states.
-
-When backend DTOs change, update TypeScript types and rendering logic in the same patch.
-
-Before committing DTO changes, verify:
+When wallet models, providers, signing, transactions, or DTOs change, run:
 
 ```bash
-npx tsc --noEmit
-cargo check
-cargo test
-```
-
-## Migration From Simulator Code
-
-Simulator code may be removed directly if replaced by real wallet behavior in the same area.
-
-Simulator-only code includes:
-
-- Custom fake mnemonic generation
-- Starter balances
-- Local-only balance mutation for sends
-- Local-only swap accounting
-- Static/fake fee calculation
-- Fake transaction signatures
-- Fake confirmed activity records
-- Hardcoded RPC health values
-
-Do not add new simulator-only features unless they are clearly isolated test fixtures.
-
-## Multichain Implementation Strategy
-
-The app must be architected for all supported chains, but implementation can land incrementally.
-
-Preferred order:
-
-1. Establish shared wallet/account/provider abstractions.
-2. Implement real EVM support across defined EVM chains.
-3. Implement Bitcoin.
-4. Implement Solana.
-5. Implement Injective, Filecoin, and Zcash with chain-specific correctness.
-
-Do not force non-EVM chains into EVM assumptions.
-
-## Verification Requirements
-
-Before committing wallet model, provider, signing, transaction, or DTO changes, run:
-
-```bash
-cargo check
-cargo test
+cargo check --manifest-path src-tauri/Cargo.toml
+cargo test --manifest-path src-tauri/Cargo.toml
 npx tsc --noEmit
 ```
 
-If a command cannot be run, document the reason.
+Document any command that could not run.
 
-Minimum test coverage for real wallet changes:
+Real-wallet changes require relevant tests for:
 
-- BIP39 create/import validation
-- Deterministic address derivation per supported chain
-- Encryption/decryption round trip
-- Locked session does not expose decrypted secrets
-- Provider balance parsing with mocked RPC responses
-- Fee estimation parsing with mocked RPC responses
-- Transaction draft validation
-- Signing produces chain-valid signatures or serialized transactions
-- Broadcast/status code handles provider errors
+- BIP39 create/import validation and deterministic address derivation.
+- Encryption round trips and locked-session secret isolation.
+- Provider balance and fee parsing with mocked RPC responses.
+- Draft validation and chain-valid signatures or serialized transactions.
+- Broadcast/status provider errors.
 
-## Prohibited Shortcuts
-
-- Do not use `f64` for authoritative crypto amounts.
-- Do not invent balances without provider data.
-- Do not mark simulated sends as real broadcasts.
-- Do not use fake signatures in production paths.
-- Do not claim multichain support for a chain without chain-specific derivation, validation, balance, fee, signing, broadcast, and status behavior.
-- Do not remove fields from wallet structs or session DTOs without updating all dependent lifecycle, persistence, command, frontend, and test code in the same patch.
-- Do not store secrets outside encrypted payloads unless explicitly justified and reviewed.
+Do not remove wallet or session fields without updating lifecycle, persistence, commands, frontend code, migrations, and tests together.
