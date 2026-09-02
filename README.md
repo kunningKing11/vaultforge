@@ -112,13 +112,14 @@ bunx tauri build
 
 ```bash
 bun run check
+bun test
 bun run lint:fix
 bun run format
 ```
 
 `dev` and `build` run the non-mutating Oxlint, Oxfmt, and TypeScript checks before starting Vite. Run `./lint.sh` for the same checks or `./lint.sh --fix` to apply safe lint fixes and formatting first.
 
-Every commit checks 72-character commit-message lines, syncs Cargo's version from `package.json`, runs dependency installs, and stages the package and Cargo manifests/lockfiles. It then runs Oxlint, Oxfmt, TypeScript, `cargo fmt --check`, and `cargo check`. Before every push, Lefthook runs Rust Analyzer analysis and the full Rust test suite. Each hook runs every command in its group before printing a pass/fail summary; a failed command blocks its commit or push.
+Every commit checks 72-character commit-message lines, syncs Cargo's version from `package.json`, runs dependency installs, and stages the package and Cargo manifests/lockfiles. It then runs Oxlint, Oxfmt, TypeScript, the TypeScript unit tests, `cargo fmt --check`, and `cargo check`. Before every push, Lefthook runs Rust Analyzer analysis and the full Rust test suite. Each hook runs every command in its group before printing a pass/fail summary; a failed command blocks its commit or push.
 
 You can run the same checks manually with `bun run hooks:check -- commit` or `bun run hooks:check -- push`. After cloning or installing dependencies, `bun install` installs the Git hooks through the `prepare` script; run `bun run prepare` in an already-installed checkout.
 
@@ -136,6 +137,7 @@ You can run the same checks manually with `bun run hooks:check -- commit` or `bu
 - `src/render.ts` composes the current application state into the root UI and coordinates QR refreshes.
 - `src/views/` contains focused TypeScript HTML-template modules for screens, shell layout, shared UI fragments, locked-state UI, and toast markup.
 - `src/toasts.ts` owns toast timing and animation behavior while using the toast template in `src/views/toast.ts`.
+- `tests/` mirrors the frontend modules covered by Bun unit tests.
 - `src-tauri/src/main.rs` wires the Tauri app, managed state, and command handlers.
 - `src-tauri/src/commands/` contains Tauri command handlers split by domain: wallet lifecycle, transactions, and market data.
 - `src-tauri/src/providers/` contains chain RPC/provider code for balances, fee data, broadcast, and transaction status.

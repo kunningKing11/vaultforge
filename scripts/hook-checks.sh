@@ -33,6 +33,7 @@ case "${1:-}" in
     run_check "Oxlint" bun run lint:oxlint
     run_check "Oxfmt" bun run format:check
     run_check "TypeScript" bun run typecheck
+    run_check "TypeScript tests" bun test
     run_check "Cargo fmt" cargo fmt --all --manifest-path src-tauri/Cargo.toml --check
     run_check "Cargo check" cargo check --manifest-path src-tauri/Cargo.toml
     run_check "Stage dependency files" git add -- package.json bun.lock src-tauri/Cargo.toml src-tauri/Cargo.lock

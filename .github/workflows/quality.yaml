@@ -28,6 +28,9 @@ jobs:
       - name: Check frontend quality
         run: bun run check
 
+      - name: Test frontend
+        run: bun test
+
   rust:
     name: Rust
     runs-on: ubuntu-24.04

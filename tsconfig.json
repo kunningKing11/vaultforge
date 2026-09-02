@@ -11,10 +11,10 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "Bundler",
-    "types": ["node"],
+    "types": ["node", "bun"],
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["src", "scripts/**/*.ts", "scripts/**/*.mts"]
+  "include": ["src", "scripts/**/*.ts", "scripts/**/*.mts", "tests/**/*.ts"]
 }
