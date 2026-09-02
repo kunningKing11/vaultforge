@@ -1,5 +1,6 @@
 import { formatError, toWei } from "./format";
 import { networkById } from "./networks";
+import { hasValidRecoveryPhraseWordCount } from "./recoveryPhrase";
 import { render } from "./render";
 import { recordWalletActivity, stopAutoLock, syncAutoLock } from "./autoLock";
 import { addressForNetwork, selectedNetwork, unlockedWallet } from "./selectors";
@@ -15,7 +16,6 @@ import type {
 import { walletApi } from "./walletApi";
 import { walletPasswordStrength } from "./walletPassword";
 
-const BIP39_WORD_COUNTS = new Set([12, 15, 18, 21, 24]);
 let lockedDeleteTimer: number | null = null;
 let pendingTxTimer: number | null = null;
 let portfolioRefreshId = 0;
@@ -420,8 +420,7 @@ export async function copyText(value: string, message: string) {
 }
 
 function validateRecoveryPhraseWordCount(mnemonic: string) {
-  const wordCount = mnemonic.trim() === "" ? 0 : mnemonic.trim().split(/\s+/).length;
-  if (BIP39_WORD_COUNTS.has(wordCount)) return true;
+  if (hasValidRecoveryPhraseWordCount(mnemonic)) return true;
 
   pushToast("Recovery phrase must contain 12, 15, 18, 21, or 24 words.", "error");
   return false;
