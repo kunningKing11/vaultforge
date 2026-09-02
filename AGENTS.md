@@ -121,7 +121,7 @@ When wallet models, providers, signing, transactions, or DTOs change, run:
 ```bash
 cargo check --manifest-path src-tauri/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml
-npx tsc --noEmit
+bun run typecheck
 ```
 
 Document any command that could not run.
