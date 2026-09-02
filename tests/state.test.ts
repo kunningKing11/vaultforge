@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { emptySendDraft, walletStateFromSession } from "../src/state";
-import type { WalletSession } from "../src/types";
+import { appState, emptySendDraft, resetOnboarding, walletStateFromSession } from "../src/state";
+import type { FiatCurrency, WalletSession } from "../src/types";
 
 function session(overrides: Partial<WalletSession> = {}): WalletSession {
   return {
@@ -64,4 +64,10 @@ test("creates a fresh default send draft", () => {
     amount: "",
     note: "",
   });
+});
+
+test("resets the onboarding display currency to USD", () => {
+  appState.onboarding.fiatCurrency = "JPY";
+  resetOnboarding();
+  expect(appState.onboarding.fiatCurrency as FiatCurrency).toBe("USD");
 });

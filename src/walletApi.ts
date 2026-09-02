@@ -15,6 +15,7 @@ export const walletApi = {
   createWallet: (args: {
     name: string;
     walletPassword: string;
+    fiatCurrency: FiatCurrency;
     enabledNetworks: string[];
     autoLockTimeoutSecs: number | null;
     mnemonic?: string;
@@ -23,6 +24,7 @@ export const walletApi = {
     name?: string;
     mnemonic: string;
     walletPassword: string;
+    fiatCurrency: FiatCurrency;
     enabledNetworks: string[];
     autoLockTimeoutSecs: number | null;
   }) => invoke<WalletRefreshResult>("import_wallet", args),

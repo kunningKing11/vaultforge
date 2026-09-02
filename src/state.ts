@@ -39,6 +39,7 @@ type SetupWizardState = {
   acknowledgedBackup: boolean;
   wordCount: 12 | 15 | 18 | 21 | 24;
   appearance: ThemeName;
+  fiatCurrency: FiatCurrency;
   enabledNetworks: NetworkId[];
   autoLockTimeoutSecs: number | null;
 };
@@ -103,6 +104,7 @@ export const appState: AppState = {
     acknowledgedBackup: false,
     wordCount: 12,
     appearance: "vaultforge",
+    fiatCurrency: "USD",
     enabledNetworks: networks.map((network) => network.id),
     autoLockTimeoutSecs: null,
   },
@@ -190,6 +192,7 @@ export function resetOnboarding(): void {
   wizard.recoveryPhraseVisible = false;
   wizard.acknowledgedBackup = false;
   wizard.wordCount = 12;
+  wizard.fiatCurrency = "USD";
   wizard.enabledNetworks = networks.map((network) => network.id);
   wizard.autoLockTimeoutSecs = null;
 }

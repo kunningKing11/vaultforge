@@ -23,7 +23,7 @@ A local-first crypto wallet desktop app built with a TypeScript frontend, Tailwi
 ## Features
 
 - Create, import, lock, and unlock a wallet session
-- Portfolio dashboard with token balances, fiat valuation, allocation, and weighted 24h change
+- Portfolio dashboard with token balances, allocation, weighted 24h change, and USD, EUR, GBP, or JPY valuation selectable during setup or in settings
 - Sign and review chain-specific transactions before broadcasting them
 - Basic real transfer paths for BTC, EVM native/ERC-20, Solana native/classic SPL assets, and Tron native
 - Review provider-derived fees, total debit, selected fiat value, and post-send balance estimates

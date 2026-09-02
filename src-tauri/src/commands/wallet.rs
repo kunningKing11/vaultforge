@@ -63,6 +63,7 @@ pub(crate) async fn create_wallet(
     clients: State<'_, ProviderClients>,
     name: String,
     wallet_password: String,
+    fiat_currency: FiatCurrency,
     enabled_networks: Vec<String>,
     auto_lock_timeout_secs: Option<u64>,
     mnemonic: Option<String>,
@@ -81,7 +82,7 @@ pub(crate) async fn create_wallet(
         &[],
         &enabled_networks,
         bitcoin_account.as_ref(),
-        FiatCurrency::Usd,
+        fiat_currency,
         1.0,
     )
     .await;
@@ -92,7 +93,7 @@ pub(crate) async fn create_wallet(
         created_at: Utc::now().to_rfc3339(),
         addresses,
         wallet_password_hash: hash_secret(&wallet_password),
-        fiat_currency: FiatCurrency::Usd,
+        fiat_currency,
         usd_exchange_rate: refreshed.usd_exchange_rate,
         assets: refreshed.assets,
         activity: vec![activity(
@@ -124,6 +125,7 @@ pub(crate) async fn import_wallet(
     name: Option<String>,
     mnemonic: String,
     wallet_password: String,
+    fiat_currency: FiatCurrency,
     enabled_networks: Vec<String>,
     auto_lock_timeout_secs: Option<u64>,
 ) -> Result<WalletRefreshResult, String> {
@@ -140,7 +142,7 @@ pub(crate) async fn import_wallet(
         &[],
         &enabled_networks,
         bitcoin_account.as_ref(),
-        FiatCurrency::Usd,
+        fiat_currency,
         1.0,
     )
     .await;
@@ -151,7 +153,7 @@ pub(crate) async fn import_wallet(
         created_at: Utc::now().to_rfc3339(),
         addresses,
         wallet_password_hash: hash_secret(&wallet_password),
-        fiat_currency: FiatCurrency::Usd,
+        fiat_currency,
         usd_exchange_rate: refreshed.usd_exchange_rate,
         assets: refreshed.assets,
         activity: vec![activity(

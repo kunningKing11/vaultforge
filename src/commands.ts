@@ -36,6 +36,7 @@ export async function setupWizard() {
         name: wizard.name || undefined,
         mnemonic,
         walletPassword,
+        fiatCurrency: wizard.fiatCurrency,
         enabledNetworks: wizard.enabledNetworks,
         autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
       }),
@@ -56,6 +57,7 @@ export async function setupWizard() {
       walletApi.createWallet({
         name: wizard.name || "Primary Wallet",
         walletPassword,
+        fiatCurrency: wizard.fiatCurrency,
         enabledNetworks: wizard.enabledNetworks,
         autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
         mnemonic: wizard.recoveryPhrase,

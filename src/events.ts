@@ -183,6 +183,10 @@ export function bindEvents() {
       appState.onboarding.autoLockTimeoutSecs = val === "0" ? null : Number(val);
     }
 
+    if (target.matches("[data-wizard-currency]")) {
+      appState.onboarding.fiatCurrency = target.value as FiatCurrency;
+    }
+
     if (target.matches("[data-wizard-field='customWordCount']")) {
       const val = Number(target.value);
       if (val) {

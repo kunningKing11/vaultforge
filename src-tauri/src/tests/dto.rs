@@ -23,6 +23,14 @@ fn decrypts_legacy_wallet_password_hash_payloads() {
 }
 
 #[test]
+fn deserializes_frontend_fiat_currency_codes() {
+    assert_eq!(
+        serde_json::from_str::<FiatCurrency>(r#""EUR""#).unwrap(),
+        FiatCurrency::Eur
+    );
+}
+
+#[test]
 fn default_enabled_networks_derives_evm_and_tron_addresses() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     let enabled_networks = default_enabled_networks();

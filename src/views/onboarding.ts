@@ -1,5 +1,6 @@
 import eyeIcon from "../assets/icons/eye.svg?raw";
 import eyeOffIcon from "../assets/icons/eye-off.svg?raw";
+import { fiatCurrencies } from "../currencies";
 import { escapeHtml } from "../format";
 import { networks } from "../networks";
 import { featureCard, inlineIcon, walletPasswordMeter } from "./shared";
@@ -62,7 +63,7 @@ export function onboardingView() {
           ${stepIndicator(2, "Identity")}
           ${stepIndicator(3, "Seed")}
           ${stepIndicator(4, "Appearance")}
-          ${stepIndicator(5, "Networks")}
+          ${stepIndicator(5, "Settings")}
           ${stepIndicator(6, "Backup")}
         </div>
 
@@ -258,6 +259,17 @@ function step5() {
           ${autoLockOptions.map((o) => `<option value="${o.value}" ${o.value === currentAutoLock ? "selected" : ""}>${o.label}</option>`).join("")}
         </select>
       </div>
+      <div>
+        <h3 class="mb-2 text-sm font-bold uppercase tracking-wider text-slate-400">Display currency</h3>
+        <select class="field" data-wizard-currency>
+          ${fiatCurrencies
+            .map(
+              ({ code, label }) =>
+                `<option value="${escapeHtml(code)}" ${code === wizard.fiatCurrency ? "selected" : ""}>${escapeHtml(label)} (${escapeHtml(code)})</option>`,
+            )
+            .join("")}
+        </select>
+      </div>
       <div class="flex gap-3 pt-2">
         <button class="btn-secondary flex-1" type="button" data-action="setup-prev">Back</button>
         <button class="btn-primary flex-1" type="button" data-action="setup-next">Next</button>
@@ -312,6 +324,7 @@ function step6() {
         <p><span class="font-bold text-white">Recovery phrase:</span> ${wizard.wordCount} words</p>
         <p><span class="font-bold text-white">Networks:</span> ${wizard.enabledNetworks.length} enabled</p>
         <p><span class="font-bold text-white">Auto-lock:</span> ${wizard.autoLockTimeoutSecs ? `${wizard.autoLockTimeoutSecs / 60} min` : "Off"}</p>
+        <p><span class="font-bold text-white">Display currency:</span> ${escapeHtml(wizard.fiatCurrency)}</p>
       </div>
       <div class="flex gap-3 pt-2">
         <button class="btn-secondary flex-1" type="button" data-action="setup-prev">Back</button>
