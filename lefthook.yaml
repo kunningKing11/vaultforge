@@ -1,13 +1,13 @@
 commit-msg:
-  parallel: false
   commands:
     enforce-commit-message-line-length:
       run: bash scripts/check-commit-message.sh {1}
-      priority: 1
       fail_text: "Commit blocked: keep every commit-message line to 72 characters or fewer."
+
+pre-commit:
+  commands:
     run-fast-checks:
       run: bun run hooks:check -- commit
-      priority: 2
       fail_text: "Commit blocked: one or more quality checks failed. See the summary above."
 
 pre-push:
