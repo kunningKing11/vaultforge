@@ -29,6 +29,13 @@ Lightning has frontend types but is absent from `rawNetworks`. Do not claim Ligh
 
 Keep code DRY, but share only genuinely common plumbing. Chain-specific validation, fee, signing, and encoding behavior must remain explicit.
 
+In every TypeScript and JavaScript file, group imports in this order: runtime-provided
+`bun:` and `node:` modules, third-party packages, local relative modules, then side-effect
+and stylesheet imports. Sort module specifiers alphabetically within each group, regardless
+of the imported binding names, and sort named imports alphabetically by their imported
+names. Use braces for named imports, including single named imports; omit braces only for
+default imports. Oxfmt and Oxlint enforce the repository-wide ordering.
+
 ### Frontend
 
 - `src/render.ts`: root composition, screen selection, and post-render coordination only.

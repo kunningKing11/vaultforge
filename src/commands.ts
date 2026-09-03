@@ -1,8 +1,8 @@
+import { recordWalletActivity, stopAutoLock, syncAutoLock } from "./autoLock";
 import { formatError, toWei } from "./format";
 import { networkById } from "./networks";
 import { hasValidRecoveryPhraseWordCount } from "./recoveryPhrase";
 import { render } from "./render";
-import { recordWalletActivity, stopAutoLock, syncAutoLock } from "./autoLock";
 import { addressForNetwork, selectedNetwork, unlockedWallet } from "./selectors";
 import { applyWalletSession, appState, resetOnboarding, resetSendFlow } from "./state";
 import { pushToast } from "./toasts";

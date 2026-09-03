@@ -9,7 +9,23 @@
   "endOfLine": "lf",
   "insertFinalNewline": true,
   "proseWrap": "preserve",
-  "sortImports": false,
+  "sortImports": {
+    "customGroups": [
+      {
+        "groupName": "bun",
+        "elementNamePattern": ["bun:*"]
+      }
+    ],
+    "groups": [
+      ["builtin", "bun"],
+      "external",
+      ["parent", "sibling", "index"],
+      ["side_effect_style", "style", "side_effect"],
+      "unknown"
+    ],
+    "newlinesBetween": true,
+    "sortSideEffects": true
+  },
   "sortPackageJson": true,
   "sortTailwindcss": false
 }

@@ -1,5 +1,5 @@
-import activityIcon from "../assets/icons/activity.svg?raw";
 import appLogoUrl from "../../src-tauri/icons/icon.svg";
+import activityIcon from "../assets/icons/activity.svg?raw";
 import assetsIcon from "../assets/icons/assets.svg?raw";
 import copyIcon from "../assets/icons/copy.svg?raw";
 import dashboardIcon from "../assets/icons/dashboard.svg?raw";

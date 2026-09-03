@@ -1,11 +1,11 @@
-import eyeIcon from "../assets/icons/eye.svg?raw";
 import eyeOffIcon from "../assets/icons/eye-off.svg?raw";
+import eyeIcon from "../assets/icons/eye.svg?raw";
 import { fiatCurrencies } from "../currencies";
 import { escapeHtml } from "../format";
 import { networks } from "../networks";
-import { featureCard, inlineIcon, walletPasswordMeter } from "./shared";
 import { appState } from "../state";
 import { themes } from "../theme";
+import { featureCard, inlineIcon, walletPasswordMeter } from "./shared";
 
 export function splashView() {
   return `

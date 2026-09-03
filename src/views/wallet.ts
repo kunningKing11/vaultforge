@@ -1,7 +1,7 @@
 import copyIcon from "../assets/icons/copy.svg?raw";
 import downloadIcon from "../assets/icons/download.svg?raw";
-import { escapeHtml, formatWei, money, shortAddress, usdToFiat } from "../format";
 import { fiatCurrencies } from "../currencies";
+import { escapeHtml, formatWei, money, shortAddress, usdToFiat } from "../format";
 import { networkDisplayName } from "../networks";
 import {
   addressForNetwork,

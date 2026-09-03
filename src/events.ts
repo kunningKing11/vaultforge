@@ -1,19 +1,20 @@
+import { recordWalletActivity, syncAutoLock } from "./autoLock";
 import {
-  setupWizard,
-  unlockWallet,
-  signTransaction,
   broadcastSignedTransaction,
-  swapTokens,
-  lockWallet,
-  showDeleteWallet,
   cancelDeleteWallet,
-  startDeleteWalletCountdown,
-  refreshPortfolio,
-  copyAddress,
-  copyReceiveAddress,
-  copyQrPayload,
-  copyText,
   changeFiatCurrency,
+  copyAddress,
+  copyQrPayload,
+  copyReceiveAddress,
+  copyText,
+  lockWallet,
+  refreshPortfolio,
+  setupWizard,
+  showDeleteWallet,
+  signTransaction,
+  startDeleteWalletCountdown,
+  swapTokens,
+  unlockWallet,
   updateWalletPasswordStrength,
 } from "./commands";
 import { formatError } from "./format";
@@ -21,7 +22,6 @@ import { normalizeNetworkId } from "./networks";
 import { downloadQrSvg, resetQr } from "./qr";
 import { render, updateRecipientPlaceholder } from "./render";
 import { installScrollbarBehavior } from "./scrollbars";
-import { recordWalletActivity, syncAutoLock } from "./autoLock";
 import { applyWalletSession, appState, selectSetupFlow } from "./state";
 import { applyTheme, ThemeName, themes } from "./theme";
 import { pushToast } from "./toasts";

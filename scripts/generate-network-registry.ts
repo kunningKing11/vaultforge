@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+
 import { getNetworkRegistry } from "../src/networks";
 
 const output = process.argv[2];

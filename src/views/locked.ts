@@ -1,7 +1,7 @@
-import eyeIcon from "../assets/icons/eye.svg?raw";
 import eyeOffIcon from "../assets/icons/eye-off.svg?raw";
-import { inlineIcon } from "./shared";
+import eyeIcon from "../assets/icons/eye.svg?raw";
 import { appState } from "../state";
+import { inlineIcon } from "./shared";
 
 export function lockedWalletView() {
   const revealLabel = appState.dialogs.unlockPasswordVisible

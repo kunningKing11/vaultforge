@@ -1,4 +1,4 @@
-import { getSelectedTheme, setTheme, themes, type ThemeName } from "../theme";
+import { getSelectedTheme, setTheme, type ThemeName, themes } from "../theme";
 
 export function renderThemeSelector(): string {
   const selected = getSelectedTheme();

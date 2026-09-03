@@ -1,9 +1,10 @@
 import QRCode from "qrcode";
-import { pushToast } from "./toasts";
+
 import { formatError, shortAddress } from "./format";
 import { addressForNetwork, receivePayload, selectedNetwork } from "./selectors";
 import { appState } from "./state";
 import { getSelectedTheme, themes } from "./theme";
+import { pushToast } from "./toasts";
 
 let qrKey = "";
 let qrGeneratingKey = "";

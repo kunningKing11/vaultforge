@@ -1,5 +1,5 @@
-import type { Network, NetworkAssetConfig, NetworkId, NetworkTokenConfig } from "./types";
 import networkDataJson from "./networks.json";
+import type { Network, NetworkAssetConfig, NetworkId, NetworkTokenConfig } from "./types";
 
 type NetworkTemplate = Pick<Network, "vm_type" | "isL2" | "isTestNet">;
 type NetworkDefinition = Pick<Network, "kind" | "id" | "name" | "addressKey" | "nativeAsset"> &

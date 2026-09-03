@@ -1,11 +1,11 @@
 import { appRoot } from "./main";
 import { ensureReceiveQr } from "./qr";
+import { syncHorizontalScrollbars, syncVerticalScrollbar } from "./scrollbars";
 import { appState } from "./state";
 import { deleteWalletModal, lockedWalletView } from "./views/locked";
 import { onboardingView, splashView } from "./views/onboarding";
 import { loadingBar, updateRecipientPlaceholder } from "./views/shared";
 import { walletShell } from "./views/shell";
-import { syncHorizontalScrollbars, syncVerticalScrollbar } from "./scrollbars";
 
 export function render() {
   appRoot.innerHTML = `

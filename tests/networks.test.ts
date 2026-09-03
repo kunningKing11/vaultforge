@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import networkDataJson from "../src/networks.json";
 import {
   DEFAULT_NETWORK_ID,
+  type NetworkDataSource,
   normalizeNetworkId,
   normalizeNetworkRegistry,
-  type NetworkDataSource,
 } from "../src/networks";
+import networkDataJson from "../src/networks.json";
 
 function networkSource(): NetworkDataSource {
   return structuredClone(networkDataJson) as unknown as NetworkDataSource;
