@@ -38,9 +38,8 @@ export function lockedWalletView() {
   `;
 }
 
-export function lockedDeleteWalletModal() {
-  if (appState.wallet.status !== "locked" || appState.dialogs.deleteWallet.step === "idle")
-    return "";
+export function deleteWalletModal() {
+  if (appState.dialogs.deleteWallet.step === "idle") return "";
 
   if (appState.dialogs.deleteWallet.step === "confirm") {
     return `

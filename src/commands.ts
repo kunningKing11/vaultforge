@@ -16,7 +16,7 @@ import type {
 import { walletApi } from "./walletApi";
 import { walletPasswordStrength } from "./walletPassword";
 
-let lockedDeleteTimer: number | null = null;
+let deleteWalletTimer: number | null = null;
 let pendingTxTimer: number | null = null;
 let portfolioRefreshId = 0;
 
@@ -85,7 +85,7 @@ export async function unlockWallet(form: HTMLFormElement) {
     }),
   );
   if (ok) {
-    resetLockedDeleteWallet();
+    resetDeleteWallet();
     void refreshPortfolioInBackground();
   }
 }
@@ -246,20 +246,10 @@ export async function lockWallet() {
   }
 }
 
-export async function clearWallet() {
-  if (
-    !window.confirm(
-      "Remove the encrypted local wallet and return to onboarding? This cannot be undone.",
-    )
-  )
-    return;
-  await deleteStoredWallet();
-}
-
 async function deleteStoredWallet() {
   invalidatePortfolioRefresh();
-  stopLockedDeleteTimer();
-  resetLockedDeleteWallet();
+  stopDeleteWalletTimer();
+  resetDeleteWallet();
   const ok = await runCommand("clear_wallet", () => walletApi.clearWallet());
   if (ok) {
     stopPendingTxPolling();
@@ -270,31 +260,31 @@ async function deleteStoredWallet() {
   }
 }
 
-export function showLockedDeleteWallet() {
-  stopLockedDeleteTimer();
+export function showDeleteWallet() {
+  stopDeleteWalletTimer();
   appState.dialogs.deleteWallet.step = "confirm";
   appState.dialogs.deleteWallet.secondsRemaining = 10;
   render();
 }
 
-export function cancelLockedDeleteWallet() {
-  stopLockedDeleteTimer();
-  resetLockedDeleteWallet();
+export function cancelDeleteWallet() {
+  stopDeleteWalletTimer();
+  resetDeleteWallet();
   render();
 }
 
-function resetLockedDeleteWallet() {
+function resetDeleteWallet() {
   appState.dialogs.deleteWallet.step = "idle";
   appState.dialogs.deleteWallet.secondsRemaining = 10;
 }
 
-export function startLockedDeleteWalletCountdown() {
-  stopLockedDeleteTimer();
+export function startDeleteWalletCountdown() {
+  stopDeleteWalletTimer();
   appState.dialogs.deleteWallet.step = "countdown";
   appState.dialogs.deleteWallet.secondsRemaining = 10;
   render();
 
-  lockedDeleteTimer = window.setInterval(() => {
+  deleteWalletTimer = window.setInterval(() => {
     appState.dialogs.deleteWallet.secondsRemaining -= 1;
     if (appState.dialogs.deleteWallet.secondsRemaining <= 0) {
       void deleteStoredWallet();
@@ -304,10 +294,10 @@ export function startLockedDeleteWalletCountdown() {
   }, 1_000);
 }
 
-function stopLockedDeleteTimer() {
-  if (lockedDeleteTimer !== null) {
-    window.clearInterval(lockedDeleteTimer);
-    lockedDeleteTimer = null;
+function stopDeleteWalletTimer() {
+  if (deleteWalletTimer !== null) {
+    window.clearInterval(deleteWalletTimer);
+    deleteWalletTimer = null;
   }
 }
 

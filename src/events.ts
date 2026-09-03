@@ -5,10 +5,9 @@ import {
   broadcastSignedTransaction,
   swapTokens,
   lockWallet,
-  clearWallet,
-  showLockedDeleteWallet,
-  cancelLockedDeleteWallet,
-  startLockedDeleteWalletCountdown,
+  showDeleteWallet,
+  cancelDeleteWallet,
+  startDeleteWalletCountdown,
   refreshPortfolio,
   copyAddress,
   copyReceiveAddress,
@@ -45,10 +44,9 @@ export function bindEvents() {
     if (!action) return;
 
     if (action === "lock") void lockWallet();
-    if (action === "clear-wallet") void clearWallet();
-    if (action === "show-locked-delete-wallet") showLockedDeleteWallet();
-    if (action === "cancel-locked-delete-wallet") cancelLockedDeleteWallet();
-    if (action === "start-locked-delete-wallet-countdown") startLockedDeleteWalletCountdown();
+    if (action === "show-locked-delete-wallet") showDeleteWallet();
+    if (action === "cancel-locked-delete-wallet") cancelDeleteWallet();
+    if (action === "start-locked-delete-wallet-countdown") startDeleteWalletCountdown();
     if (action === "refresh") void refreshPortfolio();
     if (action === "copy-address") {
       const address = target.closest<HTMLElement>("[data-copy-address]")?.dataset.copyAddress;

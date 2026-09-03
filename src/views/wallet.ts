@@ -272,7 +272,7 @@ function settingsView() {
         <div class="mt-6 rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4">
           <h3 class="font-black text-rose-100">Danger zone</h3>
           <p class="mt-2 text-sm font-bold leading-6 text-rose-100/80">Remove the encrypted local wallet file and return this app to onboarding.</p>
-          <button class="btn-danger mt-4" data-action="clear-wallet" type="button">Clear local wallet</button>
+          <button class="btn-danger mt-4" data-action="show-locked-delete-wallet" type="button">Clear local wallet</button>
         </div>
       </section>
     </div>
