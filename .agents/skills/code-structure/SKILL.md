@@ -47,7 +47,7 @@ When asked about the codebase, first identify which boundary the question concer
 
 - Frontend shell and screen selection: `src/render.ts`, `src/views/`, `src/events.ts`, and `src/commands.ts`.
 - Frontend contracts and chain presentation: `src/main.ts`, `src/networks.ts`, and related API/types modules.
-- Rust application wiring: `src-tauri/src/main.rs` and `src-tauri/src/commands/`.
+- Rust application wiring: `src-tauri/src/lib.rs`, the thin desktop launcher in `src-tauri/src/main.rs`, and `src-tauri/src/commands/`.
 - Wallet identity, encrypted persistence, and lifecycle: wallet, storage, encryption, and derivation modules.
 - Chain-backed data and transfers: provider modules plus transaction, signing, broadcast, and status modules.
 - Quality and release behavior: `lefthook.yaml`, `scripts/`, and `.github/workflows/`.

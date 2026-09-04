@@ -138,7 +138,7 @@ You can run the same checks manually with `bun run hooks:check -- commit` or `bu
 - `src/views/` contains focused TypeScript HTML-template modules for screens, shell layout, shared UI fragments, locked-state UI, and toast markup.
 - `src/toasts.ts` owns toast timing and animation behavior while using the toast template in `src/views/toast.ts`.
 - `tests/` mirrors the frontend modules covered by Bun unit tests.
-- `src-tauri/src/main.rs` wires the Tauri app, managed state, and command handlers.
+- `src-tauri/src/lib.rs` wires the shared Tauri app, managed state, and command handlers; `src-tauri/src/main.rs` is the thin desktop launcher.
 - `src-tauri/src/commands/` contains Tauri command handlers split by domain: wallet lifecycle, transactions, and market data.
 - `src-tauri/src/providers/` contains chain RPC/provider code for balances, fee data, broadcast, and transaction status.
 - `src-tauri/src/registry.rs` exposes the normalized network, provider, native-asset, token, and pricing configuration embedded by `build.rs`.

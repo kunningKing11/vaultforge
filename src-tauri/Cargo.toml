@@ -5,6 +5,10 @@ description = "A local-first crypto wallet desktop app"
 authors = ["VaultForge"]
 edition = "2024"
 
+[lib]
+name = "vaultforge_wallet_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

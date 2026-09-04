@@ -52,7 +52,8 @@ Keep timer handles, callbacks, and controller details in their owning modules, n
 
 ### Backend
 
-- `src-tauri/src/main.rs`: module declarations, managed state, Tauri setup, and `generate_handler!` wiring only.
+- `src-tauri/src/lib.rs`: module declarations, managed state, Tauri setup, and `generate_handler!` wiring only.
+- `src-tauri/src/main.rs`: thin desktop entry point that calls the shared library `run` function.
 - `commands/wallet.rs`: create, import, unlock, lock, clear, and session commands.
 - `commands/tx.rs`: signing, broadcast, compatibility swap flows, and transaction status.
 - `commands/market.rs`: market data and provider-backed portfolio refresh.
