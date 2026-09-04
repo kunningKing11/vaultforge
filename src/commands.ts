@@ -1,3 +1,5 @@
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+
 import { recordWalletActivity, stopAutoLock, syncAutoLock } from "./autoLock";
 import { formatError, toWei } from "./format";
 import { networkById } from "./networks";
@@ -407,7 +409,7 @@ export async function copyQrPayload() {
 }
 
 export async function copyText(value: string, message: string) {
-  await navigator.clipboard.writeText(value);
+  await writeText(value);
   pushToast(message, "success");
 }
 

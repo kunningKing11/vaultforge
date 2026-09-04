@@ -22,6 +22,7 @@ use state::AppState;
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
             let icon =
                 tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png"))?.to_owned(); // TODO: upscale
