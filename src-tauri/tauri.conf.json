@@ -26,6 +26,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["deb", "rpm"],
     "publisher": "VaultForge",
     "homepage": "https://github.com/kunningKing11/vaultforge",
@@ -54,6 +55,14 @@
           "/usr/share/icons/hicolor/scalable/apps/vaultforge-wallet.svg": "icons/icon.svg"
         }
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg2ODNBMDVDRjUxRTFDODIKUldTQ0hCNzFYS0NEaHZjVjlWSVh1TWJ5S3R5b2hoOUtIMzArcWROQUUzNTl5aW1yamx1KzU4L2gK",
+      "endpoints": [
+        "https://github.com/kunningKing11/vaultforge/releases/latest/download/latest.json"
+      ]
     }
   }
 }

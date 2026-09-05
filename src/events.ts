@@ -26,6 +26,7 @@ import { applyWalletSession, appState, selectSetupFlow } from "./state";
 import { applyTheme, ThemeName, themes } from "./theme";
 import { pushToast } from "./toasts";
 import type { FiatCurrency, QrResilience, View } from "./types";
+import { checkForUpdates } from "./updater";
 import { walletApi } from "./walletApi";
 import { walletPasswordStrength } from "./walletPassword";
 
@@ -48,6 +49,7 @@ export function bindEvents() {
     if (action === "cancel-locked-delete-wallet") cancelDeleteWallet();
     if (action === "start-locked-delete-wallet-countdown") startDeleteWalletCountdown();
     if (action === "refresh") void refreshPortfolio();
+    if (action === "check-for-updates") void checkForUpdates();
     if (action === "copy-address") {
       const address = target.closest<HTMLElement>("[data-copy-address]")?.dataset.copyAddress;
       if (address) void copyAddress(address);

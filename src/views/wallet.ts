@@ -256,8 +256,17 @@ function settingsView() {
                   `<option value="${escapeHtml(code)}" ${code === wallet.fiatCurrency ? "selected" : ""}>${escapeHtml(label)} (${escapeHtml(code)})</option>`,
               )
               .join("")}
-          </select>
+        </select>
         </label>
+        <div class="mt-6 border-t border-white/10 pt-6">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <h3 class="font-black text-slate-100">Application updates</h3>
+              <p class="mt-1 text-sm font-bold text-slate-500">Check GitHub Releases for a newer VaultForge build.</p>
+            </div>
+            <button class="btn-secondary shrink-0" data-action="check-for-updates" type="button">Check for updates</button>
+          </div>
+        </div>
         <div class="mt-6 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm font-bold text-amber-100">This build simulates balances and transactions. Connect audited chain clients and hardware-backed signing before using real funds.</div>
       </section>
       <section class="glass rounded-[2rem] p-6">

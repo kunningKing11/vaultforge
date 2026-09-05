@@ -27,6 +27,8 @@
     "@fontsource/ubuntu-mono": "^5.3.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-clipboard-manager": "~2",
+    "@tauri-apps/plugin-process": "~2",
+    "@tauri-apps/plugin-updater": "~2",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
