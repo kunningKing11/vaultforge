@@ -256,7 +256,7 @@ function settingsView() {
                   `<option value="${escapeHtml(code)}" ${code === wallet.fiatCurrency ? "selected" : ""}>${escapeHtml(label)} (${escapeHtml(code)})</option>`,
               )
               .join("")}
-        </select>
+          </select>
         </label>
         <div class="mt-6 border-t border-white/10 pt-6">
           <div class="flex items-center justify-between gap-4">
