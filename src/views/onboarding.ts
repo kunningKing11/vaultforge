@@ -1,5 +1,6 @@
 import eyeOffIcon from "../assets/icons/eye-off.svg?raw";
 import eyeIcon from "../assets/icons/eye.svg?raw";
+import { autoLockOptions } from "../autoLock";
 import { fiatCurrencies } from "../currencies";
 import { escapeHtml } from "../format";
 import { networks } from "../networks";
@@ -225,14 +226,6 @@ function step4() {
 
 function step5() {
   const wizard = appState.onboarding;
-  const autoLockOptions = [
-    { label: "Off", value: "0" },
-    { label: "5 minutes", value: "300" },
-    { label: "10 minutes", value: "600" },
-    { label: "15 minutes", value: "900" },
-    { label: "30 minutes", value: "1800" },
-    { label: "1 hour", value: "3600" },
-  ];
   const currentAutoLock =
     wizard.autoLockTimeoutSecs === null ? "0" : String(wizard.autoLockTimeoutSecs);
 
@@ -255,7 +248,7 @@ function step5() {
       </div>
       <div>
         <h3 class="mb-2 text-sm font-bold uppercase tracking-wider text-slate-400">Auto-lock timeout</h3>
-        <select class="field" data-wizard-autolock>
+        <select class="field" data-auto-lock>
           ${autoLockOptions.map((o) => `<option value="${o.value}" ${o.value === currentAutoLock ? "selected" : ""}>${o.label}</option>`).join("")}
         </select>
       </div>

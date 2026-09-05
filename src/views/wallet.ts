@@ -1,5 +1,6 @@
 import copyIcon from "../assets/icons/copy.svg?raw";
 import downloadIcon from "../assets/icons/download.svg?raw";
+import { autoLockOptions } from "../autoLock";
 import { fiatCurrencies } from "../currencies";
 import { escapeHtml, formatWei, money, shortAddress, usdToFiat } from "../format";
 import { networkDisplayName } from "../networks";
@@ -242,11 +243,23 @@ function activityView() {
 function settingsView() {
   const wallet = unlockedWallet();
   if (!wallet) return "";
+
+  const currentAutoLock =
+    wallet.autoLockTimeoutSecs === null ? "0" : String(wallet.autoLockTimeoutSecs);
   return `
     <div class="grid gap-5 xl:grid-cols-[0.95fr_1fr]">
       <section class="glass rounded-[2rem] p-6">
         <p class="text-sm font-bold uppercase tracking-[0.3em] text-slate-500">Preferences</p>
         <h2 class="mt-2 text-3xl font-black">Wallet settings</h2>
+        <h3 class="mb-3 text-sm font-bold uppercase tracking-wider text-slate-400">Auto-lock timeout</h3>
+        <select class="field" data-auto-lock>
+          ${autoLockOptions
+            .map(
+              (option) =>
+                `<option value="${option.value}" ${option.value === currentAutoLock ? "selected" : ""}>${option.label}</option>`,
+            )
+            .join("")}
+        </select>
         <label class="mt-6 block space-y-2">
           <span class="text-sm font-bold text-slate-300">Display currency</span>
           <select class="field" data-fiat-currency>

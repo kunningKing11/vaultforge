@@ -1,5 +1,14 @@
 import type { WalletState } from "./state";
 
+export const autoLockOptions = [
+  { label: "Off", value: "0" },
+  { label: "5 minutes", value: "300" },
+  { label: "10 minutes", value: "600" },
+  { label: "15 minutes", value: "900" },
+  { label: "30 minutes", value: "1800" },
+  { label: "1 hour", value: "3600" },
+];
+
 let timer: number | null = null;
 let lastActivity = Date.now();
 

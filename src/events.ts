@@ -178,7 +178,7 @@ export function bindEvents() {
       }
     }
 
-    if (target.matches("[data-wizard-autolock]")) {
+    if (target.matches("[data-auto-lock]")) {
       const val = target.value;
       appState.onboarding.autoLockTimeoutSecs = val === "0" ? null : Number(val);
     }
