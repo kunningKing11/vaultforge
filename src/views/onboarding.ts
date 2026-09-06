@@ -91,7 +91,6 @@ function step1() {
 
 function step2() {
   const wizard = appState.onboarding;
-  const isImport = wizard.flow === "import";
   const passwordRevealLabel = wizard.walletPasswordVisible
     ? "Hide wallet passwords"
     : "Show wallet passwords";
@@ -99,16 +98,10 @@ function step2() {
   const passwordIcon = wizard.walletPasswordVisible ? eyeOffIcon : eyeIcon;
   return `
     <div class="space-y-4">
-      ${
-        !isImport
-          ? `
-        <label class="block space-y-2">
-          <span class="text-sm font-bold text-slate-300">Wallet name</span>
-          <input class="field" data-wizard-field="name" value="${escapeHtml(wizard.name)}" placeholder="Primary Vault" />
-        </label>
-      `
-          : ""
-      }
+      <label class="block space-y-2">
+        <span class="text-sm font-bold text-slate-300">Wallet name</span>
+        <input class="field" data-wizard-field="name" value="${escapeHtml(wizard.name)}" placeholder="Primary Vault" />
+      </label>
       <label class="block space-y-2">
         <span class="text-sm font-bold text-slate-300">Wallet password</span>
         <div class="relative">
