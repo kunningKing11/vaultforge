@@ -251,26 +251,35 @@ function settingsView() {
       <section class="glass rounded-[2rem] p-6">
         <p class="text-sm font-bold uppercase tracking-[0.3em] text-slate-500">Preferences</p>
         <h2 class="mt-2 text-3xl font-black">Wallet settings</h2>
-        <h3 class="mb-3 text-sm font-bold uppercase tracking-wider text-slate-400">Auto-lock timeout</h3>
-        <select class="field" data-auto-lock>
-          ${autoLockOptions
-            .map(
-              (option) =>
-                `<option value="${option.value}" ${option.value === currentAutoLock ? "selected" : ""}>${option.label}</option>`,
-            )
-            .join("")}
-        </select>
-        <label class="mt-6 block space-y-2">
-          <span class="text-sm font-bold text-slate-300">Display currency</span>
-          <select class="field" data-fiat-currency>
-            ${fiatCurrencies
-              .map(
-                ({ code, label }) =>
-                  `<option value="${escapeHtml(code)}" ${code === wallet.fiatCurrency ? "selected" : ""}>${escapeHtml(label)} (${escapeHtml(code)})</option>`,
-              )
-              .join("")}
-          </select>
-        </label>
+        <form data-action="save-wallet-settings">
+          <label class="mt-6 block space-y-2">
+            <span class="preference-label">Wallet name</span>
+            <input class="field" name="walletName" value="${escapeHtml(wallet.name)}" maxlength="48" required />
+          </label>
+          <label class="mt-6 block space-y-2">
+            <span class="preference-label">Auto-lock timeout</span>
+            <select class="field" name="autoLockTimeoutSecs">
+              ${autoLockOptions
+                .map(
+                  (option) =>
+                    `<option value="${option.value}" ${option.value === currentAutoLock ? "selected" : ""}>${option.label}</option>`,
+                )
+                .join("")}
+            </select>
+          </label>
+          <label class="mt-6 block space-y-2">
+            <span class="preference-label">Display currency</span>
+            <select class="field" name="fiatCurrency">
+              ${fiatCurrencies
+                .map(
+                  ({ code, label }) =>
+                    `<option value="${escapeHtml(code)}" ${code === wallet.fiatCurrency ? "selected" : ""}>${escapeHtml(label)} (${escapeHtml(code)})</option>`,
+                )
+                .join("")}
+            </select>
+          </label>
+          <button class="btn-primary mt-6" type="submit">Save settings</button>
+        </form>
         <div class="mt-6 border-t border-white/10 pt-6">
           <div class="flex items-center justify-between gap-4">
             <div>

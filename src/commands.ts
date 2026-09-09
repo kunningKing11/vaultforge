@@ -92,8 +92,16 @@ export async function unlockWallet(form: HTMLFormElement) {
   }
 }
 
-export async function changeFiatCurrency(currency: FiatCurrency) {
-  await runCommand("set_fiat_currency", () => walletApi.setFiatCurrency(currency));
+export async function saveWalletSettings(form: HTMLFormElement) {
+  const formData = new FormData(form);
+  const autoLockTimeout = String(formData.get("autoLockTimeoutSecs") || "0");
+  await runCommand("update_wallet_settings", () =>
+    walletApi.updateWalletSettings({
+      name: String(formData.get("walletName") || ""),
+      fiatCurrency: String(formData.get("fiatCurrency") || "USD") as FiatCurrency,
+      autoLockTimeoutSecs: autoLockTimeout === "0" ? null : Number(autoLockTimeout),
+    }),
+  );
 }
 
 export async function signTransaction(form: HTMLFormElement) {
@@ -435,7 +443,7 @@ function successMessage(command: string) {
     create_wallet: "Wallet created. Recovery phrase was generated in the Rust backend.",
     import_wallet: "Wallet imported successfully.",
     unlock_wallet: "Wallet unlocked.",
-    set_fiat_currency: "Display currency updated.",
+    update_wallet_settings: "Wallet settings updated.",
     lock_wallet: "Wallet locked.",
     clear_wallet: "Local wallet cleared.",
     sign_transaction: "Transaction signed locally.",

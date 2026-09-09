@@ -85,7 +85,7 @@ export type SessionCommand =
   | "create_wallet"
   | "import_wallet"
   | "unlock_wallet"
-  | "set_fiat_currency"
+  | "update_wallet_settings"
   | "send_transaction"
   | "swap_tokens"
   | "clear_wallet"

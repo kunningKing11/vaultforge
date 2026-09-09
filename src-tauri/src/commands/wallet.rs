@@ -13,6 +13,7 @@ use crate::derivation::{
 use crate::dto::{FiatCurrency, Wallet, WalletRefreshResult, WalletSession};
 use crate::providers::bitcoin::BitcoinAccountSnapshot;
 use crate::providers::http::ProviderClients;
+use crate::providers::prices::fetch_usd_exchange_rate;
 use crate::state::{
     AppState, StoredWalletMetadata, clear_secret_string, refresh_result_from_state,
     session_from_state,
@@ -55,6 +56,69 @@ pub(crate) fn get_wallet(state: State<'_, Mutex<AppState>>) -> Result<WalletSess
 #[tauri::command]
 pub(crate) fn generate_mnemonic_cmd(word_count: Option<u32>) -> Result<String, String> {
     generate_mnemonic(word_count.unwrap_or(24))
+}
+
+fn apply_wallet_settings(
+    wallet: &mut Wallet,
+    name: String,
+    fiat_currency: FiatCurrency,
+    usd_exchange_rate: f64,
+    auto_lock_timeout_secs: Option<u64>,
+) {
+    wallet.name = clean_name(name);
+    wallet.fiat_currency = fiat_currency;
+    wallet.usd_exchange_rate = usd_exchange_rate;
+    wallet.auto_lock_timeout_secs = auto_lock_timeout_secs;
+}
+
+#[tauri::command]
+pub(crate) async fn update_wallet_settings(
+    state: State<'_, Mutex<AppState>>,
+    clients: State<'_, ProviderClients>,
+    name: String,
+    fiat_currency: FiatCurrency,
+    auto_lock_timeout_secs: Option<u64>,
+) -> Result<WalletSession, String> {
+    let (wallet_generation, current_currency, current_exchange_rate) = {
+        let state = state.lock().map_err(|_| "State lock failed")?;
+        if state.locked {
+            return Err("Wallet is locked".to_string());
+        }
+        let wallet = state
+            .wallet
+            .as_ref()
+            .ok_or_else(|| "No wallet exists yet".to_string())?;
+        (
+            state.wallet_generation,
+            wallet.fiat_currency,
+            wallet.usd_exchange_rate,
+        )
+    };
+
+    let usd_exchange_rate = if fiat_currency == current_currency {
+        current_exchange_rate
+    } else {
+        fetch_usd_exchange_rate(clients.http(), fiat_currency).await?
+    };
+
+    let mut state = state.lock().map_err(|_| "State lock failed")?;
+    if !state.can_commit_refresh(wallet_generation) {
+        return Err("Wallet changed while updating settings".to_string());
+    }
+    let wallet = state
+        .wallet
+        .as_mut()
+        .ok_or_else(|| "No wallet exists yet".to_string())?;
+    apply_wallet_settings(
+        wallet,
+        name,
+        fiat_currency,
+        usd_exchange_rate,
+        auto_lock_timeout_secs,
+    );
+    state.advance_wallet_generation();
+    persist_state_wallet(&mut state)?;
+    Ok(session_from_state(&state))
 }
 
 #[tauri::command]

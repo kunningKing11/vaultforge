@@ -33,8 +33,11 @@ export const walletApi = {
     invoke<WalletRefreshResult>("unlock_wallet", args),
   lockWallet: () => invoke<null>("lock_wallet"),
   clearWallet: () => invoke<WalletSession>("clear_wallet"),
-  setFiatCurrency: (currency: FiatCurrency) =>
-    invoke<WalletSession>("set_fiat_currency", { currency }),
+  updateWalletSettings: (args: {
+    name: string;
+    fiatCurrency: FiatCurrency;
+    autoLockTimeoutSecs: number | null;
+  }) => invoke<WalletSession>("update_wallet_settings", args),
   signTransaction: (args: {
     to: string;
     symbol: string;

@@ -3,9 +3,7 @@ use std::sync::Mutex;
 use tauri::State;
 
 use crate::assets::{cached_asset, cached_asset_by_token_address};
-use crate::dto::{
-    Asset, FiatCurrency, RefreshWarning, RefreshWarningKind, WalletRefreshResult, WalletSession,
-};
+use crate::dto::{Asset, FiatCurrency, RefreshWarning, RefreshWarningKind, WalletRefreshResult};
 use crate::providers::bitcoin::BitcoinAccountSnapshot;
 use crate::providers::fetch_portfolio_assets;
 use crate::providers::http::ProviderClients;
@@ -13,50 +11,8 @@ use crate::providers::prices::{
     CoinGeckoPriceResponse, TokenMetadata, fetch_market_prices, fetch_token_metadata,
     fetch_usd_exchange_rate, price_id_for_asset,
 };
-use crate::state::{AppState, refresh_result_from_state, session_from_state};
+use crate::state::{AppState, refresh_result_from_state};
 use crate::storage::persist_state_wallet;
-
-#[tauri::command]
-pub(crate) async fn set_fiat_currency(
-    state: State<'_, Mutex<AppState>>,
-    clients: State<'_, ProviderClients>,
-    currency: FiatCurrency,
-) -> Result<WalletSession, String> {
-    let wallet_generation = {
-        let state = state.lock().map_err(|_| "State lock failed")?;
-
-        if state.locked {
-            return Err("Wallet is locked".to_string());
-        }
-
-        if state.wallet.is_none() {
-            return Err("No wallet exists yet".to_string());
-        }
-
-        state.wallet_generation
-    };
-
-    let exchange_rate = fetch_usd_exchange_rate(clients.http(), currency).await?;
-
-    let mut state = state.lock().map_err(|_| "State lock failed")?;
-
-    if !state.can_commit_refresh(wallet_generation) {
-        return Err("Wallet changed while updating currency".to_string());
-    }
-
-    let wallet = state
-        .wallet
-        .as_mut()
-        .ok_or_else(|| "No wallet exists yet".to_string())?;
-
-    wallet.fiat_currency = currency;
-    wallet.usd_exchange_rate = exchange_rate;
-
-    state.advance_wallet_generation();
-    persist_state_wallet(&mut state)?;
-
-    Ok(session_from_state(&state))
-}
 
 pub(crate) struct PortfolioRefresh {
     pub(crate) assets: Vec<Asset>,

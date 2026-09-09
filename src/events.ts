@@ -2,13 +2,13 @@ import { recordWalletActivity, syncAutoLock } from "./autoLock";
 import {
   broadcastSignedTransaction,
   cancelDeleteWallet,
-  changeFiatCurrency,
   copyAddress,
   copyQrPayload,
   copyReceiveAddress,
   copyText,
   lockWallet,
   refreshPortfolio,
+  saveWalletSettings,
   setupWizard,
   showDeleteWallet,
   signTransaction,
@@ -118,6 +118,7 @@ export function bindEvents() {
     const action = form.dataset.action;
 
     if (action === "wallet-setup") void setupWizard();
+    if (action === "save-wallet-settings") void saveWalletSettings(form);
     if (action === "unlock-wallet") void unlockWallet(form);
     if (action === "sign-transaction") void signTransaction(form);
     if (action === "swap-tokens") void swapTokens(form);
@@ -140,10 +141,6 @@ export function bindEvents() {
 
     if (target.matches("[data-send-asset]")) {
       updateRecipientPlaceholder(target.selectedOptions[0]?.dataset.symbol ?? "");
-    }
-
-    if (target.matches("[data-fiat-currency]")) {
-      void changeFiatCurrency(target.value as FiatCurrency);
     }
   });
 
@@ -178,7 +175,7 @@ export function bindEvents() {
       }
     }
 
-    if (target.matches("[data-auto-lock]")) {
+    if (target.matches("[data-wizard-auto-lock]")) {
       const val = target.value;
       appState.onboarding.autoLockTimeoutSecs = val === "0" ? null : Number(val);
     }

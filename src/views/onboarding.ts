@@ -241,7 +241,7 @@ function step5() {
       </div>
       <div>
         <h3 class="preference-label mb-2">Auto-lock timeout</h3>
-        <select class="field" data-auto-lock>
+        <select class="field" data-wizard-auto-lock>
           ${autoLockOptions.map((o) => `<option value="${o.value}" ${o.value === currentAutoLock ? "selected" : ""}>${o.label}</option>`).join("")}
         </select>
       </div>
