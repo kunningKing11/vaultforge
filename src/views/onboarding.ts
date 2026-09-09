@@ -99,11 +99,11 @@ function step2() {
   return `
     <div class="space-y-4">
       <label class="block space-y-2">
-        <span class="text-sm font-bold text-slate-300">Wallet name</span>
+        <span class="preference-label">Wallet name</span>
         <input class="field" data-wizard-field="name" value="${escapeHtml(wizard.name)}" placeholder="Primary Vault" />
       </label>
       <label class="block space-y-2">
-        <span class="text-sm font-bold text-slate-300">Wallet password</span>
+        <span class="preference-label">Wallet password</span>
         <div class="relative">
           <input class="field" data-wizard-field="walletPassword" type="${wizard.walletPasswordVisible ? "text" : "password"}" minlength="8" placeholder="Minimum 8 characters" data-wallet-password-input value="${escapeHtml(wizard.walletPassword)}" />
           <button class="absolute right-3 top-1/2 -translate-y-1/2" type="button" data-action="toggle-wallet-password-visibility" aria-label="${passwordRevealLabel}" aria-pressed="${wizard.walletPasswordVisible}">
@@ -113,7 +113,7 @@ function step2() {
       </label>
       ${walletPasswordMeter(wizard.walletPassword)}
       <label class="block space-y-2">
-        <span class="text-sm font-bold text-slate-300">Confirm wallet password</span>
+        <span class="preference-label">Confirm wallet password</span>
         <div class="relative">
           <input class="field" data-wizard-field="confirmWalletPassword" type="${wizard.walletPasswordVisible ? "text" : "password"}" minlength="8" value="${escapeHtml(wizard.confirmWalletPassword)}" />
           <button class="absolute right-3 top-1/2 -translate-y-1/2" type="button" data-action="toggle-wallet-password-visibility" aria-label="${passwordRevealLabel}" aria-pressed="${wizard.walletPasswordVisible}">
@@ -138,7 +138,7 @@ function step3() {
       <div class="space-y-4">
         <p class="text-sm text-slate-300">Enter your recovery phrase exactly as you wrote it down.</p>
         <label class="block space-y-2">
-          <span class="text-sm font-bold text-slate-300">Recovery phrase</span>
+          <span class="preference-label">Recovery phrase</span>
           <textarea class="field min-h-28 resize-none" data-wizard-field="mnemonic" placeholder="12, 15, 18, 21, or 24 word phrase">${escapeHtml(wizard.recoveryPhrase)}</textarea>
         </label>
         <div class="flex gap-3 pt-2">
@@ -225,7 +225,7 @@ function step5() {
   return `
     <div class="space-y-5">
       <div>
-        <h3 class="mb-3 text-sm font-bold uppercase tracking-wider text-slate-400">Networks</h3>
+        <h3 class="preference-label mb-3">Networks</h3>
         <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
           ${networks
             .map(
@@ -240,13 +240,13 @@ function step5() {
         </div>
       </div>
       <div>
-        <h3 class="mb-2 text-sm font-bold uppercase tracking-wider text-slate-400">Auto-lock timeout</h3>
+        <h3 class="preference-label mb-2">Auto-lock timeout</h3>
         <select class="field" data-auto-lock>
           ${autoLockOptions.map((o) => `<option value="${o.value}" ${o.value === currentAutoLock ? "selected" : ""}>${o.label}</option>`).join("")}
         </select>
       </div>
       <div>
-        <h3 class="mb-2 text-sm font-bold uppercase tracking-wider text-slate-400">Display currency</h3>
+        <h3 class="preference-label mb-2">Display currency</h3>
         <select class="field" data-wizard-currency>
           ${fiatCurrencies
             .map(

@@ -112,12 +112,12 @@ function sendView() {
       <h2 class="mt-2 text-3xl font-black">Send crypto</h2>
       <p class="mt-3 text-sm font-bold leading-6 text-slate-400">Transactions are signed locally before being broadcast to the chain RPC. Review the signature before funds leave your balance.</p>
       <form data-action="sign-transaction" class="mt-6 grid gap-4">
-        <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Recipient address</span><input class="field" name="to" data-recipient-address placeholder="${addressPlaceholder(selectedSymbol)}" value="${escapeHtml(appState.send.draft.to)}" required /></label>
+        <label class="space-y-2"><span class="form-label">Recipient address</span><input class="field" name="to" data-recipient-address placeholder="${addressPlaceholder(selectedSymbol)}" value="${escapeHtml(appState.send.draft.to)}" required /></label>
         <div class="grid gap-4 sm:grid-cols-2">
-          <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Asset</span>${sendAssetSelect(selectedAssetId)}</label>
-          <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" value="${escapeHtml(appState.send.draft.amount)}" required /></label>
+          <label class="space-y-2"><span class="form-label">Asset</span>${sendAssetSelect(selectedAssetId)}</label>
+          <label class="space-y-2"><span class="form-label">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" value="${escapeHtml(appState.send.draft.amount)}" required /></label>
         </div>
-        <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Note</span><input class="field" name="note" placeholder="Optional transaction memo" value="${escapeHtml(appState.send.draft.note)}" /></label>
+        <label class="space-y-2"><span class="form-label">Note</span><input class="field" name="note" placeholder="Optional transaction memo" value="${escapeHtml(appState.send.draft.note)}" /></label>
         <button class="btn-primary justify-self-start" type="submit">Sign transaction</button>
       </form>
     </section>
@@ -176,8 +176,8 @@ function receiveView() {
       <p class="text-sm font-bold uppercase tracking-[0.3em] text-slate-500">Receive</p>
       <h2 class="mt-2 text-3xl font-black">Deposit address</h2>
       <div class="mt-6 grid gap-4 sm:grid-cols-2">
-        <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Receive network</span>${receiveNetworkSelect()}</label>
-        <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">QR resilience</span>${qrResilienceSelect()}</label>
+        <label class="space-y-2"><span class="form-label">Receive network</span>${receiveNetworkSelect()}</label>
+        <label class="space-y-2"><span class="form-label">QR resilience</span>${qrResilienceSelect()}</label>
       </div>
       <div class="theme-panel-accent mt-6 rounded-3xl border border-dashed p-6 text-center">
         <div class="theme-glow qr-code mx-auto flex h-56 w-56 items-center justify-center rounded-2xl bg-white p-4">${qrContent}</div>
@@ -206,10 +206,10 @@ function swapView() {
       <h2 class="mt-2 text-3xl font-black">Swap assets</h2>
       <form data-action="swap-tokens" class="mt-6 grid gap-4">
         <div class="grid gap-4 sm:grid-cols-2">
-          <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">From</span>${assetSelect("fromSymbol")}</label>
-          <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">To</span>${assetSelect("toSymbol", "USDC")}</label>
+          <label class="space-y-2"><span class="form-label">From</span>${assetSelect("fromSymbol")}</label>
+          <label class="space-y-2"><span class="form-label">To</span>${assetSelect("toSymbol", "USDC")}</label>
         </div>
-        <label class="space-y-2"><span class="text-sm font-bold font-bold text-slate-300">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" required /></label>
+        <label class="space-y-2"><span class="form-label">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" required /></label>
         <button class="btn-primary justify-self-start" type="submit">Execute simulated swap</button>
       </form>
     </section>
@@ -274,25 +274,14 @@ function settingsView() {
         <div class="mt-6 border-t border-white/10 pt-6">
           <div class="flex items-center justify-between gap-4">
             <div>
-              <h3 class="font-black text-slate-100">Application updates</h3>
-              <p class="mt-1 text-sm font-bold text-slate-500">Check GitHub Releases for a newer VaultForge build.</p>
+              <h3 class="section-heading text-slate-100">Application updates</h3>
+              <p class="supporting-text mt-1">Check GitHub Releases for a newer version of VaultForge</p>
             </div>
             <button class="btn-secondary shrink-0" data-action="check-for-updates" type="button">Check for updates</button>
           </div>
         </div>
-        <div class="mt-6 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm font-bold text-amber-100">This build simulates balances and transactions. Connect audited chain clients and hardware-backed signing before using real funds.</div>
-      </section>
-      <section class="glass rounded-[2rem] p-6">
-        <p class="theme-text-accent text-sm font-bold uppercase tracking-[0.3em]">Security center</p>
-        <h2 class="mt-2 text-3xl font-black">Local protection</h2>
-        <div class="mt-6 grid gap-3 sm:grid-cols-2">
-          ${securityTile("Storage", "AES-GCM encrypted")}
-          ${securityTile("Key derivation", "Argon2 wallet password key")}
-          ${securityTile("Mode", "ECDSA signing (EIP-1559)")}
-          ${securityTile("Lock state", appState.wallet.status === "locked" ? "Locked" : "Unlocked")}
-        </div>
         <div class="mt-6 rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4">
-          <h3 class="font-black text-rose-100">Danger zone</h3>
+          <h3 class="section-heading text-rose-100">Danger zone</h3>
           <p class="mt-2 text-sm font-bold leading-6 text-rose-100/80">Remove the encrypted local wallet file and return this app to onboarding.</p>
           <button class="btn-danger mt-4" data-action="show-locked-delete-wallet" type="button">Clear local wallet</button>
         </div>
@@ -321,10 +310,6 @@ function quickActions() {
       </div>
     </section>
   `;
-}
-
-function securityTile(label: string, value: string) {
-  return `<div class="rounded-2xl border border-white/10 bg-white/[0.035] p-4"><p class="text-xs uppercase tracking-[0.22em] text-slate-500">${escapeHtml(label)}</p><p class="mt-2 font-black text-slate-100">${escapeHtml(value)}</p></div>`;
 }
 
 function portfolioChange() {

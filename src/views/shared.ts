@@ -160,7 +160,7 @@ export function copyableDetailRow(label: string, value: string) {
 }
 
 export function featureCard(title: string, body: string) {
-  return `<div class="rounded-2xl border border-white/10 bg-white/[0.04] p-5"><h3 class="font-black">${title}</h3><p class="mt-2 text-sm font-bold leading-6 text-slate-400">${body}</p></div>`;
+  return `<div class="rounded-2xl border border-white/10 bg-white/[0.04] p-5"><h3 class="section-heading">${title}</h3><p class="mt-2 text-sm font-bold leading-6 text-slate-400">${body}</p></div>`;
 }
 
 export function walletPasswordMeter(password: string) {

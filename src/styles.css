@@ -37,6 +37,25 @@ h6 {
   font-family: var(--font-display);
 }
 
+/* Shared typography roles: keep visual treatment class-based rather than
+ * relying on the HTML element used as a wrapper. */
+.form-label {
+  @apply text-sm font-bold text-slate-300;
+}
+
+.preference-label {
+  @apply text-sm font-bold uppercase tracking-wider text-slate-400;
+  font-family: var(--font-display);
+}
+
+.section-heading {
+  @apply font-black;
+}
+
+.supporting-text {
+  @apply text-sm font-bold leading-6 text-slate-500;
+}
+
 button,
 input,
 select,
@@ -81,7 +100,7 @@ textarea {
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
-    background 160ms ease;
+    background-color 160ms ease;
 }
 
 .field:focus {

@@ -19,7 +19,7 @@ export function lockedWalletView() {
         <p class="mt-3 text-slate-400">Your wallet session is encrypted locally. Enter your wallet password to unlock your wallet.</p>
         <form data-action="unlock-wallet" class="mt-7 space-y-4 text-left">
           <label class="block space-y-2">
-            <span class="text-sm font-bold font-bold text-slate-300">Wallet password</span>
+            <span class="form-label">Wallet password</span>
             <div class="relative">
               <input class="field pr-12" name="walletPassword" type="${appState.dialogs.unlockPasswordVisible ? "text" : "password"}" required />
               <button class="absolute right-3 top-1/2 -translate-y-1/2" type="button" data-action="toggle-unlock-password-visibility" aria-label="${revealLabel}" aria-pressed="${appState.dialogs.unlockPasswordVisible}">
