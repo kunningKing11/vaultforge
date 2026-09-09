@@ -22,6 +22,9 @@ describe("network registry normalization", () => {
       expect(network.ticker).toBe(network.nativeAsset.symbol);
       expect(network.tokens).toBeArray();
     }
+    expect(
+      registry.networks.find((network) => network.id === "bitcoin")!.nativeAsset.unicodeSymbol,
+    ).toBe("₿");
   });
 
   test("rejects unsupported schemas and duplicate network ids", () => {

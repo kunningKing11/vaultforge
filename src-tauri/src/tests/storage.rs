@@ -30,10 +30,11 @@ fn encrypts_and_decrypts_wallet_payload() {
         activity: vec![activity("system", "Created", "Local", "1")],
         enabled_networks: vec!["evm".to_string(), "bitcoin".to_string()],
         auto_lock_timeout_secs: Some(300),
+        use_crypto_symbols: true,
     };
     let (key, salt) = derive_storage_key(wallet_password, None).unwrap();
-    let stored = encrypt_wallet(&wallet, &key, &salt).unwrap();
-    assert_eq!(stored.version, 5);
+    let mut stored = encrypt_wallet(&wallet, &key, &salt).unwrap();
+    assert_eq!(stored.version, 6);
 
     let decrypted = decrypt_wallet(&stored, wallet_password).unwrap();
     assert_eq!(decrypted.name, wallet.name);
@@ -46,4 +47,9 @@ fn encrypts_and_decrypts_wallet_payload() {
         decrypted.auto_lock_timeout_secs,
         wallet.auto_lock_timeout_secs
     );
+    assert_eq!(decrypted.use_crypto_symbols, wallet.use_crypto_symbols);
+
+    stored.version = 5;
+    let migrated = decrypt_wallet(&stored, wallet_password).unwrap();
+    assert!(!migrated.use_crypto_symbols);
 }

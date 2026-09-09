@@ -19,6 +19,7 @@ fn locked_session_does_not_expose_secrets() {
         activity: vec![],
         enabled_networks: vec![],
         auto_lock_timeout_secs: None,
+        use_crypto_symbols: false,
     };
     state.wallet = Some(wallet);
     state.locked = true;
@@ -50,6 +51,7 @@ fn unlocked_tron_state() -> AppState {
         usd_exchange_rate: 1.0,
         assets: vec![Asset {
             symbol: "TRX".to_string(),
+            unicode_symbol: None,
             name: "TRON".to_string(),
             balance: "1000000".to_string(),
             decimals: 6,
@@ -61,6 +63,7 @@ fn unlocked_tron_state() -> AppState {
         activity: vec![],
         enabled_networks: vec!["tron".to_string()],
         auto_lock_timeout_secs: None,
+        use_crypto_symbols: false,
     });
     state
 }
@@ -84,6 +87,7 @@ fn unlocked_session_includes_cached_tron_portfolio_data() {
     assert_eq!(session.assets[0].price_usd, 0.12);
     assert_eq!(session.fiat_currency, Some(FiatCurrency::Usd));
     assert_eq!(session.usd_exchange_rate, Some(1.0));
+    assert!(!session.use_crypto_symbols);
 }
 
 #[test]

@@ -53,6 +53,7 @@ pub(crate) async fn fetch_tron_assets(
         Ok(sun) => NetworkAssetRefresh {
             assets: vec![Asset {
                 symbol: config.native_asset.symbol.clone(),
+                unicode_symbol: config.native_asset.unicode_symbol.clone(),
                 name: config.native_asset.name.clone(),
                 balance: sun.to_string(),
                 decimals: config.native_asset.decimals,

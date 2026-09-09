@@ -32,6 +32,14 @@ export function usdToFiat(usdValue: number, usdExchangeRate: number): number {
   return usdValue * usdExchangeRate;
 }
 
+export function cryptoDisplaySymbol(
+  ticker: string,
+  unicodeSymbol: string | null | undefined,
+  useCryptoSymbols: boolean,
+): string {
+  return useCryptoSymbols && unicodeSymbol ? unicodeSymbol : ticker;
+}
+
 export function shortAddress(address: string | null) {
   if (!address) return "No address";
   return `${address.slice(0, 10)}...${address.slice(-8)}`;

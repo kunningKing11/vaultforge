@@ -72,6 +72,7 @@ pub(crate) fn encrypt_wallet(
         activity: wallet.activity.clone(),
         enabled_networks: wallet.enabled_networks.clone(),
         auto_lock_timeout_secs: wallet.auto_lock_timeout_secs,
+        use_crypto_symbols: wallet.use_crypto_symbols,
     };
     let plaintext = serde_json::to_vec(&payload).map_err(|_| "Failed to encode wallet")?;
     let nonce = Nonce::try_from(nonce_bytes.as_slice()).map_err(|_| "Failed to create nonce")?;
@@ -80,7 +81,7 @@ pub(crate) fn encrypt_wallet(
         .map_err(|_| "Failed to encrypt wallet")?;
 
     Ok(StoredWalletFile {
-        version: 5,
+        version: 6,
         wallet_name: wallet.name.clone(),
         network: "ethereum".to_string(),
         salt: BASE64.encode(salt),
@@ -93,7 +94,7 @@ pub(crate) fn decrypt_wallet(
     stored: &StoredWalletFile,
     wallet_password: &str,
 ) -> Result<Wallet, String> {
-    if stored.version != 2 && stored.version != 3 && stored.version != 4 && stored.version != 5 {
+    if !matches!(stored.version, 2..=6) {
         return Err("Unsupported wallet version".to_string());
     }
     let salt = BASE64
@@ -119,12 +120,12 @@ pub(crate) fn decrypt_wallet(
         created_at: payload.created_at,
         addresses: payload.addresses,
         wallet_password_hash: payload.wallet_password_hash,
-        fiat_currency: if stored.version == 5 {
+        fiat_currency: if stored.version >= 5 {
             payload.fiat_currency
         } else {
             FiatCurrency::Usd
         },
-        usd_exchange_rate: if stored.version == 5 {
+        usd_exchange_rate: if stored.version >= 5 {
             payload.usd_exchange_rate
         } else {
             1.0
@@ -133,6 +134,11 @@ pub(crate) fn decrypt_wallet(
         activity: payload.activity,
         enabled_networks: payload.enabled_networks,
         auto_lock_timeout_secs: payload.auto_lock_timeout_secs,
+        use_crypto_symbols: if stored.version >= 6 {
+            payload.use_crypto_symbols
+        } else {
+            false
+        },
     })
 }
 

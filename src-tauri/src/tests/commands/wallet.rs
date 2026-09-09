@@ -21,6 +21,7 @@ fn unlock_migrates_legacy_filecoin_addresses() {
         activity: vec![],
         enabled_networks: vec!["filecoin".to_string()],
         auto_lock_timeout_secs: None,
+        use_crypto_symbols: false,
     };
     refresh_filecoin_address(&mut wallet).unwrap();
     assert_eq!(
@@ -43,6 +44,7 @@ fn applies_all_wallet_settings_together() {
         activity: vec![],
         enabled_networks: vec![],
         auto_lock_timeout_secs: None,
+        use_crypto_symbols: false,
     };
 
     apply_wallet_settings(
@@ -51,10 +53,12 @@ fn applies_all_wallet_settings_together() {
         FiatCurrency::Eur,
         0.92,
         Some(300),
+        true,
     );
 
     assert_eq!(wallet.name, "Renamed wallet");
     assert_eq!(wallet.fiat_currency, FiatCurrency::Eur);
     assert_eq!(wallet.usd_exchange_rate, 0.92);
     assert_eq!(wallet.auto_lock_timeout_secs, Some(300));
+    assert!(wallet.use_crypto_symbols);
 }

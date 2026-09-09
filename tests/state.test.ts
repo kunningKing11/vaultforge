@@ -15,6 +15,7 @@ function session(overrides: Partial<WalletSession> = {}): WalletSession {
     activity: [],
     enabled_networks: ["ethereum"],
     auto_lock_timeout_secs: 300,
+    use_crypto_symbols: true,
     ...overrides,
   };
 }
@@ -51,6 +52,7 @@ describe("wallet session transitions", () => {
       activity: [],
       enabledNetworks: ["ethereum"],
       autoLockTimeoutSecs: 300,
+      useCryptoSymbols: true,
     });
   });
 });
@@ -68,6 +70,8 @@ test("creates a fresh default send draft", () => {
 
 test("resets the onboarding display currency to USD", () => {
   appState.onboarding.fiatCurrency = "JPY";
+  appState.onboarding.useCryptoSymbols = true;
   resetOnboarding();
   expect(appState.onboarding.fiatCurrency as FiatCurrency).toBe("USD");
+  expect(appState.onboarding.useCryptoSymbols).toBeFalse();
 });

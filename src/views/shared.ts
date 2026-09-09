@@ -1,4 +1,12 @@
-import { escapeHtml, formatWei, money, usdToFiat, weiToNumber } from "../format";
+import infoIcon from "../assets/icons/info.svg?raw";
+import {
+  cryptoDisplaySymbol,
+  escapeHtml,
+  formatWei,
+  money,
+  usdToFiat,
+  weiToNumber,
+} from "../format";
 import { networkDisplayName, networks } from "../networks";
 import { networkLabel, unlockedWallet } from "../selectors";
 import { appState } from "../state";
@@ -31,6 +39,11 @@ export function inlineIcon({
 
 export function assetCard(asset: Asset) {
   const wallet = unlockedWallet();
+  const displaySymbol = cryptoDisplaySymbol(
+    asset.symbol,
+    asset.unicode_symbol,
+    wallet?.useCryptoSymbols ?? false,
+  );
   const valueUsd = assetValueUsd(asset);
   const positive = asset.change_24h >= 0;
   const totalUsd = wallet?.assets.reduce((sum, item) => sum + assetValueUsd(item), 0) ?? 0;
@@ -39,11 +52,11 @@ export function assetCard(asset: Asset) {
   return `
     <article class="asset-card rounded-3xl border border-white/10 bg-white/[0.04] p-5">
       <div class="flex items-start justify-between gap-4">
-        <div class="asset-card-header"><p class="truncate text-lg font-black">${escapeHtml(asset.symbol)}</p><p class="truncate text-sm font-bold text-slate-500">${escapeHtml(asset.name)} on ${escapeHtml(networkDisplayName(asset.network))}</p></div>
+        <div class="asset-card-header"><p class="truncate text-lg font-black">${escapeHtml(displaySymbol)}</p><p class="truncate text-sm font-bold text-slate-500">${escapeHtml(asset.name)} on ${escapeHtml(networkDisplayName(asset.network))}</p></div>
         <span class="asset-change rounded-full ${positive ? "bg-emerald-400/10 text-emerald-300" : "bg-rose-400/10 text-rose-300"} px-3 py-1 text-xs font-bold">${positive ? "+" : ""}${asset.change_24h.toFixed(2)}%</span>
       </div>
       <p class="asset-value mt-5 text-2xl font-black">${money(displayValue, wallet?.fiatCurrency ?? "USD")}</p>
-      <p class="mt-1 text-sm font-bold text-slate-400">${escapeHtml(formatWei(asset.balance, asset.decimals))} ${escapeHtml(asset.symbol)}</p>
+      <p class="mt-1 text-sm font-bold text-slate-400">${escapeHtml(formatWei(asset.balance, asset.decimals))} ${escapeHtml(displaySymbol)}</p>
       <div class="mt-4">
         <div class="flex justify-between text-xs font-bold text-slate-500"><span>Allocation</span><span>${allocation.toFixed(1)}%</span></div>
         <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-900"><div class="theme-progress-accent h-full rounded-full" style="width: ${Math.max(2, allocation).toFixed(1)}%"></div></div>
@@ -97,10 +110,14 @@ export function activityDetails(item: Activity | null) {
 export function assetSelect(name: string, selected = "ETH", attributes = "") {
   return `<select class="field" name="${escapeHtml(name)}" ${attributes}>${
     unlockedWallet()
-      ?.assets.map(
-        (asset) =>
-          `<option value="${escapeHtml(asset.symbol)}" ${asset.symbol === selected ? "selected" : ""}>${escapeHtml(asset.symbol)} - ${escapeHtml(asset.name)}</option>`,
-      )
+      ?.assets.map((asset) => {
+        const displaySymbol = cryptoDisplaySymbol(
+          asset.symbol,
+          asset.unicode_symbol,
+          unlockedWallet()?.useCryptoSymbols ?? false,
+        );
+        return `<option value="${escapeHtml(asset.symbol)}" ${asset.symbol === selected ? "selected" : ""}>${escapeHtml(displaySymbol)} - ${escapeHtml(asset.name)}</option>`;
+      })
       .join("") ?? ""
   }</select>`;
 }
@@ -110,7 +127,12 @@ export function sendAssetSelect(selectedAssetId: string) {
     unlockedWallet()
       ?.assets.map((asset) => {
         const assetId = `${asset.network}:${asset.token_address ?? "native"}`;
-        return `<option value="${escapeHtml(assetId)}" data-symbol="${escapeHtml(asset.symbol)}" ${assetId === selectedAssetId ? "selected" : ""}>${escapeHtml(asset.symbol)} - ${escapeHtml(asset.name)} (${escapeHtml(networkDisplayName(asset.network))})</option>`;
+        const displaySymbol = cryptoDisplaySymbol(
+          asset.symbol,
+          asset.unicode_symbol,
+          unlockedWallet()?.useCryptoSymbols ?? false,
+        );
+        return `<option value="${escapeHtml(assetId)}" data-symbol="${escapeHtml(asset.symbol)}" ${assetId === selectedAssetId ? "selected" : ""}>${escapeHtml(displaySymbol)} - ${escapeHtml(asset.name)} (${escapeHtml(networkDisplayName(asset.network))})</option>`;
       })
       .join("") ?? ""
   }</select>`;
@@ -123,6 +145,14 @@ export function decimalsForAsset(symbol: string, network: NetworkId, fallback: n
     unlockedWallet()?.assets.find((asset) => asset.symbol === symbol)?.decimals ??
     fallback
   );
+}
+
+export function displaySymbolForTicker(symbol: string, network?: NetworkId) {
+  const wallet = unlockedWallet();
+  const asset = wallet?.assets.find(
+    (candidate) => candidate.symbol === symbol && (!network || candidate.network === network),
+  );
+  return cryptoDisplaySymbol(symbol, asset?.unicode_symbol, wallet?.useCryptoSymbols ?? false);
 }
 
 export function updateRecipientPlaceholder(symbol: string) {
@@ -161,6 +191,34 @@ export function copyableDetailRow(label: string, value: string) {
 
 export function featureCard(title: string, body: string) {
   return `<div class="rounded-2xl border border-white/10 bg-white/[0.04] p-5"><h3 class="section-heading">${title}</h3><p class="mt-2 text-sm font-bold leading-6 text-slate-400">${body}</p></div>`;
+}
+
+export function cryptoSymbolPreference(checked: boolean, context: "onboarding" | "settings") {
+  const inputAttributes =
+    context === "onboarding" ? "data-wizard-crypto-symbols" : 'name="useCryptoSymbols"';
+  return `
+    <div class="mt-6 flex items-center justify-between gap-4">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <span class="preference-label">Use crypto symbols (not tickers)</span>
+          <button class="crypto-symbol-info relative" type="button" aria-label="Preview crypto symbols">
+            ${inlineIcon({ svg: infoIcon, sizeClass: "h-4 w-4" })}
+            <span class="crypto-symbol-preview" role="tooltip">
+              <span class="crypto-symbol-preview-row"><span>Off</span><span class="font-mono">BTC · ETH · USDT</span></span>
+              <span class="crypto-symbol-preview-row"><span>On</span><span class="font-mono">₿ · Ξ · ₮</span></span>
+              <span class="mt-2 block text-xs text-slate-500">Tickers remain in use when no alternate symbol is available.</span>
+            </span>
+          </button>
+        </div>
+        <p class="supporting-text mt-1">Show compact Unicode symbols where an asset provides one.</p>
+      </div>
+      <label class="crypto-symbol-toggle shrink-0">
+        <span class="sr-only">Use crypto symbols instead of tickers</span>
+        <input type="checkbox" ${inputAttributes} ${checked ? "checked" : ""} />
+        <span aria-hidden="true"></span>
+      </label>
+    </div>
+  `;
 }
 
 export function walletPasswordMeter(password: string) {

@@ -41,6 +41,7 @@ export async function setupWizard() {
         fiatCurrency: wizard.fiatCurrency,
         enabledNetworks: wizard.enabledNetworks,
         autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
+        useCryptoSymbols: wizard.useCryptoSymbols,
       }),
     );
     if (imported) clearSetupSecrets();
@@ -62,6 +63,7 @@ export async function setupWizard() {
         fiatCurrency: wizard.fiatCurrency,
         enabledNetworks: wizard.enabledNetworks,
         autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
+        useCryptoSymbols: wizard.useCryptoSymbols,
         mnemonic: wizard.recoveryPhrase,
       }),
     );
@@ -100,6 +102,7 @@ export async function saveWalletSettings(form: HTMLFormElement) {
       name: String(formData.get("walletName") || ""),
       fiatCurrency: String(formData.get("fiatCurrency") || "USD") as FiatCurrency,
       autoLockTimeoutSecs: autoLockTimeout === "0" ? null : Number(autoLockTimeout),
+      useCryptoSymbols: formData.has("useCryptoSymbols"),
     }),
   );
 }

@@ -82,10 +82,11 @@ type WalletSession = {
   activity: Activity[];
   enabled_networks: string[];
   auto_lock_timeout_secs: number | null;
+  use_crypto_symbols: boolean;
 };
 ```
 
-`Asset.token_address` is optional and nullable. Native assets use `null`; ERC-20 assets use the contract; SPL assets use the mint. Signing must use this identifier, never the display name.
+`Asset.token_address` is optional and nullable. Native assets use `null`; ERC-20 assets use the contract; SPL assets use the mint. `Asset.unicode_symbol` is optional display metadata; asset identity and signing continue to use the canonical ticker and token address. Signing must use the identifier, never the display name or alternate symbol.
 
 Session states:
 

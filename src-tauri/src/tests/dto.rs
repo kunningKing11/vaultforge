@@ -20,6 +20,7 @@ fn decrypts_legacy_wallet_password_hash_payloads() {
     assert_eq!(payload.wallet_password_hash, "legacy-hash");
     assert_eq!(payload.fiat_currency, FiatCurrency::Usd);
     assert_eq!(payload.usd_exchange_rate, 1.0);
+    assert!(!payload.use_crypto_symbols);
 }
 
 #[test]

@@ -184,6 +184,10 @@ export function bindEvents() {
       appState.onboarding.fiatCurrency = target.value as FiatCurrency;
     }
 
+    if (target.matches("[data-wizard-crypto-symbols]")) {
+      appState.onboarding.useCryptoSymbols = target.checked;
+    }
+
     if (target.matches("[data-wizard-field='customWordCount']")) {
       const val = Number(target.value);
       if (val) {

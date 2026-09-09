@@ -2,6 +2,7 @@ export type FiatCurrency = "USD" | "EUR" | "GBP" | "JPY";
 
 export type Asset = {
   symbol: string;
+  unicode_symbol?: string | null;
   name: string;
   balance: string;
   decimals: number;
@@ -39,6 +40,7 @@ export type WalletSession = {
   activity: Activity[];
   enabled_networks: string[];
   auto_lock_timeout_secs: number | null;
+  use_crypto_symbols: boolean;
 };
 
 export type RefreshWarning = {
@@ -153,6 +155,7 @@ export interface NetworkConfig {
 
 export interface NetworkAssetConfig {
   symbol: string;
+  unicodeSymbol?: string;
   name: string;
   decimals: number;
   coinGeckoId: string;

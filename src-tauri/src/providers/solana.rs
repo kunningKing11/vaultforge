@@ -69,6 +69,7 @@ pub(crate) async fn fetch_solana_assets(
     match fetch_solana_native_balance(client, address).await {
         Ok(lamports) => assets.push(Asset {
             symbol: config.native_asset.symbol.clone(),
+            unicode_symbol: config.native_asset.unicode_symbol.clone(),
             name: config.native_asset.name.clone(),
             balance: lamports.to_string(),
             decimals: config.native_asset.decimals,
@@ -122,11 +123,15 @@ pub(crate) async fn fetch_solana_assets(
             .as_ref()
             .map(|asset| asset.name.clone())
             .unwrap_or_else(|| format!("SPL Token {}", short_mint(&mint)));
+        let unicode_symbol = cached
+            .as_ref()
+            .and_then(|asset| asset.unicode_symbol.clone());
         let price_usd = cached.as_ref().map(|asset| asset.price_usd).unwrap_or(0.0);
         let change_24h = cached.as_ref().map(|asset| asset.change_24h).unwrap_or(0.0);
 
         assets.push(Asset {
             symbol,
+            unicode_symbol,
             name,
             balance: amount.to_string(),
             decimals: u32::from(decimals),

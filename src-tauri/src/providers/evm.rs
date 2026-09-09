@@ -89,6 +89,7 @@ pub(crate) async fn fetch_evm_assets(
     match fetch_evm_native_balance(client, config, address).await {
         Ok(wei) => assets.push(Asset {
             symbol: config.native_asset.symbol.clone(),
+            unicode_symbol: config.native_asset.unicode_symbol.clone(),
             name: config.native_asset.name.clone(),
             balance: wei.to_string(),
             decimals: config.native_asset.decimals,
@@ -112,6 +113,7 @@ pub(crate) async fn fetch_evm_assets(
             Ok(balance) => {
                 assets.push(Asset {
                     symbol: token.symbol.to_string(),
+                    unicode_symbol: token.unicode_symbol.clone(),
                     name: token.name.to_string(),
                     balance: balance.to_string(),
                     decimals: token.decimals,

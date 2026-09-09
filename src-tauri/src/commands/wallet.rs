@@ -64,11 +64,13 @@ fn apply_wallet_settings(
     fiat_currency: FiatCurrency,
     usd_exchange_rate: f64,
     auto_lock_timeout_secs: Option<u64>,
+    use_crypto_symbols: bool,
 ) {
     wallet.name = clean_name(name);
     wallet.fiat_currency = fiat_currency;
     wallet.usd_exchange_rate = usd_exchange_rate;
     wallet.auto_lock_timeout_secs = auto_lock_timeout_secs;
+    wallet.use_crypto_symbols = use_crypto_symbols;
 }
 
 #[tauri::command]
@@ -78,6 +80,7 @@ pub(crate) async fn update_wallet_settings(
     name: String,
     fiat_currency: FiatCurrency,
     auto_lock_timeout_secs: Option<u64>,
+    use_crypto_symbols: bool,
 ) -> Result<WalletSession, String> {
     let (wallet_generation, current_currency, current_exchange_rate) = {
         let state = state.lock().map_err(|_| "State lock failed")?;
@@ -115,6 +118,7 @@ pub(crate) async fn update_wallet_settings(
         fiat_currency,
         usd_exchange_rate,
         auto_lock_timeout_secs,
+        use_crypto_symbols,
     );
     state.advance_wallet_generation();
     persist_state_wallet(&mut state)?;
@@ -130,6 +134,7 @@ pub(crate) async fn create_wallet(
     fiat_currency: FiatCurrency,
     enabled_networks: Vec<String>,
     auto_lock_timeout_secs: Option<u64>,
+    use_crypto_symbols: bool,
     mnemonic: Option<String>,
 ) -> Result<WalletRefreshResult, String> {
     validate_wallet_password(&wallet_password)?;
@@ -168,6 +173,7 @@ pub(crate) async fn create_wallet(
         )],
         enabled_networks,
         auto_lock_timeout_secs,
+        use_crypto_symbols,
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
@@ -192,6 +198,7 @@ pub(crate) async fn import_wallet(
     fiat_currency: FiatCurrency,
     enabled_networks: Vec<String>,
     auto_lock_timeout_secs: Option<u64>,
+    use_crypto_symbols: bool,
 ) -> Result<WalletRefreshResult, String> {
     let mnemonic = mnemonic.trim().to_string();
     validate_recovery_phrase_word_count(&mnemonic)?;
@@ -228,6 +235,7 @@ pub(crate) async fn import_wallet(
         )],
         enabled_networks,
         auto_lock_timeout_secs,
+        use_crypto_symbols,
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;

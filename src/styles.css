@@ -199,6 +199,116 @@ select.field option:checked {
   height: 100%;
 }
 
+.crypto-symbol-info {
+  display: inline-flex;
+  cursor: help;
+  color: var(--color-text-muted);
+  outline: none;
+  transition: color 160ms ease;
+}
+
+.crypto-symbol-info:hover,
+.crypto-symbol-info:focus-visible {
+  color: var(--color-accent);
+}
+
+.crypto-symbol-preview {
+  position: absolute;
+  bottom: calc(100% + 0.65rem);
+  left: 50%;
+  z-index: 60;
+  width: min(18rem, calc(100vw - 2rem));
+  padding: 0.85rem;
+  border: 1px solid rgb(var(--color-text-muted-rgb) / 0.28);
+  border-radius: 0.9rem;
+  background: rgb(var(--color-surface-raised-rgb) / 0.98);
+  box-shadow: 0 14px 36px rgb(0 0 0 / 0.32);
+  color: var(--color-text-soft);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 0.35rem) scale(0.98);
+  transform-origin: bottom center;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.crypto-symbol-info:hover .crypto-symbol-preview,
+.crypto-symbol-info:focus-visible .crypto-symbol-preview {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.crypto-symbol-preview-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.crypto-symbol-preview-row + .crypto-symbol-preview-row {
+  margin-top: 0.45rem;
+}
+
+.crypto-symbol-toggle {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.crypto-symbol-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.crypto-symbol-toggle > span:last-child {
+  position: relative;
+  width: 2.75rem;
+  height: 1.5rem;
+  border: 1px solid rgb(var(--color-text-muted-rgb) / 0.3);
+  border-radius: 999px;
+  background: rgb(var(--color-surface-rgb) / 0.88);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.crypto-symbol-toggle > span:last-child::after {
+  position: absolute;
+  top: 0.2rem;
+  left: 0.2rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  background: var(--color-text-muted);
+  content: "";
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.crypto-symbol-toggle input:checked + span {
+  border-color: rgb(var(--color-accent-rgb) / 0.7);
+  background: rgb(var(--color-accent-rgb) / 0.22);
+}
+
+.crypto-symbol-toggle input:checked + span::after {
+  background: var(--color-accent);
+  transform: translateX(1.25rem);
+}
+
+.crypto-symbol-toggle input:focus-visible + span {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .btn-danger {
   display: inline-flex;
   align-items: center;

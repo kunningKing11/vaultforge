@@ -6,6 +6,7 @@ pub(crate) fn starter_assets(network: &str) -> Vec<Asset> {
     vec![
         Asset {
             symbol: "ETH".to_string(),
+            unicode_symbol: Some("Ξ".to_string()),
             name: "Ethereum".to_string(),
             balance: "2482100000000000000000".to_string(),
             decimals: 18,
@@ -16,6 +17,7 @@ pub(crate) fn starter_assets(network: &str) -> Vec<Asset> {
         },
         Asset {
             symbol: "BTC".to_string(),
+            unicode_symbol: Some("₿".to_string()),
             name: "Bitcoin".to_string(),
             balance: "184200000000".to_string(),
             decimals: 8,
@@ -26,6 +28,7 @@ pub(crate) fn starter_assets(network: &str) -> Vec<Asset> {
         },
         Asset {
             symbol: "SOL".to_string(),
+            unicode_symbol: None,
             name: "Solana".to_string(),
             balance: "82450000000".to_string(),
             decimals: 9,
@@ -36,6 +39,7 @@ pub(crate) fn starter_assets(network: &str) -> Vec<Asset> {
         },
         Asset {
             symbol: "USDC".to_string(),
+            unicode_symbol: None,
             name: "USD Coin".to_string(),
             balance: "8420000000".to_string(),
             decimals: 6,

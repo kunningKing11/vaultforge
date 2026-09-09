@@ -81,6 +81,7 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
                 activity: vec![],
                 enabled_networks: vec![],
                 auto_lock_timeout_secs: None,
+                use_crypto_symbols: false,
             };
         }
 
@@ -95,6 +96,7 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
             activity: vec![],
             enabled_networks: vec![],
             auto_lock_timeout_secs: None,
+            use_crypto_symbols: false,
         };
     };
 
@@ -110,6 +112,7 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
             activity: vec![],
             enabled_networks: vec![],
             auto_lock_timeout_secs: None,
+            use_crypto_symbols: false,
         };
     }
 
@@ -133,6 +136,7 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
         activity: wallet.activity.clone(),
         enabled_networks: wallet.enabled_networks.clone(),
         auto_lock_timeout_secs: wallet.auto_lock_timeout_secs,
+        use_crypto_symbols: wallet.use_crypto_symbols,
     }
 }
 

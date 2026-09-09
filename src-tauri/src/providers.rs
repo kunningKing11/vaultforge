@@ -135,6 +135,7 @@ async fn refresh_bitcoin_account_asset(
     let balance = refreshed_account.total_balance()?.to_string();
     let asset = Asset {
         symbol: config.native_asset.symbol.clone(),
+        unicode_symbol: config.native_asset.unicode_symbol.clone(),
         name: config.native_asset.name.clone(),
         balance,
         decimals: config.native_asset.decimals,

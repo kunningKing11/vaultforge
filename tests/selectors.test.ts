@@ -50,6 +50,7 @@ function unlockWallet(): void {
     ],
     enabled_networks: ["bitcoin", "ethereum", "solana", "tron"],
     auto_lock_timeout_secs: null,
+    use_crypto_symbols: false,
   };
   appState.wallet = walletStateFromSession(session);
 }
@@ -79,6 +80,13 @@ describe("receive selectors", () => {
 
   test("includes an EVM chain id when requested", () => {
     expect(networkLabel(networkById("polygon")!, true)).toBe("POL - Chain ID 137");
+  });
+
+  test("uses configured crypto symbols when the wallet preference is enabled", () => {
+    unlockWallet();
+    if (appState.wallet.status === "unlocked") appState.wallet.useCryptoSymbols = true;
+    expect(networkLabel(networkById("bitcoin")!)).toBe("₿");
+    expect(networkLabel(networkById("solana")!)).toBe("SOL");
   });
 });
 

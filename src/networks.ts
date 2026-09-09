@@ -31,6 +31,12 @@ function validateAsset(asset: NetworkAssetConfig, context: string) {
   if (!Number.isInteger(asset.decimals) || asset.decimals < 0) {
     throw new Error(`${context} has invalid decimals`);
   }
+  if (
+    asset.unicodeSymbol !== undefined &&
+    (!asset.unicodeSymbol.trim() || Array.from(asset.unicodeSymbol).length !== 1)
+  ) {
+    throw new Error(`${context} has an invalid Unicode symbol`);
+  }
 }
 
 function validateToken(token: NetworkTokenConfig, context: string, network: Network) {

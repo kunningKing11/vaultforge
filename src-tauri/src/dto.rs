@@ -47,6 +47,8 @@ pub(crate) struct Wallet {
     pub(crate) enabled_networks: Vec<String>,
     #[serde(default)]
     pub(crate) auto_lock_timeout_secs: Option<u64>,
+    #[serde(default)]
+    pub(crate) use_crypto_symbols: bool,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -67,6 +69,8 @@ pub(crate) struct WalletPayload {
     pub(crate) enabled_networks: Vec<String>,
     #[serde(default)]
     pub(crate) auto_lock_timeout_secs: Option<u64>,
+    #[serde(default)]
+    pub(crate) use_crypto_symbols: bool,
 }
 
 fn default_enabled_networks() -> Vec<String> {
@@ -84,6 +88,8 @@ fn default_enabled_networks() -> Vec<String> {
 #[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct Asset {
     pub(crate) symbol: String,
+    #[serde(default)]
+    pub(crate) unicode_symbol: Option<String>,
     pub(crate) name: String,
     pub(crate) balance: String,
     pub(crate) decimals: u32,
@@ -126,6 +132,7 @@ pub(crate) struct WalletSession {
     pub(crate) enabled_networks: Vec<String>,
     #[serde(default)]
     pub(crate) auto_lock_timeout_secs: Option<u64>,
+    pub(crate) use_crypto_symbols: bool,
 }
 
 #[derive(Clone, Serialize)]

@@ -19,6 +19,7 @@ export const walletApi = {
     fiatCurrency: FiatCurrency;
     enabledNetworks: string[];
     autoLockTimeoutSecs: number | null;
+    useCryptoSymbols: boolean;
     mnemonic?: string;
   }) => invoke<WalletRefreshResult>("create_wallet", args),
   importWallet: (args: {
@@ -28,6 +29,7 @@ export const walletApi = {
     fiatCurrency: FiatCurrency;
     enabledNetworks: string[];
     autoLockTimeoutSecs: number | null;
+    useCryptoSymbols: boolean;
   }) => invoke<WalletRefreshResult>("import_wallet", args),
   unlockWallet: (args: { walletPassword: string }) =>
     invoke<WalletRefreshResult>("unlock_wallet", args),
@@ -37,6 +39,7 @@ export const walletApi = {
     name: string;
     fiatCurrency: FiatCurrency;
     autoLockTimeoutSecs: number | null;
+    useCryptoSymbols: boolean;
   }) => invoke<WalletSession>("update_wallet_settings", args),
   signTransaction: (args: {
     to: string;

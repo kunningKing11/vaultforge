@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  cryptoDisplaySymbol,
   escapeHtml,
   formatError,
   formatWei,
@@ -28,6 +29,12 @@ describe("crypto amount formatting", () => {
 
   test("converts USD values using the supplied exchange rate", () => {
     expect(usdToFiat(125, 0.92)).toBe(115);
+  });
+
+  test("uses Unicode crypto symbols only when enabled and available", () => {
+    expect(cryptoDisplaySymbol("BTC", "₿", true)).toBe("₿");
+    expect(cryptoDisplaySymbol("BTC", "₿", false)).toBe("BTC");
+    expect(cryptoDisplaySymbol("SOL", null, true)).toBe("SOL");
   });
 });
 

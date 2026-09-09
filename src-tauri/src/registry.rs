@@ -28,6 +28,7 @@ pub(crate) struct NetworkConfig {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AssetConfig {
     pub(crate) symbol: String,
+    pub(crate) unicode_symbol: Option<String>,
     pub(crate) name: String,
     pub(crate) decimals: u32,
     pub(crate) coin_gecko_id: String,

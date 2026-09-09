@@ -25,6 +25,7 @@ export type WalletState =
       activity: Activity[];
       enabledNetworks: NetworkId[];
       autoLockTimeoutSecs: number | null;
+      useCryptoSymbols: boolean;
     };
 
 type SetupWizardState = {
@@ -42,6 +43,7 @@ type SetupWizardState = {
   fiatCurrency: FiatCurrency;
   enabledNetworks: NetworkId[];
   autoLockTimeoutSecs: number | null;
+  useCryptoSymbols: boolean;
 };
 
 type AppState = {
@@ -107,6 +109,7 @@ export const appState: AppState = {
     fiatCurrency: "USD",
     enabledNetworks: networks.map((network) => network.id),
     autoLockTimeoutSecs: null,
+    useCryptoSymbols: false,
   },
   send: {
     draft: emptySendDraft(),
@@ -155,6 +158,7 @@ export function walletStateFromSession(session: WalletSession): WalletState {
       return network ? [network.id] : [];
     }),
     autoLockTimeoutSecs: session.auto_lock_timeout_secs,
+    useCryptoSymbols: session.use_crypto_symbols,
   };
 }
 
@@ -195,4 +199,5 @@ export function resetOnboarding(): void {
   wizard.fiatCurrency = "USD";
   wizard.enabledNetworks = networks.map((network) => network.id);
   wizard.autoLockTimeoutSecs = null;
+  wizard.useCryptoSymbols = false;
 }

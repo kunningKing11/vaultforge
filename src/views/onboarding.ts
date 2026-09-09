@@ -6,7 +6,7 @@ import { escapeHtml } from "../format";
 import { networks } from "../networks";
 import { appState } from "../state";
 import { themes } from "../theme";
-import { featureCard, inlineIcon, walletPasswordMeter } from "./shared";
+import { cryptoSymbolPreference, featureCard, inlineIcon, walletPasswordMeter } from "./shared";
 
 export function splashView() {
   return `
@@ -256,6 +256,7 @@ function step5() {
             .join("")}
         </select>
       </div>
+      ${cryptoSymbolPreference(wizard.useCryptoSymbols, "onboarding")}
       <div class="flex gap-3 pt-2">
         <button class="btn-secondary flex-1" type="button" data-action="setup-prev">Back</button>
         <button class="btn-primary flex-1" type="button" data-action="setup-next">Next</button>
@@ -311,6 +312,7 @@ function step6() {
         <p><span class="font-bold text-white">Networks:</span> ${wizard.enabledNetworks.length} enabled</p>
         <p><span class="font-bold text-white">Auto-lock:</span> ${wizard.autoLockTimeoutSecs ? `${wizard.autoLockTimeoutSecs / 60} min` : "Off"}</p>
         <p><span class="font-bold text-white">Display currency:</span> ${escapeHtml(wizard.fiatCurrency)}</p>
+        <p><span class="font-bold text-white">Asset labels:</span> ${wizard.useCryptoSymbols ? "Crypto symbols where available" : "Tickers"}</p>
       </div>
       <div class="flex gap-3 pt-2">
         <button class="btn-secondary flex-1" type="button" data-action="setup-prev">Back</button>

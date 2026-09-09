@@ -106,6 +106,7 @@ fn validates_solana_token_transfer_recipient_as_solana_address() {
         usd_exchange_rate: 1.0,
         assets: vec![Asset {
             symbol: "SPL-So1111".to_string(),
+            unicode_symbol: None,
             name: "So11111111111111111111111111111111111111112".to_string(),
             balance: "1000000".to_string(),
             decimals: 9,
@@ -117,6 +118,7 @@ fn validates_solana_token_transfer_recipient_as_solana_address() {
         activity: vec![],
         enabled_networks: vec!["solana".to_string()],
         auto_lock_timeout_secs: None,
+        use_crypto_symbols: false,
     };
 
     assert!(
@@ -145,6 +147,7 @@ fn token_transfer_validation_uses_contract_or_mint_identity() {
         assets: vec![
             Asset {
                 symbol: "DUP".to_string(),
+                unicode_symbol: None,
                 name: "First".to_string(),
                 balance: "0".to_string(),
                 decimals: 6,
@@ -155,6 +158,7 @@ fn token_transfer_validation_uses_contract_or_mint_identity() {
             },
             Asset {
                 symbol: "DUP".to_string(),
+                unicode_symbol: None,
                 name: "Second".to_string(),
                 balance: "10".to_string(),
                 decimals: 6,
@@ -167,6 +171,7 @@ fn token_transfer_validation_uses_contract_or_mint_identity() {
         activity: vec![],
         enabled_networks: vec!["solana".to_string()],
         auto_lock_timeout_secs: None,
+        use_crypto_symbols: false,
     };
 
     assert!(
@@ -231,6 +236,7 @@ fn transfer_validation_rejects_malformed_amounts_and_mints() {
         usd_exchange_rate: 1.0,
         assets: vec![Asset {
             symbol: "SPL".to_string(),
+            unicode_symbol: None,
             name: "SPL".to_string(),
             balance: "10".to_string(),
             decimals: 6,
@@ -242,6 +248,7 @@ fn transfer_validation_rejects_malformed_amounts_and_mints() {
         activity: vec![],
         enabled_networks: vec!["solana".to_string()],
         auto_lock_timeout_secs: None,
+        use_crypto_symbols: false,
     };
     let recipient = "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ";
     let mint = "So11111111111111111111111111111111111111112";

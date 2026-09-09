@@ -1,3 +1,4 @@
+import { cryptoDisplaySymbol } from "./format";
 import { networks } from "./networks";
 import { appState } from "./state";
 import type { Activity, Network } from "./types";
@@ -11,10 +12,15 @@ export function selectedNetwork(): Network {
 }
 
 export function networkLabel(network: Network, includeChainId = false): string {
+  const ticker = cryptoDisplaySymbol(
+    network.ticker ?? "",
+    network.nativeAsset.unicodeSymbol,
+    unlockedWallet()?.useCryptoSymbols ?? false,
+  );
   if (network.kind === "evm" && includeChainId) {
-    return `${network.ticker} - Chain ID ${network.chainId}`;
+    return `${ticker} - Chain ID ${network.chainId}`;
   }
-  return network.ticker;
+  return ticker;
 }
 
 export function addressKeyForNetwork(network: Network): string {

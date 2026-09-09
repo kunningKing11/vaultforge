@@ -21,7 +21,9 @@ import {
   assetCard,
   assetSelect,
   assetValueUsd,
+  cryptoSymbolPreference,
   decimalsForAsset,
+  displaySymbolForTicker,
   emptyState,
   inlineIcon,
   qrResilienceSelect,
@@ -127,6 +129,8 @@ function sendView() {
 function signedTransactionView(signed: SignedTransaction) {
   const wallet = unlockedWallet();
   const feeDecimals = decimalsForAsset(signed.feeSymbol, signed.network, signed.decimals);
+  const amountSymbol = displaySymbolForTicker(signed.symbol, signed.network);
+  const feeSymbol = displaySymbolForTicker(signed.feeSymbol, signed.network);
   const chainReferenceLabel = transactionReferenceLabel(signed.network);
   return `
     <section class="glass max-w-4xl rounded-[2rem] p-6">
@@ -141,10 +145,10 @@ function signedTransactionView(signed: SignedTransaction) {
       <div class="mt-6 grid gap-4 sm:grid-cols-2">
         ${signedDetail("From", shortAddress(signed.from))}
         ${signedDetail("To", shortAddress(signed.to))}
-        ${signedDetail("Amount", `${formatWei(signed.amount, signed.decimals)} ${signed.symbol}`)}
-        ${signedDetail("Network fee", `${formatWei(signed.feeAmount, feeDecimals)} ${signed.feeSymbol}`)}
-        ${signedDetail("Total debit", `${formatWei(signed.totalDebit, signed.decimals)} ${signed.symbol}`)}
-        ${signedDetail("Post-send balance", `${formatWei(signed.postBalance, signed.decimals)} ${signed.symbol}`)}
+        ${signedDetail("Amount", `${formatWei(signed.amount, signed.decimals)} ${amountSymbol}`)}
+        ${signedDetail("Network fee", `${formatWei(signed.feeAmount, feeDecimals)} ${feeSymbol}`)}
+        ${signedDetail("Total debit", `${formatWei(signed.totalDebit, signed.decimals)} ${amountSymbol}`)}
+        ${signedDetail("Post-send balance", `${formatWei(signed.postBalance, signed.decimals)} ${amountSymbol}`)}
         ${signedDetail("Estimated value", money(usdToFiat(signed.fiatValue, wallet?.usdExchangeRate ?? 1), wallet?.fiatCurrency ?? "USD"))}
         ${signedDetail("Network", networkDisplayName(signed.network))}
         ${signedDetail(chainReferenceLabel, signed.nonce)}
@@ -278,6 +282,7 @@ function settingsView() {
                 .join("")}
             </select>
           </label>
+          ${cryptoSymbolPreference(wallet.useCryptoSymbols, "settings")}
           <button class="btn-primary mt-6" type="submit">Save settings</button>
         </form>
         <div class="mt-6 border-t border-white/10 pt-6">

@@ -16,7 +16,13 @@
       "name": "Bitcoin",
       "addressKey": "bitcoin",
       "apiUrl": "https://blockstream.info/api",
-      "nativeAsset": { "symbol": "BTC", "name": "Bitcoin", "decimals": 8, "coinGeckoId": "bitcoin" }
+      "nativeAsset": {
+        "symbol": "BTC",
+        "unicodeSymbol": "₿",
+        "name": "Bitcoin",
+        "decimals": 8,
+        "coinGeckoId": "bitcoin"
+      }
     },
     {
       "kind": "evm",
@@ -44,6 +50,7 @@
         {
           "standard": "erc20",
           "symbol": "USDT",
+          "unicodeSymbol": "₮",
           "name": "Tether USD",
           "decimals": 6,
           "tokenAddress": "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7",
@@ -75,6 +82,7 @@
       "rpcUrl": "https://ethereum-rpc.publicnode.com",
       "nativeAsset": {
         "symbol": "ETH",
+        "unicodeSymbol": "Ξ",
         "name": "Ether",
         "decimals": 18,
         "coinGeckoId": "ethereum"
@@ -91,6 +99,7 @@
         {
           "standard": "erc20",
           "symbol": "USDT",
+          "unicodeSymbol": "₮",
           "name": "Tether USD",
           "decimals": 6,
           "tokenAddress": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
@@ -128,6 +137,7 @@
       "rpcUrl": "https://arbitrum-one-rpc.publicnode.com",
       "nativeAsset": {
         "symbol": "ETH",
+        "unicodeSymbol": "Ξ",
         "name": "Ether",
         "decimals": 18,
         "coinGeckoId": "ethereum"
@@ -153,6 +163,7 @@
       "rpcUrl": "https://base-rpc.publicnode.com",
       "nativeAsset": {
         "symbol": "ETH",
+        "unicodeSymbol": "Ξ",
         "name": "Ether",
         "decimals": 18,
         "coinGeckoId": "ethereum"
@@ -178,6 +189,7 @@
       "rpcUrl": "https://optimism-rpc.publicnode.com",
       "nativeAsset": {
         "symbol": "ETH",
+        "unicodeSymbol": "Ξ",
         "name": "Ether",
         "decimals": 18,
         "coinGeckoId": "ethereum"
@@ -227,6 +239,7 @@
         {
           "standard": "erc20",
           "symbol": "USDT",
+          "unicodeSymbol": "₮",
           "name": "Tether USD",
           "decimals": 6,
           "tokenAddress": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
@@ -241,6 +254,7 @@
       "addressKey": "filecoin",
       "nativeAsset": {
         "symbol": "FIL",
+        "unicodeSymbol": "⨎",
         "name": "Filecoin",
         "decimals": 18,
         "coinGeckoId": "filecoin"
@@ -279,6 +293,7 @@
         {
           "standard": "trc20",
           "symbol": "USDT",
+          "unicodeSymbol": "₮",
           "name": "Tether USD",
           "decimals": 6,
           "tokenAddress": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -299,7 +314,13 @@
       "id": "zcash",
       "name": "Zcash",
       "addressKey": "zcash",
-      "nativeAsset": { "symbol": "ZEC", "name": "Zcash", "decimals": 8, "coinGeckoId": "zcash" }
+      "nativeAsset": {
+        "symbol": "ZEC",
+        "unicodeSymbol": "ⓩ",
+        "name": "Zcash",
+        "decimals": 8,
+        "coinGeckoId": "zcash"
+      }
     }
   ]
 }

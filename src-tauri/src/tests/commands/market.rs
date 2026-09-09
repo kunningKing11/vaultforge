@@ -5,6 +5,7 @@ use crate::providers::prices::CoinGeckoPriceResponse;
 fn asset(price_usd: f64, change_24h: f64, token_address: Option<&str>) -> Asset {
     Asset {
         symbol: "USDC".to_string(),
+        unicode_symbol: None,
         name: "USD Coin".to_string(),
         balance: "1000000".to_string(),
         decimals: 6,
