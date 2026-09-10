@@ -106,8 +106,11 @@ bun run build
 Build the desktop bundle:
 
 ```bash
+bun run prepare-tauri
 bunx tauri build
 ```
+
+`prepare-tauri` records SHA-256 hashes for `src-tauri/icons/icon.svg` and every generated desktop, Android, and iOS icon in the ignored local `src-tauri/icons/icon-hashes.json` cache. It skips `tauri icon` when the source, manifest, and all generated products still match, and regenerates the complete set when any file is missing or changed.
 
 **Check and fix frontend quality:**
 
