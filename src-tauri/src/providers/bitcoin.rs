@@ -5,6 +5,8 @@ use crate::providers::http::{http_get_json, http_get_json_with_client, http_post
 use crate::registry::network_by_id;
 use crate::tx::bitcoin::{BitcoinSignedTransfer, bitcoin_signed_transfer};
 use std::collections::{HashSet, VecDeque};
+use std::sync::Arc;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio::task::JoinSet;
 
 const BITCOIN_SCAN_BATCH_SIZE: u32 = 2;
@@ -238,10 +240,17 @@ async fn fetch_bitcoin_address_batch(
     addresses: Vec<BitcoinDerivedAddress>,
 ) -> Result<Vec<(BitcoinDerivedAddress, BitcoinAddressStats)>, String> {
     let mut tasks = JoinSet::new();
+    let address_limiter = Arc::new(Semaphore::new(BITCOIN_UTXO_CONCURRENCY));
     for derived in addresses {
         let client = client.clone();
         let url = format!("{api_url}/address/{}", derived.address);
+        let task_limiter = Arc::clone(&address_limiter);
+        let permit = task_limiter
+            .acquire_owned()
+            .await
+            .map_err(|error| format!("Bitcoin address scan limiter closed: {error}"))?;
         tasks.spawn(async move {
+            let _permit = permit;
             let json = http_get_json_with_client(&client, &url).await?;
             let stats = parse_bitcoin_address_stats(&json)?;
             Ok::<_, String>((derived, stats))
@@ -301,21 +310,21 @@ async fn fetch_bitcoin_account_utxos(
     let mut pending = account.used_addresses().cloned().collect::<VecDeque<_>>();
     let mut tasks = JoinSet::new();
     let mut utxos = Vec::new();
+    let utxo_limiter: Arc<Semaphore> = Arc::new(Semaphore::new(BITCOIN_UTXO_CONCURRENCY));
 
-    while tasks.len() < BITCOIN_UTXO_CONCURRENCY {
-        let Some(owner) = pending.pop_front() else {
-            break;
-        };
-        spawn_bitcoin_utxo_fetch(&mut tasks, client, &api_url, owner);
+    while let Some(owner) = pending.pop_front() {
+        let task_limiter = Arc::clone(&utxo_limiter);
+        let permit = task_limiter
+            .acquire_owned()
+            .await
+            .map_err(|error| format!("Bitcoin UTXO limiter closed: {error}"))?;
+        spawn_bitcoin_utxo_fetch(&mut tasks, client, &api_url, owner, permit);
     }
 
     while let Some(result) = tasks.join_next().await {
         let mut fetched =
             result.map_err(|error| format!("Bitcoin UTXO task failed: {error}"))??;
         utxos.append(&mut fetched);
-        if let Some(owner) = pending.pop_front() {
-            spawn_bitcoin_utxo_fetch(&mut tasks, client, &api_url, owner);
-        }
     }
 
     let mut outpoints = HashSet::new();
@@ -343,11 +352,13 @@ fn spawn_bitcoin_utxo_fetch(
     client: &reqwest::Client,
     api_url: &str,
     owner: BitcoinDerivedAddress,
+    permit: OwnedSemaphorePermit,
 ) {
-    let client = client.clone();
+    let task_client = client.clone();
     let url = format!("{api_url}/address/{}/utxo", owner.address);
     tasks.spawn(async move {
-        let json = http_get_json_with_client(&client, &url).await?;
+        let _permit = permit;
+        let json = http_get_json_with_client(&task_client, &url).await?;
         parse_bitcoin_utxos(&json, &owner)
     });
 }

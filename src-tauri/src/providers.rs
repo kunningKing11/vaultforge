@@ -19,6 +19,9 @@ use crate::providers::solana::fetch_solana_assets;
 use crate::providers::tron::fetch_tron_assets;
 use crate::registry::{evm_networks, network_by_id};
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
 pub(crate) mod bitcoin;
 pub(crate) mod evm;
@@ -26,6 +29,8 @@ pub(crate) mod http;
 pub(crate) mod prices;
 pub(crate) mod solana;
 pub(crate) mod tron;
+
+const NETWORK_CONCURRENCY: usize = 4;
 
 pub(crate) struct NetworkAssetRefresh {
     pub(crate) assets: Vec<Asset>,
@@ -49,36 +54,120 @@ pub(crate) async fn fetch_portfolio_assets(
     let mut failed_networks = vec![];
     let mut bitcoin_account = cached_bitcoin_account.cloned();
 
+    let mut staged_refreshes: Vec<(String, String, NetworkAssetRefresh)> = vec![];
+    let mut tasks: JoinSet<(String, String, NetworkAssetRefresh)> = JoinSet::new();
+    let network_limiter: Arc<Semaphore> = Arc::new(Semaphore::new(NETWORK_CONCURRENCY));
+    let cached_assets_owned: Vec<Asset> = cached_assets.to_vec();
+
     if let Some(evm_address) = addresses.get("evm") {
+        let evm_address = evm_address.clone();
         for config in evm_networks() {
             if !enabled_networks.contains(&config.id) {
                 continue;
             }
 
-            let refreshed = fetch_evm_assets(client, config, evm_address, cached_assets).await;
-            if refreshed.balance_failed {
-                failed_networks.push(config.name.clone());
-            }
-            assets.extend(refreshed.assets);
+            let task_client = client.clone();
+            let task_address = evm_address.clone();
+            let task_cached_assets = cached_assets_owned.clone();
+            let task_network_id = config.id.clone();
+            let task_network_name = config.name.clone();
+            let task_limiter = Arc::clone(&network_limiter);
+            let permit = match task_limiter.acquire_owned().await {
+                Ok(permit) => permit,
+                Err(_) => {
+                    staged_refreshes.push((
+                        task_network_id,
+                        task_network_name,
+                        NetworkAssetRefresh {
+                            assets: vec![],
+                            balance_failed: true,
+                        },
+                    ));
+                    continue;
+                }
+            };
+
+            tasks.spawn(async move {
+                let _permit = permit;
+                let refreshed =
+                    fetch_evm_assets(&task_client, config, &task_address, &task_cached_assets)
+                        .await;
+                (task_network_id, task_network_name, refreshed)
+            });
         }
     }
 
     if enabled_networks.iter().any(|id| id == "solana")
         && let Some(solana_address) = addresses.get("solana")
     {
-        let refreshed = fetch_solana_assets(client, solana_address, cached_assets).await;
-        if refreshed.balance_failed {
-            failed_networks.push("Solana".to_string());
+        let task_client = client.clone();
+        let task_address = solana_address.clone();
+        let task_cached_assets = cached_assets_owned.clone();
+        let task_network_id = "solana".to_string();
+        let task_network_name = "Solana".to_string();
+        let task_limiter = Arc::clone(&network_limiter);
+
+        match task_limiter.acquire_owned().await {
+            Ok(permit) => {
+                tasks.spawn(async move {
+                    let _permit = permit;
+                    let refreshed =
+                        fetch_solana_assets(&task_client, &task_address, &task_cached_assets).await;
+                    (task_network_id, task_network_name, refreshed)
+                });
+            }
+            Err(_) => staged_refreshes.push((
+                task_network_id,
+                task_network_name,
+                NetworkAssetRefresh {
+                    assets: vec![],
+                    balance_failed: true,
+                },
+            )),
         }
-        assets.extend(refreshed.assets);
     }
 
     if enabled_networks.iter().any(|id| id == "tron")
         && let Some(tron_address) = addresses.get("tron")
     {
-        let refreshed = fetch_tron_assets(client, tron_address, cached_assets).await;
+        let task_client = client.clone();
+        let task_address = tron_address.clone();
+        let task_cached_assets = cached_assets_owned.clone();
+        let task_network_id = "tron".to_string();
+        let task_network_name = "Tron".to_string();
+        let task_limiter = Arc::clone(&network_limiter);
+
+        match task_limiter.acquire_owned().await {
+            Ok(permit) => {
+                tasks.spawn(async move {
+                    let _permit = permit;
+                    let refreshed =
+                        fetch_tron_assets(&task_client, &task_address, &task_cached_assets).await;
+                    (task_network_id, task_network_name, refreshed)
+                });
+            }
+            Err(_) => staged_refreshes.push((
+                task_network_id,
+                task_network_name,
+                NetworkAssetRefresh {
+                    assets: vec![],
+                    balance_failed: true,
+                },
+            )),
+        }
+    }
+
+    while let Some(result) = tasks.join_next().await {
+        match result {
+            Ok(refresh) => staged_refreshes.push(refresh),
+            Err(_) => failed_networks.push("Network provider task".to_string()),
+        }
+    }
+
+    staged_refreshes.sort_by(|left, right| left.0.cmp(&right.0));
+    for (_, network_name, refreshed) in staged_refreshes.drain(..) {
         if refreshed.balance_failed {
-            failed_networks.push("Tron".to_string());
+            failed_networks.push(network_name);
         }
         assets.extend(refreshed.assets);
     }
