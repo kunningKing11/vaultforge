@@ -4,9 +4,10 @@ use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
+use zeroize::Zeroize;
 
 use crate::dto::{FiatCurrency, Wallet, WalletPayload};
-use crate::state::{AppState, StoredWalletMetadata};
+use crate::state::{AppState, StoredWalletMetadata, clear_secret_string};
 
 #[derive(Deserialize, Serialize)]
 pub(crate) struct StoredWalletFile {
@@ -16,6 +17,48 @@ pub(crate) struct StoredWalletFile {
     pub(crate) salt: String,
     pub(crate) nonce: String,
     pub(crate) ciphertext: String,
+}
+
+pub(crate) struct DecryptedWallet {
+    wallet: Option<Wallet>,
+    key: Option<[u8; 32]>,
+    salt: Option<Vec<u8>>,
+}
+
+impl DecryptedWallet {
+    pub(crate) fn wallet(&self) -> &Wallet {
+        self.wallet.as_ref().expect("decrypted wallet is present")
+    }
+
+    pub(crate) fn wallet_mut(&mut self) -> &mut Wallet {
+        self.wallet.as_mut().expect("decrypted wallet is present")
+    }
+
+    pub(crate) fn into_parts(mut self) -> (Wallet, [u8; 32], Vec<u8>) {
+        (
+            self.wallet.take().expect("decrypted wallet is present"),
+            self.key.take().expect("decryption key is present"),
+            self.salt.take().expect("storage salt is present"),
+        )
+    }
+
+    fn zeroize_remaining(&mut self) {
+        if let Some(wallet) = &mut self.wallet {
+            clear_secret_string(&mut wallet.mnemonic);
+        }
+        if let Some(key) = &mut self.key {
+            key.zeroize();
+        }
+        if let Some(salt) = &mut self.salt {
+            salt.zeroize();
+        }
+    }
+}
+
+impl Drop for DecryptedWallet {
+    fn drop(&mut self) {
+        self.zeroize_remaining();
+    }
 }
 
 pub(crate) fn read_stored_wallet(path: &PathBuf) -> Result<Option<StoredWalletFile>, String> {
@@ -93,7 +136,7 @@ pub(crate) fn encrypt_wallet(
 pub(crate) fn decrypt_wallet(
     stored: &StoredWalletFile,
     wallet_password: &str,
-) -> Result<Wallet, String> {
+) -> Result<DecryptedWallet, String> {
     if !matches!(stored.version, 2..=6) {
         return Err("Unsupported wallet version".to_string());
     }
@@ -106,39 +149,54 @@ pub(crate) fn decrypt_wallet(
     let ciphertext = BASE64
         .decode(&stored.ciphertext)
         .map_err(|_| "Stored wallet payload is invalid")?;
-    let (key, _) = derive_storage_key(wallet_password, Some(&salt))?;
-    let cipher = Aes256Gcm::new_from_slice(&key).map_err(|_| "Failed to initialize encryption")?;
-    let nonce = Nonce::try_from(nonce.as_slice()).map_err(|_| "Stored wallet nonce is invalid")?;
-    let plaintext = cipher
-        .decrypt(&nonce, ciphertext.as_ref())
-        .map_err(|_| "Invalid wallet password")?;
-    let payload: WalletPayload = serde_json::from_slice(&plaintext)
-        .map_err(|_| "Stored wallet contents are invalid".to_string())?;
-    Ok(Wallet {
-        name: payload.wallet_name,
-        mnemonic: payload.mnemonic,
-        created_at: payload.created_at,
-        addresses: payload.addresses,
-        wallet_password_hash: payload.wallet_password_hash,
-        fiat_currency: if stored.version >= 5 {
-            payload.fiat_currency
-        } else {
-            FiatCurrency::Usd
-        },
-        usd_exchange_rate: if stored.version >= 5 {
-            payload.usd_exchange_rate
-        } else {
-            1.0
-        },
-        assets: payload.assets,
-        activity: payload.activity,
-        enabled_networks: payload.enabled_networks,
-        auto_lock_timeout_secs: payload.auto_lock_timeout_secs,
-        use_crypto_symbols: if stored.version >= 6 {
-            payload.use_crypto_symbols
-        } else {
-            false
-        },
+    let (mut key, salt) = derive_storage_key(wallet_password, Some(&salt))?;
+    let cipher = Aes256Gcm::new_from_slice(&key).map_err(|_| {
+        key.zeroize();
+        "Failed to initialize encryption".to_string()
+    })?;
+    let nonce = Nonce::try_from(nonce.as_slice()).map_err(|_| {
+        key.zeroize();
+        "Stored wallet nonce is invalid".to_string()
+    })?;
+    let mut plaintext = cipher.decrypt(&nonce, ciphertext.as_ref()).map_err(|_| {
+        key.zeroize();
+        "Invalid wallet password".to_string()
+    })?;
+    let payload: WalletPayload = serde_json::from_slice(&plaintext).map_err(|_| {
+        key.zeroize();
+        plaintext.zeroize();
+        "Stored wallet contents are invalid".to_string()
+    })?;
+    plaintext.zeroize();
+    Ok(DecryptedWallet {
+        wallet: Some(Wallet {
+            name: payload.wallet_name,
+            mnemonic: payload.mnemonic,
+            created_at: payload.created_at,
+            addresses: payload.addresses,
+            wallet_password_hash: payload.wallet_password_hash,
+            fiat_currency: if stored.version >= 5 {
+                payload.fiat_currency
+            } else {
+                FiatCurrency::Usd
+            },
+            usd_exchange_rate: if stored.version >= 5 {
+                payload.usd_exchange_rate
+            } else {
+                1.0
+            },
+            assets: payload.assets,
+            activity: payload.activity,
+            enabled_networks: payload.enabled_networks,
+            auto_lock_timeout_secs: payload.auto_lock_timeout_secs,
+            use_crypto_symbols: if stored.version >= 6 {
+                payload.use_crypto_symbols
+            } else {
+                false
+            },
+        }),
+        key: Some(key),
+        salt: Some(salt),
     })
 }
 

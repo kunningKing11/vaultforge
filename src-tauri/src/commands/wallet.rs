@@ -1,4 +1,3 @@
-use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use chrono::Utc;
 use std::{fs, sync::Mutex};
 use tauri::State;
@@ -289,22 +288,20 @@ pub(crate) async fn unlock_wallet(
         } else {
             let stored = read_stored_wallet(&state.storage_path)?
                 .ok_or_else(|| "No wallet exists yet".to_string())?;
-            let mut wallet = decrypt_wallet(&stored, &wallet_password)?;
-            if wallet.wallet_password_hash != wallet_password_hash {
+            let mut decrypted = decrypt_wallet(&stored, &wallet_password)?;
+            if decrypted.wallet().wallet_password_hash != wallet_password_hash {
                 return Err("Invalid wallet password".to_string());
             }
-            refresh_filecoin_address(&mut wallet)?;
+            refresh_filecoin_address(decrypted.wallet_mut())?;
             state.stored_wallet = Some(StoredWalletMetadata {
                 wallet_name: stored.wallet_name,
             });
-            let salt = BASE64 // check General Purpose Engine for decoding base64 for cryptographic purposes
-                .decode(stored.salt)
-                .map_err(|_| "Stored wallet salt is invalid")?;
-            let (key, salt) = derive_storage_key(&wallet_password, Some(&salt))?;
+            let enabled_networks = decrypted.wallet().enabled_networks.clone();
+            let bitcoin_account =
+                initialize_bitcoin_account(&decrypted.wallet().mnemonic, &enabled_networks)?;
+            let (wallet, key, salt) = decrypted.into_parts();
             state.encryption_key = Some(key);
             state.storage_salt = Some(salt);
-            let enabled_networks = wallet.enabled_networks.clone();
-            let bitcoin_account = initialize_bitcoin_account(&wallet.mnemonic, &enabled_networks)?;
             state.wallet = Some(wallet);
             state.locked = false;
             bitcoin_account

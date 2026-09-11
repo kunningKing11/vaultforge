@@ -37,19 +37,29 @@ fn encrypts_and_decrypts_wallet_payload() {
     assert_eq!(stored.version, 6);
 
     let decrypted = decrypt_wallet(&stored, wallet_password).unwrap();
-    assert_eq!(decrypted.name, wallet.name);
-    assert_eq!(decrypted.mnemonic, wallet.mnemonic);
-    assert_eq!(decrypted.created_at, wallet.created_at);
-    assert_eq!(decrypted.fiat_currency, wallet.fiat_currency);
-    assert_eq!(decrypted.usd_exchange_rate, wallet.usd_exchange_rate);
-    assert_eq!(decrypted.enabled_networks, wallet.enabled_networks);
+    assert_eq!(decrypted.wallet().name, wallet.name);
+    assert_eq!(decrypted.wallet().mnemonic, wallet.mnemonic);
+    assert_eq!(decrypted.wallet().created_at, wallet.created_at);
+    assert_eq!(decrypted.wallet().fiat_currency, wallet.fiat_currency);
     assert_eq!(
-        decrypted.auto_lock_timeout_secs,
+        decrypted.wallet().usd_exchange_rate,
+        wallet.usd_exchange_rate
+    );
+    assert_eq!(decrypted.wallet().enabled_networks, wallet.enabled_networks);
+    assert_eq!(
+        decrypted.wallet().auto_lock_timeout_secs,
         wallet.auto_lock_timeout_secs
     );
-    assert_eq!(decrypted.use_crypto_symbols, wallet.use_crypto_symbols);
+    assert_eq!(
+        decrypted.wallet().use_crypto_symbols,
+        wallet.use_crypto_symbols
+    );
+    let (decrypted_wallet, decrypted_key, decrypted_salt) = decrypted.into_parts();
+    assert_eq!(decrypted_wallet.mnemonic, wallet.mnemonic);
+    assert_eq!(decrypted_key, key);
+    assert_eq!(decrypted_salt, salt);
 
     stored.version = 5;
     let migrated = decrypt_wallet(&stored, wallet_password).unwrap();
-    assert!(!migrated.use_crypto_symbols);
+    assert!(!migrated.wallet().use_crypto_symbols);
 }
