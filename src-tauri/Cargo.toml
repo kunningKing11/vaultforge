@@ -27,7 +27,7 @@ serde_json = "1"
 solana-hash = "4"
 solana-instruction = "3"
 solana-keypair = "3"
-solana-message = { version = "4", features = ["wincode"] }
+solana-message = { version = "5", features = ["wincode"] }
 solana-pubkey = "4"
 solana-signer = "3"
 solana-system-interface = { version = "3.3", features = ["wincode"] }
