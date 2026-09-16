@@ -30,7 +30,7 @@ fn validates_standard_bip39_recovery_phrase_lengths_and_checksums() {
 fn derives_documented_wallet_paths_deterministically() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, ALL_NETWORKS).unwrap();
-    assert_eq!(addresses.len(), 7);
+    assert_eq!(addresses.len(), 8);
     assert_eq!(
         addresses.get("bitcoin").unwrap(),
         "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
@@ -54,6 +54,10 @@ fn derives_documented_wallet_paths_deterministically() {
     assert_eq!(
         addresses.get("tron").unwrap(),
         "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH"
+    );
+    assert_eq!(
+        addresses.get("xrpl").unwrap(),
+        "rHsMGQEkVNJmpGWs8XUBoTBiAAbwxZN5v3"
     );
     assert_eq!(
         addresses.get("zcash").unwrap(),

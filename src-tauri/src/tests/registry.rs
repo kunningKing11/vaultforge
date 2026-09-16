@@ -33,6 +33,7 @@ fn supported_rpc_providers_use_expected_hosts() {
         match network.id.as_str() {
             "monad" => assert_eq!(rpc_url, "https://rpc.monad.xyz"),
             "solana" => assert_eq!(rpc_url, "https://api.mainnet.solana.com"),
+            "xrpl" => assert_eq!(rpc_url, "https://xrplcluster.com/"),
             _ => assert!(
                 rpc_url.contains("publicnode.com"),
                 "{} should use PublicNode",

@@ -81,6 +81,7 @@ fn default_enabled_networks() -> Vec<String> {
         "injective".into(),
         "solana".into(),
         "tron".into(),
+        "xrpl".into(),
         "zcash".into(),
     ]
 }
@@ -163,6 +164,8 @@ pub(crate) struct SignedTransaction {
     pub(crate) symbol: String,
     pub(crate) amount: String,
     pub(crate) note: String,
+    #[serde(default)]
+    pub(crate) destination_tag: Option<u32>,
     pub(crate) network: String,
     pub(crate) nonce: String,
     pub(crate) signed_at: String,

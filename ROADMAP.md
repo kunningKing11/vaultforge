@@ -39,9 +39,9 @@ The below items are the priorities for this project and an item will probably ge
   - [x] Tron (TRX) basic transfers
     - [x] native TRX transfers
     - [x] Tron token transfers
-  - [ ] Ripple (XRP) basic transfers
-    - [ ] native XRP transfers
-    - [ ] Ripple token transfers
+  - [ ] XRP Ledger (XRP) basic transfers
+    - [x] native XRP transfers
+    - [ ] issued-currency, MPT, and NFT transfers
   - [ ] Zcash (ZEC) basic transfers
     - [ ] transparent pool transfers
     - [ ] shielded pool transfers

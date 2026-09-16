@@ -63,6 +63,18 @@ pub(crate) async fn rpc_post(
     Err(last_err)
 }
 
+pub(crate) fn json_rpc_result<'a>(
+    response: &'a serde_json::Value,
+    operation: &str,
+) -> Result<&'a serde_json::Value, String> {
+    if let Some(error) = response.get("error").filter(|error| !error.is_null()) {
+        return Err(format!("{operation} RPC error: {error}"));
+    }
+    response
+        .get("result")
+        .ok_or_else(|| format!("{operation} RPC response is missing result"))
+}
+
 pub(crate) async fn http_get_json(
     client: &reqwest::Client,
     url: &str,
@@ -167,3 +179,7 @@ pub(crate) async fn http_post_text(
     }
     Err(last_err)
 }
+
+#[cfg(test)]
+#[path = "../tests/providers/http.rs"]
+mod tests;

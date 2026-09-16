@@ -85,6 +85,7 @@ export function emptySendDraft(): SendDraft {
     token_address: null,
     amount: "",
     note: "",
+    destinationTag: null,
   };
 }
 

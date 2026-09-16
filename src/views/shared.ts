@@ -168,6 +168,7 @@ export function addressPlaceholder(symbol: string) {
     INJ: "inj1...",
     SOL: "Solana address",
     TRX: "T...",
+    XRP: "r...",
     ZEC: "t1... / t3...",
   };
   return placeholders[symbol] ?? "0x...";

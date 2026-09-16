@@ -4,6 +4,7 @@ use crate::address::filecoin::validate_address as validate_filecoin_address;
 use crate::address::injective::validate_address as validate_injective_address;
 use crate::address::solana::validate_address as validate_solana_address;
 use crate::address::tron::validate_address as validate_tron_address;
+use crate::address::xrpl::validate_address as validate_xrpl_address;
 use crate::address::zcash::validate_address as validate_zcash_address;
 use crate::assets::token_addresses_match;
 use crate::dto::Wallet;
@@ -74,7 +75,7 @@ pub(crate) fn validate_transfer(
     if amount == 0 {
         return Err("Amount must be greater than zero".to_string());
     }
-    if matches!(network, "bitcoin" | "solana" | "tron") && amount > u64::MAX as u128 {
+    if matches!(network, "bitcoin" | "solana" | "tron" | "xrpl") && amount > u64::MAX as u128 {
         return Err(format!("{symbol} amount is too large"));
     }
 
@@ -117,6 +118,7 @@ pub(crate) fn validate_address_for_network(address: &str, network: &str) -> Resu
         "injective" => validate_injective_address(address),
         "solana" => validate_solana_address(address),
         "tron" => validate_tron_address(address),
+        "xrpl" => validate_xrpl_address(address),
         "zcash" => validate_zcash_address(address),
         _ if config.kind == "evm" => validate_evm_address(address),
         _ => Err(format!("Unsupported network {network}")),

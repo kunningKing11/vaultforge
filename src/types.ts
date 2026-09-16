@@ -59,6 +59,7 @@ export type SignedTransaction = {
   symbol: string;
   amount: string;
   note: string;
+  destinationTag?: number | null;
   network: NetworkId;
   nonce: string;
   signedAt: string;
@@ -81,6 +82,7 @@ export type SendDraft = {
   token_address: string | null;
   amount: string;
   note: string;
+  destinationTag: number | null;
 };
 
 export type SessionCommand =
@@ -120,7 +122,7 @@ export type Toast = {
   exiting: boolean;
 };
 
-type NetworkKind = "bitcoin" | "evm" | "filecoin" | "injective" | "svm" | "tron" | "zcash";
+type NetworkKind = "bitcoin" | "evm" | "filecoin" | "injective" | "svm" | "tron" | "xrpl" | "zcash";
 
 type ChainVM = "EVM" | "FVM" | "Multi-VM" | "SVM" | "TrVM" | null;
 
@@ -138,6 +140,7 @@ export type NetworkId =
   | "injective"
   | "solana"
   | "tron"
+  | "xrpl"
   | "zcash";
 
 export interface NetworkConfig {

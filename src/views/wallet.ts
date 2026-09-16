@@ -119,6 +119,7 @@ function sendView() {
           <label class="space-y-2"><span class="form-label">Asset</span>${sendAssetSelect(selectedAssetId)}</label>
           <label class="space-y-2"><span class="form-label">Amount</span><input class="field" name="amount" type="number" min="0.000001" step="0.000001" value="${escapeHtml(appState.send.draft.amount)}" required /></label>
         </div>
+        <label class="space-y-2"><span class="form-label">Destination tag (XRP only)</span><input class="field" name="destinationTag" type="number" min="0" max="4294967295" step="1" placeholder="Required by some exchanges" value="${appState.send.draft.destinationTag ?? ""}" /></label>
         <label class="space-y-2"><span class="form-label">Note</span><input class="field" name="note" placeholder="Optional transaction memo" value="${escapeHtml(appState.send.draft.note)}" /></label>
         <button class="btn-primary justify-self-start" type="submit">Sign transaction</button>
       </form>
@@ -145,6 +146,7 @@ function signedTransactionView(signed: SignedTransaction) {
       <div class="mt-6 grid gap-4 sm:grid-cols-2">
         ${signedDetail("From", shortAddress(signed.from))}
         ${signedDetail("To", shortAddress(signed.to))}
+        ${signed.destinationTag == null ? "" : signedDetail("Destination tag", signed.destinationTag.toString())}
         ${signedDetail("Amount", `${formatWei(signed.amount, signed.decimals)} ${amountSymbol}`)}
         ${signedDetail("Network fee", `${formatWei(signed.feeAmount, feeDecimals)} ${feeSymbol}`)}
         ${signedDetail("Total debit", `${formatWei(signed.totalDebit, signed.decimals)} ${amountSymbol}`)}
@@ -337,5 +339,6 @@ function transactionReferenceLabel(network: SignedTransaction["network"]): strin
   if (network === "bitcoin") return "Transaction model";
   if (network === "solana") return "Recent blockhash";
   if (network === "tron") return "Resource model";
+  if (network === "xrpl") return "Sequence";
   return "Nonce";
 }

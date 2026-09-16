@@ -65,6 +65,7 @@ test("creates a fresh default send draft", () => {
     token_address: null,
     amount: "",
     note: "",
+    destinationTag: null,
   });
 });
 

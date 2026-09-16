@@ -48,6 +48,7 @@ export const walletApi = {
     tokenAddress: string | null;
     amount: string;
     note: string;
+    destinationTag: number | null;
   }) => invoke<SignedTransaction>("sign_transaction", args),
   sendTransaction: (args: { signed: SignedTransaction }) =>
     invoke<WalletSession>("send_transaction", args),

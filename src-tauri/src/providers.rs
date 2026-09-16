@@ -6,17 +6,20 @@ use crate::address::filecoin::validate_address as validate_filecoin_address;
 use crate::address::injective::validate_address as validate_injective_address;
 use crate::address::solana::validate_address as validate_solana_address;
 use crate::address::tron::validate_address as validate_tron_address;
+use crate::address::xrpl::validate_address as validate_xrpl_address;
 use crate::address::zcash::validate_address as validate_zcash_address;
 use crate::assets::cached_asset;
 use crate::derivation::{
     bech32_account_address, bitcoin_bech32_address, ethereum_address_from_private_key,
-    filecoin_address_from_private_key, tron_address_from_private_key, zcash_transparent_address,
+    filecoin_address_from_private_key, tron_address_from_private_key,
+    xrpl_classic_address_from_private_key, zcash_transparent_address,
 };
 use crate::dto::Asset;
 use crate::providers::bitcoin::{BitcoinAccountSnapshot, scan_bitcoin_account};
 use crate::providers::evm::fetch_evm_assets;
 use crate::providers::solana::fetch_solana_assets;
 use crate::providers::tron::fetch_tron_assets;
+use crate::providers::xrpl::fetch_xrpl_assets;
 use crate::registry::{evm_networks, network_by_id};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -29,6 +32,7 @@ pub(crate) mod http;
 pub(crate) mod prices;
 pub(crate) mod solana;
 pub(crate) mod tron;
+pub(crate) mod xrpl;
 
 const NETWORK_CONCURRENCY: usize = 4;
 
@@ -157,6 +161,36 @@ pub(crate) async fn fetch_portfolio_assets(
         }
     }
 
+    if enabled_networks.iter().any(|id| id == "xrpl")
+        && let Some(xrpl_address) = addresses.get("xrpl")
+    {
+        let task_client = client.clone();
+        let task_address = xrpl_address.clone();
+        let task_cached_assets = cached_assets_owned.clone();
+        let task_network_id = "xrpl".to_string();
+        let task_network_name = "XRP Ledger".to_string();
+        let task_limiter = Arc::clone(&network_limiter);
+
+        match task_limiter.acquire_owned().await {
+            Ok(permit) => {
+                tasks.spawn(async move {
+                    let _permit = permit;
+                    let refreshed =
+                        fetch_xrpl_assets(&task_client, &task_address, &task_cached_assets).await;
+                    (task_network_id, task_network_name, refreshed)
+                });
+            }
+            Err(_) => staged_refreshes.push((
+                task_network_id,
+                task_network_name,
+                NetworkAssetRefresh {
+                    assets: vec![],
+                    balance_failed: true,
+                },
+            )),
+        }
+    }
+
     while let Some(result) = tasks.join_next().await {
         match result {
             Ok(refresh) => staged_refreshes.push(refresh),
@@ -250,6 +284,7 @@ struct FilecoinProvider;
 struct InjectiveProvider;
 struct SolanaProvider;
 struct TronProvider;
+struct XrplProvider;
 struct ZcashProvider;
 
 impl ChainProvider for BitcoinProvider {
@@ -342,6 +377,21 @@ impl ChainProvider for TronProvider {
     }
 }
 
+impl ChainProvider for XrplProvider {
+    fn chain_name(&self) -> &'static str {
+        "XRP Ledger"
+    }
+    fn symbol(&self) -> &'static str {
+        "XRP"
+    }
+    fn validate_address(&self, address: &str) -> Result<(), String> {
+        validate_xrpl_address(address)
+    }
+    fn derive_address(&self, private_key: &[u8; 32]) -> Result<String, String> {
+        xrpl_classic_address_from_private_key(private_key)
+    }
+}
+
 impl ChainProvider for ZcashProvider {
     fn chain_name(&self) -> &'static str {
         "Zcash"
@@ -365,6 +415,7 @@ pub(crate) fn get_provider(symbol: &str) -> Option<Box<dyn ChainProvider>> {
         "INJ" => Some(Box::new(InjectiveProvider)),
         "SOL" => Some(Box::new(SolanaProvider)),
         "TRX" => Some(Box::new(TronProvider)),
+        "XRP" => Some(Box::new(XrplProvider)),
         "ZEC" => Some(Box::new(ZcashProvider)),
         _ => Some(Box::new(EvmProvider)),
     }

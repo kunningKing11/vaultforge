@@ -54,6 +54,41 @@ describe("network registry normalization", () => {
       "ethereum contains a duplicate token symbol or contract",
     );
   });
+
+  test("normalizes token identifiers according to their standard", () => {
+    const evmDuplicate = networkSource();
+    const ethereum = evmDuplicate.networks.find((network) => network.id === "ethereum")!;
+    ethereum.tokens!.push({
+      ...structuredClone(ethereum.tokens![0]!),
+      symbol: "USDC duplicate",
+      tokenAddress: ethereum.tokens![0]!.tokenAddress.toLowerCase(),
+    });
+    expect(() => normalizeNetworkRegistry(evmDuplicate)).toThrow(
+      "ethereum contains a duplicate token symbol or contract",
+    );
+
+    const solanaTokens = networkSource();
+    const solana = solanaTokens.networks.find((network) => network.id === "solana")!;
+    solana.tokens = [
+      {
+        standard: "spl",
+        symbol: "Token One",
+        name: "Token One",
+        decimals: 9,
+        tokenAddress: "So11111111111111111111111111111111111111112",
+        coinGeckoId: "token-one",
+      },
+      {
+        standard: "spl",
+        symbol: "Token Two",
+        name: "Token Two",
+        decimals: 9,
+        tokenAddress: "so11111111111111111111111111111111111111112",
+        coinGeckoId: "token-two",
+      },
+    ];
+    expect(() => normalizeNetworkRegistry(solanaTokens)).not.toThrow();
+  });
 });
 
 test("unknown network ids fall back to Ethereum", () => {

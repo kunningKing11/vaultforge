@@ -1,13 +1,46 @@
 {
   "schemaVersion": 1,
   "network_types": {
-    "bitcoin": { "vm_type": null, "isL2": false, "isTestNet": false },
-    "evm": { "vm_type": "EVM", "isL2": false, "isTestNet": false },
-    "filecoin": { "vm_type": "FVM", "isL2": false, "isTestNet": false },
-    "injective": { "vm_type": "Multi-VM", "isL2": false, "isTestNet": false },
-    "svm": { "vm_type": "SVM", "isL2": false, "isTestNet": false },
-    "tron": { "vm_type": "TrVM", "isL2": false, "isTestNet": false },
-    "zcash": { "vm_type": null, "isL2": false, "isTestNet": false }
+    "bitcoin": {
+      "vm_type": null,
+      "isL2": false,
+      "isTestNet": false
+    },
+    "evm": {
+      "vm_type": "EVM",
+      "isL2": false,
+      "isTestNet": false
+    },
+    "filecoin": {
+      "vm_type": "FVM",
+      "isL2": false,
+      "isTestNet": false
+    },
+    "injective": {
+      "vm_type": "Multi-VM",
+      "isL2": false,
+      "isTestNet": false
+    },
+    "svm": {
+      "vm_type": "SVM",
+      "isL2": false,
+      "isTestNet": false
+    },
+    "tron": {
+      "vm_type": "TrVM",
+      "isL2": false,
+      "isTestNet": false
+    },
+    "xrpl": {
+      "vm_type": null,
+      "isL2": false,
+      "isTestNet": false
+    },
+    "zcash": {
+      "vm_type": null,
+      "isL2": false,
+      "isTestNet": false
+    }
   },
   "networks": [
     {
@@ -114,7 +147,12 @@
       "chainId": 143,
       "addressKey": "evm",
       "rpcUrl": "https://rpc.monad.xyz",
-      "nativeAsset": { "symbol": "MON", "name": "Monad", "decimals": 18, "coinGeckoId": "monad" },
+      "nativeAsset": {
+        "symbol": "MON",
+        "name": "Monad",
+        "decimals": 18,
+        "coinGeckoId": "monad"
+      },
       "tokens": [
         {
           "standard": "erc20",
@@ -280,7 +318,12 @@
       "addressKey": "solana",
       "rpcUrl": "https://api.mainnet.solana.com",
       "coinGeckoNetworkId": "solana",
-      "nativeAsset": { "symbol": "SOL", "name": "Solana", "decimals": 9, "coinGeckoId": "solana" }
+      "nativeAsset": {
+        "symbol": "SOL",
+        "name": "Solana",
+        "decimals": 9,
+        "coinGeckoId": "solana"
+      }
     },
     {
       "kind": "tron",
@@ -288,7 +331,12 @@
       "name": "Tron",
       "addressKey": "tron",
       "rpcUrl": "https://tron-rpc.publicnode.com",
-      "nativeAsset": { "symbol": "TRX", "name": "Tron", "decimals": 6, "coinGeckoId": "tron" },
+      "nativeAsset": {
+        "symbol": "TRX",
+        "name": "Tron",
+        "decimals": 6,
+        "coinGeckoId": "tron"
+      },
       "tokens": [
         {
           "standard": "trc20",
@@ -308,6 +356,19 @@
           "coinGeckoId": "usd-coin"
         }
       ]
+    },
+    {
+      "kind": "xrpl",
+      "id": "xrpl",
+      "name": "XRP Ledger",
+      "addressKey": "xrpl",
+      "rpcUrl": "https://xrplcluster.com/",
+      "nativeAsset": {
+        "symbol": "XRP",
+        "name": "XRP",
+        "decimals": 6,
+        "coinGeckoId": "ripple"
+      }
     },
     {
       "kind": "zcash",

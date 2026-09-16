@@ -6,6 +6,7 @@ use crate::activity::{activity, random_hex, short_address};
 use crate::address::evm::validate_address as validate_evm_address;
 use crate::assets::token_addresses_match;
 use crate::derivation::signing_key_from_mnemonic;
+use crate::derivation::xrpl_private_key_from_mnemonic;
 use crate::dto::{Activity, SignedTransaction, WalletSession};
 use crate::providers::bitcoin::{
     broadcast_bitcoin_transaction, fetch_bitcoin_tx_status, sign_bitcoin_transfer,
@@ -21,6 +22,10 @@ use crate::providers::solana::{
     fetch_solana_tx_status, simulate_solana_transaction,
 };
 use crate::providers::tron::{broadcast_tron_transaction, fetch_tron_tx_status};
+use crate::providers::xrpl::{
+    broadcast_xrpl_transaction, fetch_xrpl_account_info, fetch_xrpl_network_info,
+    fetch_xrpl_tx_status,
+};
 use crate::state::{AppState, session_from_state, validate_unlocked};
 use crate::storage::persist_state_wallet;
 use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
@@ -29,7 +34,9 @@ use crate::tx::solana::{
     solana_associated_token_address,
 };
 use crate::tx::tron::sign_tron_transfer;
+use crate::tx::xrpl::sign_xrpl_payment;
 use crate::validation::validate_transfer;
+use zeroize::Zeroize;
 
 pub(crate) fn required_native_debit(
     is_native_transfer: bool,
@@ -82,6 +89,7 @@ pub(crate) async fn sign_transaction(
     token_address: Option<String>,
     amount: String,
     note: String,
+    destination_tag: Option<u32>,
 ) -> Result<SignedTransaction, String> {
     validate_unlocked(&state)?;
 
@@ -129,6 +137,10 @@ pub(crate) async fn sign_transaction(
     let network_id = asset.network.as_str();
     let mut decimals = asset.decimals;
 
+    if destination_tag.is_some() && network_id != "xrpl" {
+        return Err("Destination tags are only supported for XRP Ledger payments".to_string());
+    }
+
     match network_id {
         "bitcoin" if symbol == "BTC" => {
             let from = addresses
@@ -151,6 +163,7 @@ pub(crate) async fn sign_transaction(
                 symbol: symbol.clone(),
                 amount: value.to_string(),
                 note: note.trim().to_string(),
+                destination_tag: None,
                 network: "bitcoin".to_string(),
                 nonce: "utxo".to_string(),
                 signed_at: Utc::now().to_rfc3339(),
@@ -262,6 +275,7 @@ pub(crate) async fn sign_transaction(
                 symbol: symbol.clone(),
                 amount: value.to_string(),
                 note: note.trim().to_string(),
+                destination_tag: None,
                 network: "solana".to_string(),
                 nonce: signed_sol.recent_blockhash,
                 signed_at: Utc::now().to_rfc3339(),
@@ -308,6 +322,7 @@ pub(crate) async fn sign_transaction(
                 symbol: symbol.clone(),
                 amount: value.to_string(),
                 note: note.trim().to_string(),
+                destination_tag: None,
                 network: "tron".to_string(),
                 nonce: "resource".to_string(),
                 signed_at: Utc::now().to_rfc3339(),
@@ -415,6 +430,7 @@ pub(crate) async fn sign_transaction(
                 symbol: symbol.clone(),
                 amount: value.to_string(),
                 note: note.trim().to_string(),
+                destination_tag: None,
                 network: config.id.to_string(),
                 nonce: nonce.to_string(),
                 signed_at: Utc::now().to_rfc3339(),
@@ -428,6 +444,67 @@ pub(crate) async fn sign_transaction(
                 fiat_value: (value as f64) * asset.price_usd,
                 raw_tx: Some(raw_tx_hex),
                 tx_hash: Some(tx_hash),
+            })
+        }
+        "xrpl" if symbol == "XRP" => {
+            let from = addresses
+                .get("xrpl")
+                .ok_or_else(|| "Wallet XRP Ledger address is not available".to_string())?
+                .clone();
+            let amount_drops: u64 = value
+                .try_into()
+                .map_err(|_| "XRP amount is too large".to_string())?;
+            let account = fetch_xrpl_account_info(client, &from, "current")
+                .await?
+                .ok_or_else(|| "The XRP Ledger account is not funded yet".to_string())?;
+            let network_info = fetch_xrpl_network_info(client).await?;
+            let recipient_exists = fetch_xrpl_account_info(client, &to, "validated")
+                .await?
+                .is_some();
+            if !recipient_exists && amount_drops < network_info.base_reserve_drops {
+                return Err(format!(
+                    "A new XRP Ledger account must receive at least {} drops",
+                    network_info.base_reserve_drops
+                ));
+            }
+
+            let mut private_key = xrpl_private_key_from_mnemonic(&mnemonic)?;
+            let signed = sign_xrpl_payment(
+                &private_key,
+                &from,
+                &to,
+                amount_drops,
+                destination_tag,
+                &note,
+                &account,
+                &network_info,
+            );
+            private_key.zeroize();
+            let signed = signed?;
+
+            Ok(SignedTransaction {
+                from,
+                to,
+                symbol: symbol.clone(),
+                amount: value.to_string(),
+                note: note.trim().to_string(),
+                destination_tag,
+                network: "xrpl".to_string(),
+                nonce: signed.sequence.to_string(),
+                signed_at: Utc::now().to_rfc3339(),
+                payload_hash: signed.tx_hash.clone(),
+                signature: signed.signature,
+                fee_amount: signed.fee_drops.to_string(),
+                fee_symbol: "XRP".to_string(),
+                total_debit: amount_drops
+                    .checked_add(signed.fee_drops)
+                    .ok_or_else(|| "XRP amount plus fee is too large".to_string())?
+                    .to_string(),
+                post_balance: signed.post_balance_drops.to_string(),
+                decimals,
+                fiat_value: (value as f64) * asset.price_usd,
+                raw_tx: Some(signed.raw_tx_hex),
+                tx_hash: Some(signed.tx_hash),
             })
         }
         unsupported_network_id => Err(format!(
@@ -476,6 +553,9 @@ pub(crate) async fn send_transaction(
             let tx: serde_json::Value = serde_json::from_str(raw_tx)
                 .map_err(|_| "Invalid signed Tron transaction JSON".to_string())?;
             broadcast_tron_transaction(client, &tx).await?
+        }
+        "xrpl" if signed.symbol == "XRP" => {
+            broadcast_xrpl_transaction(client, raw_tx, &signed.payload_hash).await?
         }
         network_id if evm_config_by_id(network_id).is_some() => {
             let config = evm_config_by_id(network_id)
@@ -592,6 +672,7 @@ pub(crate) async fn check_transaction_status(
         "bitcoin" => fetch_bitcoin_tx_status(client, &tx_hash).await,
         "solana" => fetch_solana_tx_status(client, &tx_hash).await,
         "tron" => fetch_tron_tx_status(client, &tx_hash).await,
+        "xrpl" => fetch_xrpl_tx_status(client, &tx_hash).await,
         network_id if evm_config_by_id(network_id).is_some() => {
             let config = evm_config_by_id(network_id)
                 .ok_or_else(|| format!("Unknown network: {}", network))?;

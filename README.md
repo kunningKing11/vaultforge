@@ -26,9 +26,10 @@ A local-first crypto wallet desktop app built with a TypeScript frontend, Tailwi
 - Portfolio dashboard with token balances, allocation, weighted 24h change, optional Unicode crypto symbols, and USD, EUR, GBP, or JPY valuation selectable during setup or in settings
 - Save the wallet name, display currency, auto-lock timeout, and crypto-symbol preference together from settings
 - Sign and review chain-specific transactions before broadcasting them
-- Basic real transfer paths for BTC, EVM native/ERC-20, Solana native/classic SPL assets, and Tron native
+- Basic real transfer paths for BTC, EVM native/ERC-20, Solana native/classic SPL assets, Tron native, and XRP Ledger native XRP
 - Review provider-derived fees, total debit, selected fiat value, and post-send balance estimates
 - Solana native/classic SPL sends recheck live RPC balances; classic SPL sends validate the mint, draw from live wallet-owned token accounts with ATA priority, account for recipient ATA rent, and simulate the signed transaction before broadcast
+- XRP Ledger native sends use live account balance, reserve, fee, and sequence data; they support classic addresses, destination tags, and short on-ledger memos
 - Encrypted local wallet persistence using the app data directory
 - Activity details with transaction hashes, signatures, payload hashes, and copy actions
 - Security center with storage status, signing status, and local wallet clearing
@@ -40,7 +41,6 @@ A local-first crypto wallet desktop app built with a TypeScript frontend, Tailwi
 ### Coming soon
 
 - Non-native Tron token support (e.g., stablecoins)
-- Ripple (XRP) support
 - Zcash (ZEC) support with support for shielded addresses planned
 
 For a full list of upcoming features (there are quite a few!), click [here](https://github.com/kunningKing11/vaultforge/blob/main/ROADMAP.md).
@@ -51,6 +51,7 @@ For a full list of upcoming features (there are quite a few!), click [here](http
 - EVM: Ethereum Mainnet (ETH), Arbitrum One, Avalanche C-Chain (AVAX), Base, BNB Smart Chain (BNB), Monad (MON), Optimism, and Polygon (POL)
 - Solana Mainnet (SOL)
 - Tron Mainnet (TRX; native transfers only)
+- XRP Ledger Mainnet (XRP; native transfers only)
 
 ### Supported features
 
@@ -71,6 +72,7 @@ The table distinguishes implemented backend paths from network entries that are 
 | Polygon           | Yes                        | ERC-20                  |                                                                  No |
 | Solana            | Yes                        | Classic SPL Token       |                                                                  No |
 | Tron              | Yes                        | No (TRC-20 unavailable) |                                                                  No |
+| XRP Ledger        | Yes (classic addresses)    | No                      |                                                                  No |
 | Zcash             | No                         | No                      |                                                                  No |
 
 ## Development

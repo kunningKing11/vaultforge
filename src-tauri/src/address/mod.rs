@@ -4,4 +4,5 @@ pub(crate) mod filecoin;
 pub(crate) mod injective;
 pub(crate) mod solana;
 pub(crate) mod tron;
+pub(crate) mod xrpl;
 pub(crate) mod zcash;

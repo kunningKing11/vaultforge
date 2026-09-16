@@ -39,20 +39,57 @@ function validateAsset(asset: NetworkAssetConfig, context: string) {
   }
 }
 
+type TokenStandardDefinition = {
+  networkKind: Network["kind"];
+  isValidIdentifier(identifier: string): boolean;
+  normalizeIdentifier(identifier: string): string;
+};
+
+const tokenStandardDefinitions = {
+  erc20: {
+    networkKind: "evm",
+    isValidIdentifier: (identifier) => /^0x[0-9a-fA-F]{40}$/.test(identifier),
+    normalizeIdentifier: (identifier) => identifier.toLowerCase(),
+  },
+  spl: {
+    networkKind: "svm",
+    isValidIdentifier: (identifier) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(identifier),
+    normalizeIdentifier: (identifier) => identifier,
+  },
+  trc20: {
+    networkKind: "tron",
+    isValidIdentifier: (identifier) => /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(identifier),
+    normalizeIdentifier: (identifier) => identifier,
+  },
+} satisfies Record<NetworkTokenConfig["standard"], TokenStandardDefinition>;
+
 function validateToken(token: NetworkTokenConfig, context: string, network: Network) {
   validateAsset(token, context);
-  const validAddress =
-    (token.standard === "erc20" && /^0x[0-9a-fA-F]{40}$/.test(token.tokenAddress)) ||
-    (token.standard === "spl" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(token.tokenAddress)) ||
-    (token.standard === "trc20" && /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(token.tokenAddress));
-  const validStandard =
-    (network.kind === "evm" && token.standard === "erc20") ||
-    (network.kind === "svm" && token.standard === "spl") ||
-    (network.kind === "tron" && token.standard === "trc20");
-  if (!validStandard || !validAddress) {
+  const definition = tokenStandardDefinitions[token.standard];
+  if (
+    definition.networkKind !== network.kind ||
+    !definition.isValidIdentifier(token.tokenAddress)
+  ) {
     throw new Error(
       `${context} has an invalid token standard or contract address on the ${network.id} network`,
     );
+  }
+}
+
+function validateNetworkTokens(network: Network) {
+  const tokenSymbols = new Set<string>();
+  const tokenIdentifiers = new Set<string>();
+
+  for (const token of network.tokens) {
+    validateToken(token, `${network.id} ${token.symbol}`, network);
+    const identifier = tokenStandardDefinitions[token.standard].normalizeIdentifier(
+      token.tokenAddress,
+    );
+    if (tokenSymbols.has(token.symbol) || tokenIdentifiers.has(identifier)) {
+      throw new Error(`${network.id} contains a duplicate token symbol or contract`);
+    }
+    tokenSymbols.add(token.symbol);
+    tokenIdentifiers.add(identifier);
   }
 }
 
@@ -74,24 +111,10 @@ export function normalizeNetworkRegistry(source: NetworkDataSource): NormalizedN
     } as Network;
 
     validateAsset(network.nativeAsset, `${network.id} native asset`);
-    if (network.kind === "evm" || network.kind === "tron" || network.kind === "svm") {
-      if (network.kind === "evm" && (!network.chainId || !network.rpcUrl)) {
-        throw new Error(`${network.id} must define chainId and rpcUrl`);
-      }
-      const tokenSymbols = new Set<string>();
-      const tokenAddresses = new Set<string>();
-      for (const token of network.tokens) {
-        validateToken(token, `${network.id} ${token.symbol}`, network);
-        const address = token.tokenAddress.toLowerCase();
-        if (tokenSymbols.has(token.symbol) || tokenAddresses.has(address)) {
-          throw new Error(`${network.id} contains a duplicate token symbol or contract`);
-        }
-        tokenSymbols.add(token.symbol);
-        tokenAddresses.add(address);
-      }
-    } else if (network.tokens.length > 0) {
-      throw new Error(`${network.id} has configured tokens but no supported token standard`);
+    if (network.kind === "evm" && (!network.chainId || !network.rpcUrl)) {
+      throw new Error(`${network.id} must define chainId and rpcUrl`);
     }
+    validateNetworkTokens(network);
 
     for (const url of [network.rpcUrl, network.apiUrl]) {
       if (url && !/^https:\/\//.test(url)) {

@@ -117,6 +117,15 @@ export async function signTransaction(form: HTMLFormElement) {
   }
 
   const tokenAddress = tokenValue === "native" ? null : tokenValue;
+  const destinationTagInput = String(formData.get("destinationTag") || "").trim();
+  const destinationTag = destinationTagInput === "" ? null : Number(destinationTagInput);
+  if (
+    destinationTag !== null &&
+    (!Number.isInteger(destinationTag) || destinationTag < 0 || destinationTag > 0xffff_ffff)
+  ) {
+    pushToast("Destination tag must be an integer from 0 to 4,294,967,295.", "error");
+    return;
+  }
   const tokenAddressesMatch = (left: string, right: string) =>
     networkById(network)?.kind === "evm"
       ? left.toLowerCase() === right.toLowerCase()
@@ -141,6 +150,7 @@ export async function signTransaction(form: HTMLFormElement) {
     token_address: asset.token_address ?? null,
     amount: String(formData.get("amount") || ""),
     note: String(formData.get("note") || ""),
+    destinationTag,
   };
   appState.operation.busy = true;
   render();
@@ -153,6 +163,7 @@ export async function signTransaction(form: HTMLFormElement) {
       tokenAddress: appState.send.draft.token_address,
       amount: toWei(appState.send.draft.amount || "0", decimals),
       note: appState.send.draft.note,
+      destinationTag: appState.send.draft.destinationTag,
     });
     if (appState.wallet.status !== "unlocked") return;
     appState.send.signedTransaction = signedTransaction;

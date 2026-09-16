@@ -26,6 +26,7 @@ pub(crate) const ALL_NETWORKS: &[&str] = &[
     "injective",
     "solana",
     "tron",
+    "xrpl",
     "zcash",
 ];
 
@@ -38,6 +39,7 @@ const FILECOIN_DERIVATION_PATH: &str = "m/44'/461'/0'/0/0";
 const INJECTIVE_DERIVATION_PATH: &str = EVM_DERIVATION_PATH;
 pub(crate) const SOLANA_DERIVATION_PATH: &[u32] = &[44, 501, 0, 0];
 pub(crate) const TRON_DERIVATION_PATH: &str = "m/44'/195'/0'/0/0";
+const XRPL_DERIVATION_PATH: &str = "m/44'/144'/0'/0/0";
 const ZCASH_DERIVATION_PATH: &str = "m/44'/133'/0'/0/0";
 
 struct DerivedWalletKeys {
@@ -47,6 +49,7 @@ struct DerivedWalletKeys {
     injective: [u8; 32],
     solana: [u8; 32],
     tron: [u8; 32],
+    xrpl: [u8; 32],
     zcash: [u8; 32],
 }
 
@@ -247,6 +250,7 @@ fn derive_wallet_keys(mnemonic: &str) -> Result<DerivedWalletKeys, String> {
         injective: secp256k1_private_key_from_mnemonic(mnemonic, INJECTIVE_DERIVATION_PATH)?,
         solana: solana_secret_key_from_mnemonic(mnemonic)?,
         tron: secp256k1_private_key_from_mnemonic(mnemonic, TRON_DERIVATION_PATH)?,
+        xrpl: secp256k1_private_key_from_mnemonic(mnemonic, XRPL_DERIVATION_PATH)?,
         zcash: secp256k1_private_key_from_mnemonic(mnemonic, ZCASH_DERIVATION_PATH)?,
     })
 }
@@ -301,6 +305,12 @@ pub(crate) fn derive_addresses_from_mnemonic_filtered(
                         tron_address_from_private_key(&keys.tron)?,
                     );
                 }
+                "xrpl" => {
+                    addresses.insert(
+                        "xrpl".to_string(),
+                        xrpl_classic_address_from_private_key(&keys.xrpl)?,
+                    );
+                }
                 "zcash" => {
                     addresses.insert(
                         "zcash".to_string(),
@@ -340,6 +350,19 @@ pub(crate) fn tron_address_from_private_key(private_key: &[u8; 32]) -> Result<St
     address.extend_from_slice(&hash[12..]);
 
     Ok(bs58::encode(address).with_check().into_string())
+}
+
+pub(crate) fn xrpl_private_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32], String> {
+    secp256k1_private_key_from_mnemonic(mnemonic, XRPL_DERIVATION_PATH)
+}
+
+pub(crate) fn xrpl_classic_address_from_private_key(
+    private_key: &[u8; 32],
+) -> Result<String, String> {
+    let signing_key = signing_key_from_private_key(private_key)?;
+    let public_key = signing_key.verifying_key().to_sec1_point(true);
+    xrpl::core::keypairs::derive_classic_address(&hex::encode_upper(public_key.as_bytes()))
+        .map_err(|_| "Failed to derive XRP Ledger address".to_string())
 }
 
 pub(crate) fn bitcoin_bech32_address(

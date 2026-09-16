@@ -17,9 +17,9 @@ Non-negotiable rules:
 
 ## Current Chain Scope
 
-The architecture must support Bitcoin; Ethereum, Monad, Polygon, Arbitrum One, Base, Optimism, and Avalanche C-Chain; Filecoin; Injective; Solana; Tron; and Zcash.
+The architecture must support Bitcoin; Ethereum, Monad, Polygon, Arbitrum One, Base, Optimism, and Avalanche C-Chain; Filecoin; Injective; Solana; Tron; XRP Ledger; and Zcash.
 
-Implemented transfer paths are currently basic Bitcoin, EVM native/ERC-20, Solana native/classic SPL, and Tron native transfers. Treat other exposed chains as address/portfolio scaffolding unless their full provider and transaction paths exist.
+Implemented transfer paths are currently basic Bitcoin, EVM native/ERC-20, Solana native/classic SPL, Tron native, and XRP Ledger native transfers. Treat other exposed chains as address/portfolio scaffolding unless their full provider and transaction paths exist.
 
 For new chain work, establish shared account/provider boundaries first, then prioritize EVM, Bitcoin, Solana, and finally Injective, Filecoin, and Zcash with chain-specific correctness.
 
@@ -113,6 +113,7 @@ Chain-specific requirements:
 - EVM: chain ID, RPC URL, native currency, token contracts, pending nonce, gas estimation, EIP-1559 where available, raw broadcast, and receipts. Current sends use `eth_feeHistory` with `eth_gasPrice` fallback but have no nonce reservation manager or user priority-fee policy.
 - Bitcoin: UTXO discovery, fee rates, coin selection/PSBT or transaction construction, signing, broadcast, and confirmations.
 - Solana: recent blockhash, native/SPL balances, associated token accounts, recipient ATA rent, construction, signing, send, and confirmation. Current token support is classic SPL, not Token-2022.
+- XRP Ledger: classic-address validation, BIP44 account derivation, drop-denominated native balance, live reserve/fee/sequence reads, canonical `Payment` encoding and signing, raw submit, and validated transaction status. Support destination tags and bounded memos; do not treat issued currencies, MPTs, NFTs, X-addresses, or path payments as native XRP transfers.
 - Filecoin, Injective, Tron, and Zcash: use their native derivation, address, fee, signing, and broadcast rules.
 
 Represent amounts in base units: wei/token units, satoshis, lamports/SPL units, zatoshis, attoFIL, and chain denomination units. Convert to decimal display strings only at the UI edge.
