@@ -1,7 +1,7 @@
 use crate::assets::cached_asset;
 use crate::dto::Asset;
 use crate::providers::NetworkAssetRefresh;
-use crate::providers::http::rpc_post;
+use crate::providers::http::{json_rpc_result, rpc_post};
 use crate::registry::{AssetConfig, NetworkConfig, network_by_id};
 
 pub(crate) type EvmNetworkConfig = NetworkConfig;
@@ -36,9 +36,9 @@ pub(crate) async fn fetch_evm_native_balance(
     });
 
     let json = rpc_post(client, config.rpc_url()?, &body).await?;
-    let balance_hex = json["result"]
+    let balance_hex = json_rpc_result(&json, "EVM balance")?
         .as_str()
-        .ok_or_else(|| "RPC response missing result field".to_string())?;
+        .ok_or_else(|| "EVM balance RPC result is not a hex quantity".to_string())?;
 
     u128::from_str_radix(balance_hex.trim_start_matches("0x"), 16)
         .map_err(|e| format!("Invalid balance hex: {e}"))
@@ -69,9 +69,9 @@ pub(crate) async fn fetch_evm_token_balance(
     });
 
     let json = rpc_post(client, config.rpc_url()?, &body).await?;
-    let hex_str = json["result"]
+    let hex_str = json_rpc_result(&json, "EVM token balance")?
         .as_str()
-        .ok_or_else(|| "Token balance RPC missing result".to_string())?;
+        .ok_or_else(|| "EVM token balance RPC result is not a hex quantity".to_string())?;
 
     u128::from_str_radix(hex_str.trim_start_matches("0x"), 16)
         .map_err(|e| format!("Invalid token balance hex: {e}"))
@@ -150,9 +150,9 @@ pub(crate) async fn fetch_evm_nonce(
         "id": 1,
     });
     let json = rpc_post(client, config.rpc_url()?, &body).await?;
-    let hex_str = json["result"]
+    let hex_str = json_rpc_result(&json, "EVM nonce")?
         .as_str()
-        .ok_or_else(|| "Nonce RPC missing result".to_string())?;
+        .ok_or_else(|| "EVM nonce RPC result is not a hex quantity".to_string())?;
     u64::from_str_radix(hex_str.trim_start_matches("0x"), 16)
         .map_err(|e| format!("Invalid nonce hex: {e}"))
 }
@@ -169,9 +169,9 @@ pub(crate) async fn fetch_evm_gas_price(
         "id": 1,
     });
     let json = rpc_post(client, config.rpc_url()?, &body).await?;
-    let hex_str = json["result"]
+    let hex_str = json_rpc_result(&json, "EVM gas price")?
         .as_str()
-        .ok_or_else(|| "Gas price RPC missing result".to_string())?;
+        .ok_or_else(|| "EVM gas price RPC result is not a hex quantity".to_string())?;
     u128::from_str_radix(hex_str.trim_start_matches("0x"), 16)
         .map_err(|e| format!("Invalid gas price hex: {e}"))
 }
@@ -200,11 +200,8 @@ pub(crate) async fn fetch_evm_fee_estimate(
 }
 
 pub(crate) fn parse_evm_fee_history(json: &serde_json::Value) -> Result<EvmFeeEstimate, String> {
-    if let Some(error) = json.get("error") {
-        return Err(format!("EVM fee history RPC error: {error}"));
-    }
-
-    let base_fees = json["result"]["baseFeePerGas"]
+    let result = json_rpc_result(json, "EVM fee history")?;
+    let base_fees = result["baseFeePerGas"]
         .as_array()
         .ok_or_else(|| "EVM fee history missing baseFeePerGas".to_string())?;
     let latest_base_fee_hex = base_fees
@@ -214,7 +211,7 @@ pub(crate) fn parse_evm_fee_history(json: &serde_json::Value) -> Result<EvmFeeEs
     let base_fee = u128::from_str_radix(latest_base_fee_hex.trim_start_matches("0x"), 16)
         .map_err(|e| format!("Invalid EVM base fee hex: {e}"))?;
 
-    let priority_fee = json["result"]["reward"]
+    let priority_fee = result["reward"]
         .as_array()
         .and_then(|rewards| rewards.last())
         .and_then(|last_reward| last_reward.as_array())
@@ -259,9 +256,9 @@ pub(crate) async fn fetch_evm_estimated_gas(
         "id": 1,
     });
     let json = rpc_post(client, config.rpc_url()?, &body).await?;
-    let hex_str = json["result"]
+    let hex_str = json_rpc_result(&json, "EVM gas estimate")?
         .as_str()
-        .ok_or_else(|| "Estimate gas RPC missing result".to_string())?;
+        .ok_or_else(|| "EVM gas estimate RPC result is not a hex quantity".to_string())?;
     u64::from_str_radix(hex_str.trim_start_matches("0x"), 16)
         .map_err(|e| format!("Invalid gas estimate hex: {e}"))
 }
@@ -278,15 +275,10 @@ pub(crate) async fn broadcast_evm_tx(
         "id": 1,
     });
     let json = rpc_post(client, config.rpc_url()?, &body).await?;
-    json["result"]
+    json_rpc_result(&json, "EVM broadcast")?
         .as_str()
         .map(|s| s.to_string())
-        .ok_or_else(|| {
-            json["error"]["message"]
-                .as_str()
-                .unwrap_or("Unknown broadcast error")
-                .to_string()
-        })
+        .ok_or_else(|| "EVM broadcast RPC result is not a transaction hash".to_string())
 }
 
 pub(crate) async fn fetch_evm_tx_status(
@@ -302,11 +294,12 @@ pub(crate) async fn fetch_evm_tx_status(
     });
     let json = rpc_post(client, config.rpc_url()?, &body).await?;
 
-    if json["result"].is_null() {
+    let result = json_rpc_result(&json, "EVM transaction status")?;
+    if result.is_null() {
         return Ok(None);
     }
 
-    let status_hex = json["result"]["status"].as_str().unwrap_or("0x0");
+    let status_hex = result["status"].as_str().unwrap_or("0x0");
     if status_hex == "0x1" {
         Ok(Some("confirmed".to_string()))
     } else {

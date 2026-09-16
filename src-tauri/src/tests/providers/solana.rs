@@ -15,6 +15,16 @@ fn parses_solana_balance_lamports() {
         "id": 1
     });
     assert_eq!(parse_solana_balance(&json).unwrap(), 123456789);
+
+    let error = serde_json::json!({
+        "jsonrpc": "2.0",
+        "error": { "code": -32005, "message": "node unhealthy" },
+        "id": 1
+    });
+    assert_eq!(
+        parse_solana_balance(&error).unwrap_err(),
+        "Solana balance RPC error: {\"code\":-32005,\"message\":\"node unhealthy\"}"
+    );
 }
 
 #[test]

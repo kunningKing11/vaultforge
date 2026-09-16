@@ -1,7 +1,7 @@
 use crate::assets::{cached_asset, cached_asset_by_token_address};
 use crate::dto::Asset;
 use crate::providers::NetworkAssetRefresh;
-use crate::providers::http::rpc_post;
+use crate::providers::http::{json_rpc_result, rpc_post};
 use crate::registry::{NetworkConfig, network_by_id};
 use std::collections::BTreeMap;
 
@@ -163,7 +163,7 @@ fn short_mint(mint: &str) -> String {
 }
 
 pub(crate) fn parse_solana_balance(json: &serde_json::Value) -> Result<u128, String> {
-    json["result"]["value"]
+    json_rpc_result(json, "Solana balance")?["value"]
         .as_u64()
         .map(|value| value as u128)
         .ok_or_else(|| "Solana balance RPC missing result.value".to_string())
@@ -173,7 +173,7 @@ pub(crate) fn parse_solana_token_accounts(
     json: &serde_json::Value,
     expected_owner: &str,
 ) -> Result<Vec<SolanaTokenAccount>, String> {
-    let accounts = json["result"]["value"]
+    let accounts = json_rpc_result(json, "Solana token accounts")?["value"]
         .as_array()
         .ok_or_else(|| "Solana token accounts RPC missing result.value".to_string())?;
     let mut parsed = Vec::new();
@@ -233,15 +233,10 @@ pub(crate) async fn broadcast_solana_transaction(
         "id": 1,
     });
     let json = rpc_post(client, solana_rpc_url()?, &body).await?;
-    json["result"]
+    json_rpc_result(&json, "Solana broadcast")?
         .as_str()
         .map(|s| s.to_string())
-        .ok_or_else(|| {
-            json["error"]["message"]
-                .as_str()
-                .unwrap_or("Unknown Solana broadcast error")
-                .to_string()
-        })
+        .ok_or_else(|| "Solana broadcast RPC result is not a transaction signature".to_string())
 }
 
 pub(crate) async fn fetch_solana_tx_status(
@@ -293,11 +288,7 @@ pub(crate) fn parse_solana_token_account_state(
     expected_owner: &str,
     expected_mint: &str,
 ) -> Result<Option<SolanaTokenAccountState>, String> {
-    if let Some(error) = json.get("error") {
-        return Err(format!("Solana account info RPC error: {error}"));
-    }
-
-    let value = &json["result"]["value"];
+    let value = &json_rpc_result(json, "Solana account info")?["value"];
     if value.is_null() {
         return Ok(None);
     }
@@ -347,11 +338,7 @@ pub(crate) fn parse_solana_token_account_state(
 }
 
 pub(crate) fn parse_solana_mint_decimals(json: &serde_json::Value) -> Result<u8, String> {
-    if let Some(error) = json.get("error") {
-        return Err(format!("Solana mint info RPC error: {error}"));
-    }
-
-    let value = &json["result"]["value"];
+    let value = &json_rpc_result(json, "Solana mint info")?["value"];
     if value.is_null() {
         return Err("Solana token mint account does not exist".to_string());
     }
@@ -389,10 +376,7 @@ pub(crate) async fn simulate_solana_transaction(
 }
 
 pub(crate) fn parse_solana_simulation(json: &serde_json::Value) -> Result<(), String> {
-    if let Some(error) = json.get("error") {
-        return Err(format!("Solana simulation RPC error: {error}"));
-    }
-    let value = json["result"]
+    let value = json_rpc_result(json, "Solana simulation")?
         .get("value")
         .ok_or_else(|| "Solana simulation RPC missing result.value".to_string())?;
     if value["err"].is_null() {
@@ -418,11 +402,7 @@ pub(crate) async fn fetch_solana_token_account_rent(
 }
 
 pub(crate) fn parse_solana_rent_exemption(json: &serde_json::Value) -> Result<u64, String> {
-    if let Some(error) = json.get("error") {
-        return Err(format!("Solana rent exemption RPC error: {error}"));
-    }
-
-    json["result"]
+    json_rpc_result(json, "Solana rent exemption")?
         .as_u64()
         .ok_or_else(|| "Solana rent exemption RPC missing result".to_string())
 }
@@ -441,21 +421,14 @@ pub(crate) async fn fetch_latest_solana_blockhash(
 }
 
 pub(crate) fn parse_latest_solana_blockhash(json: &serde_json::Value) -> Result<String, String> {
-    if let Some(error) = json.get("error") {
-        return Err(format!("Solana blockhash RPC error: {error}"));
-    }
-    json["result"]["value"]["blockhash"]
+    json_rpc_result(json, "Solana blockhash")?["value"]["blockhash"]
         .as_str()
         .map(|s| s.to_string())
         .ok_or_else(|| "Solana blockhash RPC missing result.value.blockhash".to_string())
 }
 
 pub(crate) fn parse_solana_tx_status(json: &serde_json::Value) -> Result<Option<String>, String> {
-    if let Some(error) = json.get("error") {
-        return Err(format!("Solana status RPC error: {error}"));
-    }
-
-    let Some(status) = json["result"]["value"]
+    let Some(status) = json_rpc_result(json, "Solana status")?["value"]
         .as_array()
         .and_then(|items| items.first())
     else {
@@ -486,10 +459,7 @@ pub(crate) async fn fetch_solana_fee_for_message(
 }
 
 pub(crate) fn parse_solana_fee_for_message(json: &serde_json::Value) -> Result<u64, String> {
-    if let Some(error) = json.get("error") {
-        return Err(format!("Solana fee RPC error: {error}"));
-    }
-    json["result"]["value"]
+    json_rpc_result(json, "Solana fee")?["value"]
         .as_u64()
         .ok_or_else(|| "Solana fee RPC missing result.value".to_string())
 }

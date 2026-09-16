@@ -14,6 +14,16 @@ fn parses_evm_fee_history() {
     let estimate = parse_evm_fee_history(&json).unwrap();
     assert_eq!(estimate.max_priority_fee_per_gas, 2_000_000_000);
     assert_eq!(estimate.max_fee_per_gas, 42_000_000_000);
+
+    let error = serde_json::json!({
+        "jsonrpc": "2.0",
+        "error": { "code": -32000, "message": "rate limited" },
+        "id": 1
+    });
+    assert_eq!(
+        parse_evm_fee_history(&error).err().unwrap(),
+        "EVM fee history RPC error: {\"code\":-32000,\"message\":\"rate limited\"}"
+    );
 }
 
 #[test]
