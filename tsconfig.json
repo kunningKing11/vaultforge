@@ -13,7 +13,15 @@
     "types": ["node", "bun"],
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "jsx": "react-jsx",
     "noEmit": true
   },
-  "include": ["src", "scripts/**/*.ts", "scripts/**/*.mts", "tests/**/*.ts"]
+  "include": [
+    "src/main.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "scripts/**/*.ts",
+    "scripts/**/*.mts",
+    "tests/**/*.ts"
+  ]
 }

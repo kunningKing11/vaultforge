@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 import { networkById } from "../src/networks";
 import {
@@ -6,15 +6,11 @@ import {
   networkLabel,
   receivePayload,
   selectedActivity,
-} from "../src/selectors";
-import { appState, walletStateFromSession } from "../src/state";
+  walletStateFromSession,
+} from "../src/react/model";
 import type { WalletSession } from "../src/types";
 
-const originalWallet = appState.wallet;
-const originalNetworkId = appState.receive.networkId;
-const originalActivityId = appState.navigation.selectedActivityId;
-
-function unlockWallet(): void {
+function unlockWallet() {
   const session: WalletSession = {
     has_wallet: true,
     locked: false,
@@ -52,14 +48,10 @@ function unlockWallet(): void {
     auto_lock_timeout_secs: null,
     use_crypto_symbols: false,
   };
-  appState.wallet = walletStateFromSession(session);
+  const wallet = walletStateFromSession(session);
+  if (wallet.status !== "unlocked") throw new Error("Expected unlocked test wallet");
+  return wallet;
 }
-
-afterEach(() => {
-  appState.wallet = originalWallet;
-  appState.receive.networkId = originalNetworkId;
-  appState.navigation.selectedActivityId = originalActivityId;
-});
 
 describe("receive selectors", () => {
   test.each([
@@ -68,35 +60,36 @@ describe("receive selectors", () => {
     ["solana", "solana:SolanaAddress"],
     ["tron", "TronAddress"],
   ] as const)("builds the %s receive payload", (networkId, payload) => {
-    unlockWallet();
-    appState.receive.networkId = networkId;
-    expect(receivePayload()).toBe(payload);
+    const network = networkById(networkId);
+    if (!network) throw new Error(`Missing ${networkId} network`);
+    expect(receivePayload(unlockWallet(), network)).toBe(payload);
   });
 
   test("returns no address while the wallet is locked", () => {
-    appState.wallet = { status: "locked", name: "Test Wallet" };
-    expect(addressForNetwork(networkById("ethereum")!)).toBe("");
+    const network = networkById("ethereum");
+    if (!network) throw new Error("Missing Ethereum network");
+    expect(addressForNetwork({ status: "locked", name: "Test Wallet" }, network)).toBe("");
   });
 
   test("includes an EVM chain id when requested", () => {
-    expect(networkLabel(networkById("polygon")!, true)).toBe("POL - Chain ID 137");
+    const network = networkById("polygon");
+    if (!network) throw new Error("Missing Polygon network");
+    expect(networkLabel(network, false, true)).toBe("POL - Chain ID 137");
   });
 
   test("uses configured crypto symbols when the wallet preference is enabled", () => {
-    unlockWallet();
-    if (appState.wallet.status === "unlocked") appState.wallet.useCryptoSymbols = true;
-    expect(networkLabel(networkById("bitcoin")!)).toBe("₿");
-    expect(networkLabel(networkById("solana")!)).toBe("SOL");
+    const bitcoin = networkById("bitcoin");
+    const solana = networkById("solana");
+    if (!bitcoin || !solana) throw new Error("Missing display-symbol test network");
+    expect(networkLabel(bitcoin, true)).toBe("₿");
+    expect(networkLabel(solana, true)).toBe("SOL");
   });
 });
 
 describe("activity selection", () => {
   test("selects the requested activity and otherwise falls back to the first", () => {
-    unlockWallet();
-    appState.navigation.selectedActivityId = "second";
-    expect(selectedActivity()?.id).toBe("second");
-
-    appState.navigation.selectedActivityId = "missing";
-    expect(selectedActivity()?.id).toBe("first");
+    const wallet = unlockWallet();
+    expect(selectedActivity(wallet, "second")?.id).toBe("second");
+    expect(selectedActivity(wallet, "missing")?.id).toBe("first");
   });
 });

@@ -1,9 +1,15 @@
 import type { FiatCurrency } from "./types";
 
 export function toWei(amount: string, decimals: number): string {
-  const parts = amount.split(".");
-  const intPart = parts[0] || "0";
-  const fracPart = (parts[1] || "").padEnd(decimals, "0").slice(0, decimals);
+  if (!/^\d+(?:\.\d+)?$/.test(amount)) {
+    throw new Error("Enter a valid decimal amount.");
+  }
+  const [intPart, fractional = ""] = amount.split(".");
+  const significantFraction = fractional.replace(/0+$/, "");
+  if (significantFraction.length > decimals) {
+    throw new Error(`Amount exceeds the asset's ${decimals}-decimal precision.`);
+  }
+  const fracPart = significantFraction.padEnd(decimals, "0");
   const combined = intPart + fracPart;
   return combined.replace(/^0+/, "") || "0";
 }

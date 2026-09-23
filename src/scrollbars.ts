@@ -18,12 +18,20 @@ type HorizontalDragState = HorizontalScrollElements & {
   grabOffset: number;
 };
 
+type HorizontalContentDragState = {
+  scroll: HTMLElement;
+  pointerId: number;
+  startClientX: number;
+  startScrollLeft: number;
+};
+
 type VerticalDragState = VerticalScrollElements & {
   pointerId: number;
   grabOffset: number;
 };
 
 let horizontalDragState: HorizontalDragState | null = null;
+let horizontalContentDragState: HorizontalContentDragState | null = null;
 let verticalDragState: VerticalDragState | null = null;
 let resizeObserver: ResizeObserver | null = null;
 
@@ -97,28 +105,32 @@ function updateSidebarVerticalScrollbar(scroll: HTMLElement): void {
   thumb.style.transform = `translateY(${thumbOffset}px)`;
 }
 
-function updatePageVerticalScrollbar(): void {
-  const scrollbar = document.querySelector<HTMLElement>('[data-vertical-scrollbar="page"]');
+function getMainScroll(): HTMLElement | null {
+  return document.querySelector<HTMLElement>("[data-main-scroll]");
+}
+
+function updateMainVerticalScrollbar(): void {
+  const scrollbar = document.querySelector<HTMLElement>('[data-vertical-scrollbar="main"]');
   const thumb = scrollbar?.querySelector<HTMLElement>("[data-vertical-scrollbar-thumb]");
   if (!scrollbar || !thumb) return;
 
-  const scrollHeight = document.documentElement.scrollHeight;
-  const maxScroll = Math.max(0, scrollHeight - window.innerHeight);
+  const scroll = getMainScroll();
+  const maxScroll = scroll ? maxScrollTop(scroll) : 0;
   const trackHeight = scrollbar.clientHeight;
-  const scrollTop = window.scrollY;
+  const scrollTop = scroll?.scrollTop ?? 0;
 
   scrollbar.hidden = maxScroll === 0;
   scrollbar.tabIndex = maxScroll === 0 ? -1 : 0;
   scrollbar.setAttribute("aria-valuemax", String(Math.round(maxScroll)));
   scrollbar.setAttribute("aria-valuenow", String(Math.round(scrollTop)));
 
-  if (maxScroll === 0 || trackHeight === 0) return;
+  if (maxScroll === 0 || trackHeight === 0 || !scroll) return;
 
   const thumbHeight = Math.min(
     trackHeight,
-    Math.max(MIN_THUMB_SIZE, trackHeight * (window.innerHeight / scrollHeight)),
+    Math.max(MIN_THUMB_SIZE, trackHeight * (scroll.clientHeight / scroll.scrollHeight)),
   );
-  const thumbOffset = (scrollTop / maxScroll) * (trackHeight - thumbHeight);
+  const thumbOffset = (scroll.scrollTop / maxScroll) * (trackHeight - thumbHeight);
   thumb.style.height = `${thumbHeight}px`;
   thumb.style.transform = `translateY(${thumbOffset}px)`;
 }
@@ -149,20 +161,6 @@ function scrollVerticalToThumbPosition(
     Math.max(0, Math.min(maxThumbOffset, thumbOffset)) * (maxScroll / maxThumbOffset);
 }
 
-function scrollPageToThumbPosition(thumbOffset: number): void {
-  const scrollbar = document.querySelector<HTMLElement>('[data-vertical-scrollbar="page"]');
-  const thumb = scrollbar?.querySelector<HTMLElement>("[data-vertical-scrollbar-thumb]");
-  if (!scrollbar || !thumb) return;
-
-  const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-  const maxThumbOffset = Math.max(0, scrollbar.clientHeight - thumb.getBoundingClientRect().height);
-  if (maxScroll === 0 || maxThumbOffset === 0) return;
-
-  window.scrollTo({
-    top: Math.max(0, Math.min(maxThumbOffset, thumbOffset)) * (maxScroll / maxThumbOffset),
-  });
-}
-
 function syncSidebarVerticalScrollbars(scope: ParentNode = document): void {
   scope.querySelectorAll<HTMLElement>("[data-sidebar-scroll]").forEach((scroll) => {
     updateSidebarVerticalScrollbar(scroll);
@@ -170,12 +168,18 @@ function syncSidebarVerticalScrollbars(scope: ParentNode = document): void {
   });
 }
 
+function syncMainVerticalScrollbar(): void {
+  const scroll = getMainScroll();
+  if (scroll) resizeObserver?.observe(scroll);
+  updateMainVerticalScrollbar();
+}
+
 function syncAllScrollbars(): void {
   document
     .querySelectorAll<HTMLElement>("[data-horizontal-scroll]")
     .forEach(updateHorizontalScrollbar);
   syncSidebarVerticalScrollbars();
-  updatePageVerticalScrollbar();
+  syncMainVerticalScrollbar();
 }
 
 export function syncHorizontalScrollbars(scope: ParentNode = document): void {
@@ -188,7 +192,7 @@ export function syncHorizontalScrollbars(scope: ParentNode = document): void {
 
 export function syncVerticalScrollbar(): void {
   syncSidebarVerticalScrollbars();
-  updatePageVerticalScrollbar();
+  syncMainVerticalScrollbar();
 }
 
 export function installScrollbarBehavior(): void {
@@ -199,6 +203,7 @@ export function installScrollbarBehavior(): void {
       const scroll = entry.target as HTMLElement;
       if (scroll.matches("[data-horizontal-scroll]")) updateHorizontalScrollbar(scroll);
       if (scroll.matches("[data-sidebar-scroll]")) updateSidebarVerticalScrollbar(scroll);
+      if (scroll.matches("[data-main-scroll]")) updateMainVerticalScrollbar();
     });
   });
 
@@ -209,6 +214,7 @@ export function installScrollbarBehavior(): void {
       if (!(scroll instanceof HTMLElement)) return;
       if (scroll.matches("[data-horizontal-scroll]")) updateHorizontalScrollbar(scroll);
       if (scroll.matches("[data-sidebar-scroll]")) updateSidebarVerticalScrollbar(scroll);
+      if (scroll.matches("[data-main-scroll]")) updateMainVerticalScrollbar();
     },
     true,
   );
@@ -280,49 +286,66 @@ export function installScrollbarBehavior(): void {
       return;
     }
 
-    const pageScrollbar = target.closest<HTMLElement>('[data-vertical-scrollbar="page"]');
-    if (pageScrollbar && !pageScrollbar.hidden) {
-      const thumb = pageScrollbar.querySelector<HTMLElement>("[data-vertical-scrollbar-thumb]");
-      if (!thumb) return;
+    const mainScrollbar = target.closest<HTMLElement>('[data-vertical-scrollbar="main"]');
+    if (mainScrollbar && !mainScrollbar.hidden) {
+      const scroll = getMainScroll();
+      const thumb = mainScrollbar.querySelector<HTMLElement>("[data-vertical-scrollbar-thumb]");
+      if (!scroll || !thumb) return;
 
-      const scrollbarBounds = pageScrollbar.getBoundingClientRect();
+      const elements = { scroll, scrollbar: mainScrollbar, thumb };
+      const scrollbarBounds = mainScrollbar.getBoundingClientRect();
       const thumbBounds = thumb.getBoundingClientRect();
       const pointerOffset = event.clientY - scrollbarBounds.top;
       const startedOnThumb = thumb.contains(target);
       const grabOffset = startedOnThumb ? event.clientY - thumbBounds.top : thumbBounds.height / 2;
 
-      if (!startedOnThumb) scrollPageToThumbPosition(pointerOffset - grabOffset);
+      if (!startedOnThumb) scrollVerticalToThumbPosition(elements, pointerOffset - grabOffset);
 
-      pageScrollbar.setPointerCapture(event.pointerId);
-      verticalDragState = {
-        scroll: document.documentElement,
-        scrollbar: pageScrollbar,
-        thumb,
-        pointerId: event.pointerId,
-        grabOffset,
-      };
+      mainScrollbar.setPointerCapture(event.pointerId);
+      verticalDragState = { ...elements, pointerId: event.pointerId, grabOffset };
       event.preventDefault();
       return;
     }
 
     const scrollbar = target.closest<HTMLElement>("[data-horizontal-scrollbar]");
-    if (!scrollbar || scrollbar.hidden) return;
+    if (scrollbar && !scrollbar.hidden) {
+      const scroll = scrollbar.parentElement?.querySelector<HTMLElement>(
+        "[data-horizontal-scroll]",
+      );
+      const thumb = scrollbar.querySelector<HTMLElement>("[data-horizontal-scrollbar-thumb]");
+      if (!scroll || !thumb) return;
 
-    const scroll = scrollbar.parentElement?.querySelector<HTMLElement>("[data-horizontal-scroll]");
-    const thumb = scrollbar.querySelector<HTMLElement>("[data-horizontal-scrollbar-thumb]");
-    if (!scroll || !thumb) return;
+      const elements = { scroll, scrollbar, thumb };
+      const scrollbarBounds = scrollbar.getBoundingClientRect();
+      const thumbBounds = thumb.getBoundingClientRect();
+      const pointerOffset = event.clientX - scrollbarBounds.left;
+      const startedOnThumb = thumb.contains(target);
+      const grabOffset = startedOnThumb ? event.clientX - thumbBounds.left : thumbBounds.width / 2;
 
-    const elements = { scroll, scrollbar, thumb };
-    const scrollbarBounds = scrollbar.getBoundingClientRect();
-    const thumbBounds = thumb.getBoundingClientRect();
-    const pointerOffset = event.clientX - scrollbarBounds.left;
-    const startedOnThumb = thumb.contains(target);
-    const grabOffset = startedOnThumb ? event.clientX - thumbBounds.left : thumbBounds.width / 2;
+      if (!startedOnThumb) scrollHorizontalToThumbPosition(elements, pointerOffset - grabOffset);
 
-    if (!startedOnThumb) scrollHorizontalToThumbPosition(elements, pointerOffset - grabOffset);
+      scrollbar.setPointerCapture(event.pointerId);
+      horizontalDragState = { ...elements, pointerId: event.pointerId, grabOffset };
+      event.preventDefault();
+      return;
+    }
 
-    scrollbar.setPointerCapture(event.pointerId);
-    horizontalDragState = { ...elements, pointerId: event.pointerId, grabOffset };
+    const horizontalScroll = target.closest<HTMLElement>("[data-horizontal-scroll]");
+    if (
+      !horizontalScroll ||
+      event.pointerType !== "mouse" ||
+      event.button !== 0 ||
+      maxScrollLeft(horizontalScroll) === 0
+    )
+      return;
+
+    horizontalScroll.setPointerCapture(event.pointerId);
+    horizontalContentDragState = {
+      scroll: horizontalScroll,
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startScrollLeft: horizontalScroll.scrollLeft,
+    };
     event.preventDefault();
   });
 
@@ -331,21 +354,27 @@ export function installScrollbarBehavior(): void {
       const scrollbarBounds = verticalDragState.scrollbar.getBoundingClientRect();
       const thumbOffset = event.clientY - scrollbarBounds.top - verticalDragState.grabOffset;
 
-      if (verticalDragState.scroll === document.documentElement) {
-        scrollPageToThumbPosition(thumbOffset);
-      } else {
-        scrollVerticalToThumbPosition(verticalDragState, thumbOffset);
-      }
+      scrollVerticalToThumbPosition(verticalDragState, thumbOffset);
       event.preventDefault();
       return;
     }
 
-    if (!horizontalDragState || event.pointerId !== horizontalDragState.pointerId) return;
-    const scrollbarBounds = horizontalDragState.scrollbar.getBoundingClientRect();
-    scrollHorizontalToThumbPosition(
-      horizontalDragState,
-      event.clientX - scrollbarBounds.left - horizontalDragState.grabOffset,
-    );
+    if (horizontalDragState && event.pointerId === horizontalDragState.pointerId) {
+      const scrollbarBounds = horizontalDragState.scrollbar.getBoundingClientRect();
+      scrollHorizontalToThumbPosition(
+        horizontalDragState,
+        event.clientX - scrollbarBounds.left - horizontalDragState.grabOffset,
+      );
+      event.preventDefault();
+      return;
+    }
+
+    if (!horizontalContentDragState || event.pointerId !== horizontalContentDragState.pointerId)
+      return;
+    horizontalContentDragState.scroll.scrollLeft =
+      horizontalContentDragState.startScrollLeft +
+      horizontalContentDragState.startClientX -
+      event.clientX;
     event.preventDefault();
   });
 
@@ -378,23 +407,26 @@ export function installScrollbarBehavior(): void {
       return;
     }
 
-    const pageScrollbar = target.closest<HTMLElement>('[data-vertical-scrollbar="page"]');
-    if (pageScrollbar && !pageScrollbar.hidden) {
-      const increment = Math.max(40, window.innerHeight * 0.1);
-      const pageIncrement = Math.max(increment, window.innerHeight * 0.9);
+    const mainScrollbar = target.closest<HTMLElement>('[data-vertical-scrollbar="main"]');
+    if (mainScrollbar && !mainScrollbar.hidden) {
+      const scroll = getMainScroll();
+      if (!scroll) return;
+
+      const increment = Math.max(40, scroll.clientHeight * 0.1);
+      const pageIncrement = Math.max(increment, scroll.clientHeight * 0.9);
       const keyToOffset: Partial<Record<string, number>> = {
         ArrowUp: -increment,
         ArrowDown: increment,
         PageUp: -pageIncrement,
         PageDown: pageIncrement,
-        Home: -Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
-        End: Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
+        Home: -maxScrollTop(scroll),
+        End: maxScrollTop(scroll),
       };
       const offset = keyToOffset[event.key];
 
       if (offset === undefined) return;
       event.preventDefault();
-      window.scrollBy({ top: offset });
+      scroll.scrollTop += offset;
       return;
     }
 
@@ -422,7 +454,6 @@ export function installScrollbarBehavior(): void {
   });
 
   window.addEventListener("resize", syncAllScrollbars);
-  window.addEventListener("scroll", updatePageVerticalScrollbar, { passive: true });
   syncAllScrollbars();
 }
 
@@ -433,7 +464,14 @@ function endDrag(event: PointerEvent): void {
     return;
   }
 
-  if (!horizontalDragState || event.pointerId !== horizontalDragState.pointerId) return;
-  horizontalDragState.scrollbar.releasePointerCapture(event.pointerId);
-  horizontalDragState = null;
+  if (horizontalDragState && event.pointerId === horizontalDragState.pointerId) {
+    horizontalDragState.scrollbar.releasePointerCapture(event.pointerId);
+    horizontalDragState = null;
+    return;
+  }
+
+  if (!horizontalContentDragState || event.pointerId !== horizontalContentDragState.pointerId)
+    return;
+  horizontalContentDragState.scroll.releasePointerCapture(event.pointerId);
+  horizontalContentDragState = null;
 }

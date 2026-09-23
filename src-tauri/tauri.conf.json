@@ -14,9 +14,9 @@
       {
         "title": "VaultForge Wallet",
         "width": 1280,
-        "height": 820,
-        "minWidth": 1024,
-        "minHeight": 720,
+        "height": 900,
+        "minWidth": 380,
+        "minHeight": 600,
         "zoomHotkeysEnabled": false
       }
     ],

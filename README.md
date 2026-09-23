@@ -1,6 +1,6 @@
 ---
 title: VaultForge Wallet
-description: A local-first crypto wallet desktop app built with TypeScript, TailwindCSS, Rust, and Tauri.
+description: A local-first crypto wallet desktop app built with React, Coinbase Design System, Rust, and Tauri.
 markdownlint:
   MD033: false
 ---
@@ -18,7 +18,7 @@ Yb    dP    db    88   88 88     888888 888888  dP"Yb �
 
 # VaultForge Wallet
 
-A local-first crypto wallet desktop app built with a TypeScript frontend, TailwindCSS, and a Rust backend through Tauri.
+A local-first crypto wallet desktop app built with a React frontend, Coinbase Design System, and a Rust backend through Tauri.
 
 ## Features
 
@@ -36,7 +36,7 @@ A local-first crypto wallet desktop app built with a TypeScript frontend, Tailwi
 - Wallet-password confirmation and strength feedback for encrypted wallet setup
 - Send, receive, swap, assets, activity, and settings screens
 - Rust-backed Tauri commands for wallet state, validation, transaction signing, encrypted storage, provider-backed reads, broadcast, and status checks
-- Responsive TailwindCSS UI with desktop sidebar
+- Responsive React and Coinbase Design System UI with desktop sidebar
 
 ### Coming soon
 
@@ -135,14 +135,12 @@ You can run the same checks manually with `bun run hooks:check -- commit` or `bu
 
 ### Project Structure
 
-- `src/` contains the TypeScript frontend, including event binding, command calls, app state, formatting, QR handling, the source network registry, and shared types.
-- `src/state.ts` manages the application state.
-- `src/selectors.ts` contains derived wallet and network reads.
-- `src/autoLock.ts` contains the auto-lock timer.
+- `src/main.tsx` mounts the React frontend and Coinbase Design System providers/styles.
+- `src/react/App.tsx` contains the React shell, lifecycle screens, wallet views, Tauri action orchestration, and UI effects.
+- `src/react/model.ts` owns typed frontend state, session normalization, and pure derived wallet reads.
+- `src/react/styles.css` provides responsive layout rules using Coinbase Design System tokens; legacy SVGs remain in `src/assets/icons/`.
+- `src/` also contains the Tauri API boundary, amount formatting, recovery-phrase checks, network registry, scrollbar behavior, and shared types.
 - `scripts/generate-network-registry.ts` validates and normalizes the network registry for the Rust build.
-- `src/render.ts` composes the current application state into the root UI and coordinates QR refreshes.
-- `src/views/` contains focused TypeScript HTML-template modules for screens, shell layout, shared UI fragments, locked-state UI, and toast markup.
-- `src/toasts.ts` owns toast timing and animation behavior while using the toast template in `src/views/toast.ts`.
 - `tests/` mirrors the frontend modules covered by Bun unit tests.
 - `src-tauri/src/lib.rs` wires the shared Tauri app, managed state, and command handlers; `src-tauri/src/main.rs` is the thin desktop launcher.
 - `src-tauri/src/commands/` contains Tauri command handlers split by domain: wallet lifecycle, transactions, and market data.

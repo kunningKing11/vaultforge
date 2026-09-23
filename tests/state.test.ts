@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { appState, emptySendDraft, resetOnboarding, walletStateFromSession } from "../src/state";
-import type { FiatCurrency, WalletSession } from "../src/types";
+import { createSetupWizardState, emptySendDraft, walletStateFromSession } from "../src/react/model";
+import type { WalletSession } from "../src/types";
 
 function session(overrides: Partial<WalletSession> = {}): WalletSession {
   return {
@@ -69,10 +69,8 @@ test("creates a fresh default send draft", () => {
   });
 });
 
-test("resets the onboarding display currency to USD", () => {
-  appState.onboarding.fiatCurrency = "JPY";
-  appState.onboarding.useCryptoSymbols = true;
-  resetOnboarding();
-  expect(appState.onboarding.fiatCurrency as FiatCurrency).toBe("USD");
-  expect(appState.onboarding.useCryptoSymbols).toBeFalse();
+test("creates onboarding defaults without cross-session mutable state", () => {
+  const onboarding = createSetupWizardState();
+  expect(onboarding.fiatCurrency).toBe("USD");
+  expect(onboarding.useCryptoSymbols).toBeFalse();
 });

@@ -15,8 +15,12 @@ describe("crypto amount formatting", () => {
   test("converts decimal amounts into integer base units", () => {
     expect(toWei("1.23", 6)).toBe("1230000");
     expect(toWei("0.000001", 6)).toBe("1");
-    expect(toWei("1.23456789", 6)).toBe("1234567");
+    expect(toWei("0.12345678", 8)).toBe("12345678");
+    expect(toWei("0.000000000000000001", 18)).toBe("1");
+    expect(toWei("1.2300000", 6)).toBe("1230000");
     expect(toWei("0", 18)).toBe("0");
+    expect(() => toWei("1.23456789", 6)).toThrow("6-decimal precision");
+    expect(() => toWei("1e-8", 8)).toThrow("valid decimal amount");
   });
 
   test("formats base units without introducing precision", () => {

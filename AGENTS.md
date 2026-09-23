@@ -38,15 +38,11 @@ default imports. Oxfmt and Oxlint enforce the repository-wide ordering.
 
 ### Frontend
 
-- `src/render.ts`: root composition, screen selection, and post-render coordination only.
-- `src/views/onboarding.ts` and `locked.ts`: lifecycle and locked screens.
-- `src/views/shell.ts`: desktop/mobile navigation and unlocked shell.
-- `src/views/wallet.ts`: wallet screens.
-- `src/views/shared.ts`: reusable templates, selectors, formatting, and loading UI.
-- `src/views/toast.ts`: toast markup only; timing and DOM lifecycle stay in `src/toasts.ts`.
-- `src/events.ts` and `src/commands.ts`: event binding and command behavior. Preserve existing `data-action`, `data-view`, form names, and escaping when editing templates.
-- `src/state.ts`: typed application state. Model missing, locked, and unlocked wallets explicitly and normalize every backend session through the shared session-to-wallet transition.
-- `src/selectors.ts`: derived reads.
+- `src/main.tsx`: React root and Coinbase Design System global styles only.
+- `src/react/App.tsx`: React screen composition, user actions, timers, dialogs, and view components. Keep Tauri calls and side effects in explicit callbacks/hooks; protect real-wallet commands with a synchronous operation gate.
+- `src/react/model.ts`: typed application state and pure derived reads. Model missing, locked, and unlocked wallets explicitly and normalize every backend session through `walletStateFromSession()` and `applyWalletSession()`.
+- `src/react/styles.css`: small layout and responsive rules layered on top of CDS tokens. Prefer stable CDS components; use native controls only where the CDS equivalent is deprecated or experimental.
+- `src/walletApi.ts`: frontend command boundary. Preserve the Rust `WalletSession` DTO and avoid invoking Tauri directly from view components.
 
 Keep timer handles, callbacks, and controller details in their owning modules, not render state.
 
