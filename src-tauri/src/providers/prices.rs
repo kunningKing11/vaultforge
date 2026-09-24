@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use crate::dto::{Asset, FiatCurrency};
 use crate::registry::{configured_asset, network_by_id};
 
+const USER_AGENT: &str = concat!("VaultForge Wallet/", env!("CARGO_PKG_VERSION"));
+
 #[derive(serde::Deserialize)]
 struct ExchangeRateResponse {
     rate: f64,
@@ -77,7 +79,7 @@ pub(crate) async fn fetch_market_prices(
     let response = client
         .get(url)
         .header("accept", "application/json")
-        .header("user-agent", "VaultForge Wallet/0.1.0")
+        .header("user-agent", USER_AGENT)
         .send()
         .await
         .map_err(|_| "Failed to reach price service")?;
@@ -109,7 +111,7 @@ pub(crate) async fn fetch_token_metadata(
     let response = client
         .get(url)
         .header("accept", "application/json")
-        .header("user-agent", "VaultForge Wallet/0.1.0")
+        .header("user-agent", USER_AGENT)
         .send()
         .await
         .map_err(|_| "Failed to reach token metadata service")?;
