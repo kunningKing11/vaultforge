@@ -39,6 +39,7 @@ import sendUpIcon from "../assets/icons/send-up.svg?raw";
 import sendIcon from "../assets/icons/send.svg?raw";
 import settingsIcon from "../assets/icons/settings.svg?raw";
 import swapIcon from "../assets/icons/swap.svg?raw";
+import walletIcon from "../assets/icons/wallet.svg?raw";
 import { fiatCurrencies } from "../currencies";
 import {
   cryptoDisplaySymbol,
@@ -931,7 +932,7 @@ function OnboardingView({
     <Box className="onboarding">
       <VStack alignSelf="center" className="onboarding-intro" gap={4} padding={4}>
         <HStack alignItems="center" className="onboarding-brand" gap={2}>
-          <img alt="VaultForge" height={56} src={appLogoUrl} width={56} />
+          <LegacyIcon size="l" svg={walletIcon} />
           <Text as="h1" className="onboarding-brand-title" font="display2">
             VaultForge
           </Text>
@@ -1129,7 +1130,7 @@ function WalletShell({
           height="100%"
           logo={(collapsed) => (
             <HStack alignItems="center" gap={2} justifyContent={collapsed ? "center" : undefined}>
-              <img alt="VaultForge" height={40} src={appLogoUrl} width={40} />
+              <LegacyIcon size="l" svg={walletIcon} />
               {!collapsed && <Text font="title3">{wallet.name}</Text>}
             </HStack>
           )}
