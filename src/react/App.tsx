@@ -4,6 +4,7 @@ import { Button } from "@coinbase/cds-web/buttons";
 import { ContentCard } from "@coinbase/cds-web/cards/ContentCard";
 import { Checkbox, NativeTextArea, Switch, TextInput } from "@coinbase/cds-web/controls";
 import { useMediaQuery } from "@coinbase/cds-web/hooks/useMediaQuery";
+import { Icon } from "@coinbase/cds-web/icons/Icon";
 import { Box, Grid, HStack, VStack } from "@coinbase/cds-web/layout";
 import { Sidebar, SidebarItem } from "@coinbase/cds-web/navigation";
 import { Modal, PortalProvider } from "@coinbase/cds-web/overlays";
@@ -148,6 +149,7 @@ function WalletApplication({
   const { show: showCdsToast } = useToast();
   const [state, setState] = useState<AppState>(createInitialAppState);
   const [sessionLoaded, setSessionLoaded] = useState(false);
+  const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
   const stateRef = useRef(state);
   const operationRef = useRef(false);
   const lockRequestedRef = useRef(false);
@@ -325,6 +327,23 @@ function WalletApplication({
       }
     }
   }, [commitSession, toast]);
+
+  useEffect(() => {
+    const handleOffline = () => setIsOffline(true);
+    const handleOnline = () => {
+      setIsOffline(false);
+      if (stateRef.current.wallet.status === "unlocked") {
+        void refreshPortfolioInBackground();
+      }
+    };
+
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [refreshPortfolioInBackground]);
 
   const refreshPortfolio = useCallback(async () => {
     if (operationRef.current || stateRef.current.portfolio.status === "refreshing") return;
@@ -657,6 +676,7 @@ function WalletApplication({
           }
           colorScheme={colorScheme}
           copyText={copyText}
+          isOffline={isOffline}
           onBroadcast={broadcastSignedTransaction}
           onLock={() => void lockWallet()}
           onRefresh={() => void refreshPortfolio()}
@@ -1083,6 +1103,7 @@ function WalletShell({
   clearWallet,
   colorScheme,
   copyText,
+  isOffline,
   onBroadcast,
   onLock,
   onRefresh,
@@ -1099,6 +1120,7 @@ function WalletShell({
   clearWallet: () => void;
   colorScheme: ColorScheme;
   copyText: (value: string, message: string) => Promise<void>;
+  isOffline: boolean;
   onBroadcast: () => Promise<void>;
   onLock: () => void;
   onRefresh: () => void;
@@ -1189,6 +1211,7 @@ function WalletShell({
       </nav>
       <main className="main">
         <TopBar
+          isOffline={isOffline}
           onLock={onLock}
           onRefresh={onRefresh}
           selectView={selectView}
@@ -1780,12 +1803,14 @@ function ColorSchemeToggle({
 }
 
 function TopBar({
+  isOffline,
   onLock,
   onRefresh,
   selectView,
   state,
   wallet,
 }: {
+  isOffline: boolean;
   onLock: () => void;
   onRefresh: () => void;
   selectView: (view: View) => void;
@@ -1793,8 +1818,9 @@ function TopBar({
   wallet: Extract<WalletState, { status: "unlocked" }>;
 }) {
   const isCompact = useMediaQuery("(max-width: 640px)");
-  const status =
-    state.portfolio.status === "refreshing"
+  const status = isOffline
+    ? "No internet connection. Balances may be out of sync."
+    : state.portfolio.status === "refreshing"
       ? "Updating balances…"
       : state.portfolio.status === "stale"
         ? "Portfolio data may be out of date. Refresh to retry."
@@ -1813,9 +1839,12 @@ function TopBar({
             {wallet.name}
           </Text>
           {status && (
-            <Text color="fgMuted" font="body" role="status">
-              {status}
-            </Text>
+            <HStack alignItems="center" gap={1}>
+              {isOffline && <Icon aria-hidden="true" name="noWifi" size="s" />}
+              <Text color="fgMuted" font="body" role="status">
+                {status}
+              </Text>
+            </HStack>
           )}
         </VStack>
         <HStack className="topbar-actions" flexWrap="wrap" gap={1}>
