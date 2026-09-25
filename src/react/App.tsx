@@ -73,6 +73,7 @@ import type {
   WalletRefreshResult,
   WalletSession,
 } from "../types";
+import { appVersion } from "../version";
 import { walletApi } from "../walletApi";
 import { walletPasswordStrength } from "../walletPassword";
 import {
@@ -691,6 +692,9 @@ function WalletApplication({
         />
       )}
       <DeleteWalletDialog setState={setState} state={state} />
+      <Text as="span" className="version" color="fgMuted" font="caption">
+        VaultForge v{appVersion}
+      </Text>
       <PageScrollbar />
     </Box>
   );

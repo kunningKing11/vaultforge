@@ -384,8 +384,7 @@ textarea {
   position: fixed;
   right: var(--space-2);
   bottom: var(--space-1);
-  color: var(--color-fgMuted);
-  font-size: 12px;
+  pointer-events: none;
 }
 
 .mobile-nav {
