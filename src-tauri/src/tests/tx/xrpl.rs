@@ -12,34 +12,6 @@ fn network() -> XrplNetworkInfo {
 }
 
 #[test]
-fn reserves_account_ownership_and_never_spends_it() {
-    let account = XrplAccountInfo {
-        balance_drops: 1_400_012,
-        owner_count: 2,
-        sequence: 7,
-    };
-    assert_eq!(
-        required_xrpl_reserve_drops(&account, &network()).unwrap(),
-        1_400_000
-    );
-    let private_key = [1; 32];
-    let address = xrpl_classic_address_from_private_key(&private_key).unwrap();
-    assert!(
-        sign_xrpl_payment(
-            &private_key,
-            &address,
-            "rG1QQv2nh2gr7RCZ1P8YYcBUKCCN633jCn",
-            1,
-            None,
-            "",
-            &account,
-            &network(),
-        )
-        .is_err()
-    );
-}
-
-#[test]
 fn constructs_canonical_signed_payment_with_tag_and_memo() {
     let private_key = [1; 32];
     let from = xrpl_classic_address_from_private_key(&private_key).unwrap();
@@ -72,5 +44,33 @@ fn constructs_canonical_signed_payment_with_tag_and_memo() {
     assert_eq!(
         decoded["Memos"][0]["Memo"]["MemoData"],
         "696E766F6963652D3432"
+    );
+}
+
+#[test]
+fn reserves_account_ownership_and_never_spends_it() {
+    let account = XrplAccountInfo {
+        balance_drops: 1_400_012,
+        owner_count: 2,
+        sequence: 7,
+    };
+    assert_eq!(
+        required_xrpl_reserve_drops(&account, &network()).unwrap(),
+        1_400_000
+    );
+    let private_key = [1; 32];
+    let address = xrpl_classic_address_from_private_key(&private_key).unwrap();
+    assert!(
+        sign_xrpl_payment(
+            &private_key,
+            &address,
+            "rG1QQv2nh2gr7RCZ1P8YYcBUKCCN633jCn",
+            1,
+            None,
+            "",
+            &account,
+            &network(),
+        )
+        .is_err()
     );
 }

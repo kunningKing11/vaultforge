@@ -17,14 +17,16 @@ fn asset(price_usd: f64, change_24h: f64, token_address: Option<&str>) -> Asset 
 }
 
 #[test]
-fn preserves_cached_market_data_when_a_price_refresh_fails() {
-    let mut refreshed = vec![asset(0.0, 0.0, Some("0x1234"))];
-    let cached = vec![asset(1.0, 0.25, Some("0x1234"))];
+fn failed_exchange_rate_refresh_keeps_the_cached_rate() {
+    let mut warnings = vec![];
 
-    preserve_cached_market_data(&mut refreshed, &cached);
+    let rate =
+        exchange_rate_or_cached(Err("provider unavailable".to_string()), 0.92, &mut warnings);
 
-    assert_eq!(refreshed[0].price_usd, 1.0);
-    assert_eq!(refreshed[0].change_24h, 0.25);
+    assert_eq!(rate, 0.92);
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(warnings[0].kind, RefreshWarningKind::Value));
+    assert_eq!(warnings[0].subject, "Exchange rate");
 }
 
 #[test]
@@ -39,16 +41,14 @@ fn missing_market_quote_keeps_the_cached_value() {
 }
 
 #[test]
-fn failed_exchange_rate_refresh_keeps_the_cached_rate() {
-    let mut warnings = vec![];
+fn preserves_cached_market_data_when_a_price_refresh_fails() {
+    let mut refreshed = vec![asset(0.0, 0.0, Some("0x1234"))];
+    let cached = vec![asset(1.0, 0.25, Some("0x1234"))];
 
-    let rate =
-        exchange_rate_or_cached(Err("provider unavailable".to_string()), 0.92, &mut warnings);
+    preserve_cached_market_data(&mut refreshed, &cached);
 
-    assert_eq!(rate, 0.92);
-    assert_eq!(warnings.len(), 1);
-    assert!(matches!(warnings[0].kind, RefreshWarningKind::Value));
-    assert_eq!(warnings[0].subject, "Exchange rate");
+    assert_eq!(refreshed[0].price_usd, 1.0);
+    assert_eq!(refreshed[0].change_24h, 0.25);
 }
 
 #[test]

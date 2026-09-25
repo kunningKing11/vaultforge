@@ -69,6 +69,24 @@ fn unlocked_tron_state() -> AppState {
 }
 
 #[test]
+fn stale_or_locked_wallet_cannot_commit_a_background_refresh() {
+    let mut state = unlocked_tron_state();
+    state.wallet_generation = 4;
+
+    assert!(state.can_commit_refresh(4));
+
+    state.advance_wallet_generation();
+    assert!(!state.can_commit_refresh(4));
+
+    state.locked = true;
+    assert!(!state.can_commit_refresh(5));
+
+    state.locked = false;
+    state.wallet = None;
+    assert!(!state.can_commit_refresh(5));
+}
+
+#[test]
 fn unlocked_session_includes_cached_tron_portfolio_data() {
     let state = unlocked_tron_state();
 
@@ -88,22 +106,4 @@ fn unlocked_session_includes_cached_tron_portfolio_data() {
     assert_eq!(session.fiat_currency, Some(FiatCurrency::Usd));
     assert_eq!(session.usd_exchange_rate, Some(1.0));
     assert!(!session.use_crypto_symbols);
-}
-
-#[test]
-fn stale_or_locked_wallet_cannot_commit_a_background_refresh() {
-    let mut state = unlocked_tron_state();
-    state.wallet_generation = 4;
-
-    assert!(state.can_commit_refresh(4));
-
-    state.advance_wallet_generation();
-    assert!(!state.can_commit_refresh(4));
-
-    state.locked = true;
-    assert!(!state.can_commit_refresh(5));
-
-    state.locked = false;
-    state.wallet = None;
-    assert!(!state.can_commit_refresh(5));
 }

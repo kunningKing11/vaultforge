@@ -20,11 +20,25 @@ function session(overrides: Partial<WalletSession> = {}): WalletSession {
   };
 }
 
-describe("wallet session transitions", () => {
-  test("represents a missing wallet explicitly", () => {
-    expect(walletStateFromSession(session({ has_wallet: false }))).toEqual({ status: "missing" });
+test("creates a fresh default send draft", () => {
+  expect(emptySendDraft()).toEqual({
+    to: "",
+    symbol: "ETH",
+    network: "ethereum",
+    token_address: null,
+    amount: "",
+    note: "",
+    destinationTag: null,
   });
+});
 
+test("creates onboarding defaults without cross-session mutable state", () => {
+  const onboarding = createSetupWizardState();
+  expect(onboarding.fiatCurrency).toBe("USD");
+  expect(onboarding.useCryptoSymbols).toBeFalse();
+});
+
+describe("wallet session transitions", () => {
   test("keeps only the locked wallet name", () => {
     expect(walletStateFromSession(session({ locked: true, wallet_name: null }))).toEqual({
       status: "locked",
@@ -55,22 +69,8 @@ describe("wallet session transitions", () => {
       useCryptoSymbols: true,
     });
   });
-});
 
-test("creates a fresh default send draft", () => {
-  expect(emptySendDraft()).toEqual({
-    to: "",
-    symbol: "ETH",
-    network: "ethereum",
-    token_address: null,
-    amount: "",
-    note: "",
-    destinationTag: null,
+  test("represents a missing wallet explicitly", () => {
+    expect(walletStateFromSession(session({ has_wallet: false }))).toEqual({ status: "missing" });
   });
-});
-
-test("creates onboarding defaults without cross-session mutable state", () => {
-  const onboarding = createSetupWizardState();
-  expect(onboarding.fiatCurrency).toBe("USD");
-  expect(onboarding.useCryptoSymbols).toBeFalse();
 });

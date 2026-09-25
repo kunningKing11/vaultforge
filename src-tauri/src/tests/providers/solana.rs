@@ -5,6 +5,71 @@ use super::{
 };
 
 #[test]
+fn parses_classic_solana_mint_and_simulation_preflight() {
+    let mint = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": {
+            "value": {
+                "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                "data": {
+                    "parsed": {
+                        "type": "mint",
+                        "info": { "decimals": 6 }
+                    }
+                }
+            }
+        },
+        "id": 1
+    });
+    assert_eq!(parse_solana_mint_decimals(&mint).unwrap(), 6);
+
+    let token_2022_mint = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": {
+            "value": {
+                "owner": "TokenzQdBNbLqP5VEhdkAS6EP1z9kF9t79yDMQH9z",
+                "data": { "parsed": { "type": "mint", "info": { "decimals": 6 } } }
+            }
+        },
+        "id": 1
+    });
+    assert!(parse_solana_mint_decimals(&token_2022_mint).is_err());
+
+    let success = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": { "value": { "err": null } },
+        "id": 1
+    });
+    assert!(parse_solana_simulation(&success).is_ok());
+
+    let failed = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": { "value": { "err": { "InstructionError": [1, "Custom"] } } },
+        "id": 1
+    });
+    assert!(parse_solana_simulation(&failed).is_err());
+}
+
+#[test]
+fn parses_latest_solana_blockhash() {
+    let json = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": {
+            "context": { "slot": 1 },
+            "value": {
+                "blockhash": "11111111111111111111111111111111",
+                "lastValidBlockHeight": 123
+            }
+        },
+        "id": 1
+    });
+    assert_eq!(
+        parse_latest_solana_blockhash(&json).unwrap(),
+        "11111111111111111111111111111111"
+    );
+}
+
+#[test]
 fn parses_solana_balance_lamports() {
     let json = serde_json::json!({
         "jsonrpc": "2.0",
@@ -28,46 +93,13 @@ fn parses_solana_balance_lamports() {
 }
 
 #[test]
-fn parses_solana_token_accounts() {
-    let owner = "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ";
+fn parses_solana_rent_exemption() {
     let json = serde_json::json!({
         "jsonrpc": "2.0",
-        "result": {
-            "value": [{
-                "pubkey": "4vJ9JU1bJJE96FWSJKvHsmmF3qN8oQfZ1ZTHwF3GvH2",
-                "account": {
-                    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-                    "data": {
-                        "parsed": {
-                            "type": "account",
-                            "info": {
-                                "mint": "So11111111111111111111111111111111111111112",
-                                "owner": owner,
-                                "state": "initialized",
-                                "tokenAmount": {
-                                    "amount": "1234500",
-                                    "decimals": 6
-                                }
-                            }
-                        }
-                    }
-                }
-            }]
-        },
+        "result": 2039280,
         "id": 1
     });
-    let accounts = parse_solana_token_accounts(&json, owner).unwrap();
-    assert_eq!(accounts.len(), 1);
-    assert_eq!(
-        accounts[0].mint,
-        "So11111111111111111111111111111111111111112"
-    );
-    assert_eq!(
-        accounts[0].address,
-        "4vJ9JU1bJJE96FWSJKvHsmmF3qN8oQfZ1ZTHwF3GvH2"
-    );
-    assert_eq!(accounts[0].amount, 1_234_500);
-    assert_eq!(accounts[0].decimals, 6);
+    assert_eq!(parse_solana_rent_exemption(&json).unwrap(), 2039280);
 }
 
 #[test]
@@ -162,76 +194,44 @@ fn parses_solana_token_account_state() {
 }
 
 #[test]
-fn parses_classic_solana_mint_and_simulation_preflight() {
-    let mint = serde_json::json!({
+fn parses_solana_token_accounts() {
+    let owner = "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ";
+    let json = serde_json::json!({
         "jsonrpc": "2.0",
         "result": {
-            "value": {
-                "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-                "data": {
-                    "parsed": {
-                        "type": "mint",
-                        "info": { "decimals": 6 }
+            "value": [{
+                "pubkey": "4vJ9JU1bJJE96FWSJKvHsmmF3qN8oQfZ1ZTHwF3GvH2",
+                "account": {
+                    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                    "data": {
+                        "parsed": {
+                            "type": "account",
+                            "info": {
+                                "mint": "So11111111111111111111111111111111111111112",
+                                "owner": owner,
+                                "state": "initialized",
+                                "tokenAmount": {
+                                    "amount": "1234500",
+                                    "decimals": 6
+                                }
+                            }
+                        }
                     }
                 }
-            }
+            }]
         },
         "id": 1
     });
-    assert_eq!(parse_solana_mint_decimals(&mint).unwrap(), 6);
-
-    let token_2022_mint = serde_json::json!({
-        "jsonrpc": "2.0",
-        "result": {
-            "value": {
-                "owner": "TokenzQdBNbLqP5VEhdkAS6EP1z9kF9t79yDMQH9z",
-                "data": { "parsed": { "type": "mint", "info": { "decimals": 6 } } }
-            }
-        },
-        "id": 1
-    });
-    assert!(parse_solana_mint_decimals(&token_2022_mint).is_err());
-
-    let success = serde_json::json!({
-        "jsonrpc": "2.0",
-        "result": { "value": { "err": null } },
-        "id": 1
-    });
-    assert!(parse_solana_simulation(&success).is_ok());
-
-    let failed = serde_json::json!({
-        "jsonrpc": "2.0",
-        "result": { "value": { "err": { "InstructionError": [1, "Custom"] } } },
-        "id": 1
-    });
-    assert!(parse_solana_simulation(&failed).is_err());
-}
-
-#[test]
-fn parses_solana_rent_exemption() {
-    let json = serde_json::json!({
-        "jsonrpc": "2.0",
-        "result": 2039280,
-        "id": 1
-    });
-    assert_eq!(parse_solana_rent_exemption(&json).unwrap(), 2039280);
-}
-
-#[test]
-fn parses_latest_solana_blockhash() {
-    let json = serde_json::json!({
-        "jsonrpc": "2.0",
-        "result": {
-            "context": { "slot": 1 },
-            "value": {
-                "blockhash": "11111111111111111111111111111111",
-                "lastValidBlockHeight": 123
-            }
-        },
-        "id": 1
-    });
+    let accounts = parse_solana_token_accounts(&json, owner).unwrap();
+    assert_eq!(accounts.len(), 1);
     assert_eq!(
-        parse_latest_solana_blockhash(&json).unwrap(),
-        "11111111111111111111111111111111"
+        accounts[0].mint,
+        "So11111111111111111111111111111111111111112"
     );
+    assert_eq!(
+        accounts[0].address,
+        "4vJ9JU1bJJE96FWSJKvHsmmF3qN8oQfZ1ZTHwF3GvH2"
+    );
+    assert_eq!(accounts[0].amount, 1_234_500);
+    assert_eq!(accounts[0].decimals, 6);
 }

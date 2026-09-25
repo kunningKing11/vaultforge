@@ -27,34 +27,6 @@ describe("network registry normalization", () => {
     ).toBe("₿");
   });
 
-  test("rejects unsupported schemas and duplicate network ids", () => {
-    const wrongSchema = networkSource();
-    wrongSchema.schemaVersion = 2;
-    expect(() => normalizeNetworkRegistry(wrongSchema)).toThrow(
-      "Unsupported network registry schema version",
-    );
-
-    const duplicate = networkSource();
-    duplicate.networks.push(structuredClone(duplicate.networks[0]!));
-    expect(() => normalizeNetworkRegistry(duplicate)).toThrow("Duplicate network id bitcoin");
-  });
-
-  test("rejects invalid providers and duplicate tokens", () => {
-    const invalidProvider = networkSource();
-    invalidProvider.networks.find((network) => network.id === "ethereum")!.rpcUrl =
-      "http://localhost";
-    expect(() => normalizeNetworkRegistry(invalidProvider)).toThrow(
-      "ethereum has an invalid provider URL",
-    );
-
-    const duplicateToken = networkSource();
-    const ethereum = duplicateToken.networks.find((network) => network.id === "ethereum")!;
-    ethereum.tokens!.push(structuredClone(ethereum.tokens![0]!));
-    expect(() => normalizeNetworkRegistry(duplicateToken)).toThrow(
-      "ethereum contains a duplicate token symbol or contract",
-    );
-  });
-
   test("normalizes token identifiers according to their standard", () => {
     const evmDuplicate = networkSource();
     const ethereum = evmDuplicate.networks.find((network) => network.id === "ethereum")!;
@@ -88,6 +60,34 @@ describe("network registry normalization", () => {
       },
     ];
     expect(() => normalizeNetworkRegistry(solanaTokens)).not.toThrow();
+  });
+
+  test("rejects invalid providers and duplicate tokens", () => {
+    const invalidProvider = networkSource();
+    invalidProvider.networks.find((network) => network.id === "ethereum")!.rpcUrl =
+      "http://localhost";
+    expect(() => normalizeNetworkRegistry(invalidProvider)).toThrow(
+      "ethereum has an invalid provider URL",
+    );
+
+    const duplicateToken = networkSource();
+    const ethereum = duplicateToken.networks.find((network) => network.id === "ethereum")!;
+    ethereum.tokens!.push(structuredClone(ethereum.tokens![0]!));
+    expect(() => normalizeNetworkRegistry(duplicateToken)).toThrow(
+      "ethereum contains a duplicate token symbol or contract",
+    );
+  });
+
+  test("rejects unsupported schemas and duplicate network ids", () => {
+    const wrongSchema = networkSource();
+    wrongSchema.schemaVersion = 2;
+    expect(() => normalizeNetworkRegistry(wrongSchema)).toThrow(
+      "Unsupported network registry schema version",
+    );
+
+    const duplicate = networkSource();
+    duplicate.networks.push(structuredClone(duplicate.networks[0]!));
+    expect(() => normalizeNetworkRegistry(duplicate)).toThrow("Duplicate network id bitcoin");
   });
 });
 

@@ -25,22 +25,12 @@ const unlockedSession: WalletSession = {
 };
 
 describe("React wallet session model", () => {
-  test("keeps locked sessions free of addresses and provider data", () => {
-    expect(
-      walletStateFromSession({
-        ...unlockedSession,
-        locked: true,
-      }),
-    ).toEqual({ status: "locked", name: "Vault" });
-  });
+  test("builds an XRP Ledger receive payload from derived classic address", () => {
+    const wallet = walletStateFromSession(unlockedSession);
+    const xrpl = networkById("xrpl");
+    if (!xrpl) throw new Error("XRP Ledger network is missing");
 
-  test("moves receive selection to an enabled network after session ingest", () => {
-    const state = createInitialAppState();
-    state.receive.networkId = "solana";
-
-    const next = applyWalletSession(state, unlockedSession);
-    expect(next.wallet.status).toBe("unlocked");
-    expect(next.receive.networkId).toBe("ethereum");
+    expect(receivePayload(wallet, xrpl)).toBe("rExample");
   });
 
   test("keeps a polled terminal status when a portfolio refresh returns cached pending activity", () => {
@@ -75,12 +65,22 @@ describe("React wallet session model", () => {
     expect(differentTransaction.wallet.activity[0]?.status).toBe("pending");
   });
 
-  test("builds an XRP Ledger receive payload from derived classic address", () => {
-    const wallet = walletStateFromSession(unlockedSession);
-    const xrpl = networkById("xrpl");
-    if (!xrpl) throw new Error("XRP Ledger network is missing");
+  test("keeps locked sessions free of addresses and provider data", () => {
+    expect(
+      walletStateFromSession({
+        ...unlockedSession,
+        locked: true,
+      }),
+    ).toEqual({ status: "locked", name: "Vault" });
+  });
 
-    expect(receivePayload(wallet, xrpl)).toBe("rExample");
+  test("moves receive selection to an enabled network after session ingest", () => {
+    const state = createInitialAppState();
+    state.receive.networkId = "solana";
+
+    const next = applyWalletSession(state, unlockedSession);
+    expect(next.wallet.status).toBe("unlocked");
+    expect(next.receive.networkId).toBe("ethereum");
   });
 
   test("sorts asset displays by fiat value with stable identifier ties", () => {

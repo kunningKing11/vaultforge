@@ -6,27 +6,6 @@ use super::{
 };
 
 #[test]
-fn validates_standard_bip39_recovery_phrase_lengths_and_checksums() {
-    for (entropy_length, expected_word_count) in [(16, 12), (20, 15), (24, 18), (28, 21), (32, 24)]
-    {
-        let mnemonic = Mnemonic::from_entropy_in(Language::English, &vec![0; entropy_length])
-            .unwrap()
-            .to_string();
-        assert_eq!(mnemonic.split_whitespace().count(), expected_word_count);
-        assert!(BIP39_WORD_COUNTS.contains(&expected_word_count));
-        assert!(validate_recovery_phrase_word_count(&mnemonic).is_ok());
-        assert!(derive_addresses_from_mnemonic_filtered(&mnemonic, ALL_NETWORKS).is_ok());
-    }
-
-    assert!(validate_recovery_phrase_word_count("abandon abandon abandon").is_err());
-    assert!(derive_addresses_from_mnemonic_filtered(
-        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon",
-        ALL_NETWORKS,
-    )
-    .is_err());
-}
-
-#[test]
 fn derives_documented_wallet_paths_deterministically() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, ALL_NETWORKS).unwrap();
@@ -63,4 +42,25 @@ fn derives_documented_wallet_paths_deterministically() {
         addresses.get("zcash").unwrap(),
         "t1XVXWCvpMgBvUaed4XDqWtgQgJSu1Ghz7F"
     );
+}
+
+#[test]
+fn validates_standard_bip39_recovery_phrase_lengths_and_checksums() {
+    for (entropy_length, expected_word_count) in [(16, 12), (20, 15), (24, 18), (28, 21), (32, 24)]
+    {
+        let mnemonic = Mnemonic::from_entropy_in(Language::English, &vec![0; entropy_length])
+            .unwrap()
+            .to_string();
+        assert_eq!(mnemonic.split_whitespace().count(), expected_word_count);
+        assert!(BIP39_WORD_COUNTS.contains(&expected_word_count));
+        assert!(validate_recovery_phrase_word_count(&mnemonic).is_ok());
+        assert!(derive_addresses_from_mnemonic_filtered(&mnemonic, ALL_NETWORKS).is_ok());
+    }
+
+    assert!(validate_recovery_phrase_word_count("abandon abandon abandon").is_err());
+    assert!(derive_addresses_from_mnemonic_filtered(
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon",
+        ALL_NETWORKS,
+    )
+    .is_err());
 }

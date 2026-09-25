@@ -53,6 +53,14 @@ function unlockWallet() {
   return wallet;
 }
 
+describe("activity selection", () => {
+  test("selects the requested activity and otherwise falls back to the first", () => {
+    const wallet = unlockWallet();
+    expect(selectedActivity(wallet, "second")?.id).toBe("second");
+    expect(selectedActivity(wallet, "missing")?.id).toBe("first");
+  });
+});
+
 describe("receive selectors", () => {
   test.each([
     ["bitcoin", "bitcoin:bc1qtest"],
@@ -65,16 +73,16 @@ describe("receive selectors", () => {
     expect(receivePayload(unlockWallet(), network)).toBe(payload);
   });
 
-  test("returns no address while the wallet is locked", () => {
-    const network = networkById("ethereum");
-    if (!network) throw new Error("Missing Ethereum network");
-    expect(addressForNetwork({ status: "locked", name: "Test Wallet" }, network)).toBe("");
-  });
-
   test("includes an EVM chain id when requested", () => {
     const network = networkById("polygon");
     if (!network) throw new Error("Missing Polygon network");
     expect(networkLabel(network, false, true)).toBe("POL - Chain ID 137");
+  });
+
+  test("returns no address while the wallet is locked", () => {
+    const network = networkById("ethereum");
+    if (!network) throw new Error("Missing Ethereum network");
+    expect(addressForNetwork({ status: "locked", name: "Test Wallet" }, network)).toBe("");
   });
 
   test("uses configured crypto symbols when the wallet preference is enabled", () => {
@@ -83,13 +91,5 @@ describe("receive selectors", () => {
     if (!bitcoin || !solana) throw new Error("Missing display-symbol test network");
     expect(networkLabel(bitcoin, true)).toBe("₿");
     expect(networkLabel(solana, true)).toBe("SOL");
-  });
-});
-
-describe("activity selection", () => {
-  test("selects the requested activity and otherwise falls back to the first", () => {
-    const wallet = unlockWallet();
-    expect(selectedActivity(wallet, "second")?.id).toBe("second");
-    expect(selectedActivity(wallet, "missing")?.id).toBe("first");
   });
 });

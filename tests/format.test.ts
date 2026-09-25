@@ -12,6 +12,10 @@ import {
 } from "../src/format";
 
 describe("crypto amount formatting", () => {
+  test("converts USD values using the supplied exchange rate", () => {
+    expect(usdToFiat(125, 0.92)).toBe(115);
+  });
+
   test("converts decimal amounts into integer base units", () => {
     expect(toWei("1.23", 6)).toBe("1230000");
     expect(toWei("0.000001", 6)).toBe("1");
@@ -31,10 +35,6 @@ describe("crypto amount formatting", () => {
     expect(weiToNumber("1230000", 6)).toBe(1.23);
   });
 
-  test("converts USD values using the supplied exchange rate", () => {
-    expect(usdToFiat(125, 0.92)).toBe(115);
-  });
-
   test("uses Unicode crypto symbols only when enabled and available", () => {
     expect(cryptoDisplaySymbol("BTC", "₿", true)).toBe("₿");
     expect(cryptoDisplaySymbol("BTC", "₿", false)).toBe("BTC");
@@ -43,13 +43,6 @@ describe("crypto amount formatting", () => {
 });
 
 describe("display-safe strings", () => {
-  test("shortens addresses and handles missing values", () => {
-    expect(shortAddress(null)).toBe("No address");
-    expect(shortAddress("0x1234567890abcdef1234567890abcdef12345678")).toBe(
-      "0x12345678...12345678",
-    );
-  });
-
   test("escapes dynamic HTML content", () => {
     expect(escapeHtml(`<script data-x="1">'&</script>`)).toBe(
       "&lt;script data-x=&quot;1&quot;&gt;&#39;&amp;&lt;/script&gt;",
@@ -59,5 +52,12 @@ describe("display-safe strings", () => {
   test("normalizes unknown errors for display", () => {
     expect(formatError(new Error("offline"))).toBe("Error: Error: offline");
     expect(formatError("offline")).toBe("Error: offline");
+  });
+
+  test("shortens addresses and handles missing values", () => {
+    expect(shortAddress(null)).toBe("No address");
+    expect(shortAddress("0x1234567890abcdef1234567890abcdef12345678")).toBe(
+      "0x12345678...12345678",
+    );
   });
 });
