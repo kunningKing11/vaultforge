@@ -36,7 +36,6 @@ export type SetupWizardState = {
   name: string;
   walletPassword: string;
   confirmWalletPassword: string;
-  walletPasswordVisible: boolean;
   recoveryPhrase: string;
   recoveryPhraseVisible: boolean;
   acknowledgedBackup: boolean;
@@ -96,7 +95,6 @@ export function createSetupWizardState(): SetupWizardState {
     name: "",
     walletPassword: "",
     confirmWalletPassword: "",
-    walletPasswordVisible: false,
     recoveryPhrase: "",
     recoveryPhraseVisible: false,
     acknowledgedBackup: false,

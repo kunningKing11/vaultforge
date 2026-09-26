@@ -90,6 +90,7 @@ import {
   sortAssetsByValue,
   type WalletState,
 } from "./model";
+import { PasswordInput } from "./PasswordInput";
 import { vaultForgeTheme } from "./theme";
 
 const MINIMUM_SPLASH_DURATION_MS = 650;
@@ -1029,7 +1030,6 @@ function LockedView({
   onUnlock: (walletPassword: string) => Promise<boolean>;
 }) {
   const [walletPassword, setWalletPassword] = useState("");
-  const [visible, setVisible] = useState(false);
   const submit: SubmitEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault();
     void onUnlock(walletPassword).then((success) => {
@@ -1061,22 +1061,11 @@ function LockedView({
         </VStack>
         <form onSubmit={submit}>
           <VStack gap={2}>
-            <TextInput
+            <PasswordInput
               autoComplete="current-password"
-              end={
-                <Button
-                  onClick={() => setVisible((current) => !current)}
-                  size="s"
-                  transparent
-                  type="button"
-                >
-                  {visible ? "Hide" : "Show"}
-                </Button>
-              }
               label="Wallet password"
-              onChange={(event) => setWalletPassword(event.target.value)}
+              onChange={setWalletPassword}
               required
-              type={visible ? "text" : "password"}
               value={walletPassword}
             />
             <Button block loading={busy} type="submit">
@@ -1498,29 +1487,12 @@ function SetupIdentity({
         placeholder="Primary Vault"
         value={wizard.name}
       />
-      <TextInput
-        end={
-          <Button
-            onClick={() =>
-              updateWizard((current) => ({
-                ...current,
-                walletPasswordVisible: !current.walletPasswordVisible,
-              }))
-            }
-            size="s"
-            transparent
-            type="button"
-          >
-            {wizard.walletPasswordVisible ? "Hide" : "Show"}
-          </Button>
-        }
+      <PasswordInput
+        autoComplete="new-password"
         label="Wallet password"
         minLength={8}
-        onChange={(event) =>
-          updateWizard((current) => ({ ...current, walletPassword: event.target.value }))
-        }
+        onChange={(value) => updateWizard((current) => ({ ...current, walletPassword: value }))}
         placeholder="Minimum 8 characters"
-        type={wizard.walletPasswordVisible ? "text" : "password"}
         value={wizard.walletPassword}
       />
       <Box background="bgSecondary" borderRadius={300} padding={2} width="100%">
@@ -1542,28 +1514,13 @@ function SetupIdentity({
           />
         </VStack>
       </Box>
-      <TextInput
-        end={
-          <Button
-            onClick={() =>
-              updateWizard((current) => ({
-                ...current,
-                walletPasswordVisible: !current.walletPasswordVisible,
-              }))
-            }
-            size="s"
-            transparent
-            type="button"
-          >
-            {wizard.walletPasswordVisible ? "Hide" : "Show"}
-          </Button>
-        }
+      <PasswordInput
+        autoComplete="new-password"
         label="Confirm wallet password"
         minLength={8}
-        onChange={(event) =>
-          updateWizard((current) => ({ ...current, confirmWalletPassword: event.target.value }))
+        onChange={(value) =>
+          updateWizard((current) => ({ ...current, confirmWalletPassword: value }))
         }
-        type={wizard.walletPasswordVisible ? "text" : "password"}
         value={wizard.confirmWalletPassword}
       />
     </VStack>
