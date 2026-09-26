@@ -15,6 +15,6 @@ pre-push:
     - name: audit installed packages
       run: bun audit
       fail_text: "Push blocked: one or more installed packages have vulnerabilities. See the summary above."
-    - name: run full Rust validation
+    - name: run push validation
       run: bun run hooks:check -- push
-      fail_text: "Push blocked: one or more Rust validation checks failed. See the summary above."
+      fail_text: "Push blocked: one or more validation checks failed. See the summary above."

@@ -118,18 +118,18 @@ bunx tauri build
 
 ```bash
 bun run check
-bun test
+bun test --parallel
 bun run lint:fix
 bun run format
 ```
 
 `dev` and `build` run the non-mutating Oxlint, Oxfmt, and TypeScript 7 checks before starting Vite. Run `./lint.sh` for the same checks or `./lint.sh --fix` to apply safe lint fixes and formatting first.
 
-Every commit checks 72-character commit-message lines, syncs Cargo's version from `package.json`, runs dependency installs, and stages the package and Cargo manifests/lockfiles. It then runs Oxlint, Oxfmt, TypeScript, the TypeScript unit tests, `cargo fmt --check`, and `cargo check`. Before every push, Lefthook runs Rust Analyzer analysis and the full Rust test suite. Each hook runs every command in its group before printing a pass/fail summary; a failed command blocks its commit or push.
+Every commit checks 72-character commit-message lines, syncs Cargo's version from `package.json`, runs dependency installs, and stages the package and Cargo manifests/lockfiles. It then runs Oxlint, Oxfmt, TypeScript, the TypeScript unit tests, `cargo fmt --check`, and `cargo check`. Before every push, Lefthook runs a dependency audit, the TypeScript unit tests, Rust Analyzer analysis, and the full Rust test suite. Each hook runs every command in its group before printing a pass/fail summary; a failed command blocks its commit or push.
 
 You can run the same checks manually with `bun run hooks:check -- commit` or `bun run hooks:check -- push`. After cloning or installing dependencies, `bun install` installs the Git hooks through the `prepare` script; run `bun run prepare` in an already-installed checkout.
 
-**NOTE: Rust Analyzer must be installed in the active Rust toolchain (for example, `rustup component add rust-analyzer`) or its check will fail and block the commit.**
+**NOTE: Rust Analyzer must be installed in the active Rust toolchain (for example, `rustup component add rust-analyzer`) or its check will fail and block the push.**
 
 `src/networks.json` is the source of truth for network identities, provider URLs, native assets, configured ERC-20 assets, decimals, and CoinGecko identifiers.
 
