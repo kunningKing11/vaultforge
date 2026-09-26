@@ -34,6 +34,7 @@ A local-first crypto wallet desktop app built with a React frontend, Coinbase De
 - Activity details with transaction hashes, signatures, payload hashes, and copy actions
 - Security center with storage status, signing status, and local wallet clearing
 - Wallet-password confirmation and strength feedback for encrypted wallet setup
+- One-time risk acknowledgment before wallet setup or unlock, with the full MIT License available in-app
 - Send, receive, swap, assets, activity, and settings screens
 - Rust-backed Tauri commands for wallet state, validation, transaction signing, encrypted storage, provider-backed reads, broadcast, and status checks
 - Responsive React and Coinbase Design System UI with desktop sidebar
@@ -157,3 +158,7 @@ You can run the same checks manually with `bun run hooks:check -- commit` or `bu
   - `state.rs`:
   - `storage.rs`:
   - `validation.rs`:
+
+## License
+
+VaultForge is licensed under the [MIT License](LICENSE). It is provided "as is," without warranty; see the license for the full terms.

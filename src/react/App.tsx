@@ -27,6 +27,7 @@ import {
   useState,
 } from "react";
 
+import licenseText from "../../LICENSE?raw";
 import appLogoUrl from "../../src-tauri/icons/icon.svg";
 import activityIcon from "../assets/icons/activity.svg?raw";
 import assetsIcon from "../assets/icons/assets.svg?raw";
@@ -76,6 +77,7 @@ import type {
 import { appVersion } from "../version";
 import { walletApi } from "../walletApi";
 import { walletPasswordStrength } from "../walletPassword";
+import { acceptDisclaimer, hasAcceptedDisclaimer } from "./disclaimer";
 import {
   addressForNetwork,
   applyWalletSession,
@@ -151,6 +153,13 @@ function WalletApplication({
   const { show: showCdsToast } = useToast();
   const [state, setState] = useState<AppState>(createInitialAppState);
   const [sessionLoaded, setSessionLoaded] = useState(false);
+  const [disclaimerAccepted, setDisclaimerAccepted] = useState(() => {
+    try {
+      return hasAcceptedDisclaimer(window.localStorage);
+    } catch {
+      return false;
+    }
+  });
   const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
   const stateRef = useRef(state);
   const operationRef = useRef(false);
@@ -641,6 +650,20 @@ function WalletApplication({
       {state.operation.busy && <LoadingBar />}
       {!sessionLoaded ? (
         <SplashScreen />
+      ) : !disclaimerAccepted ? (
+        <FirstRunDisclaimer
+          onAccept={() => {
+            try {
+              if (acceptDisclaimer(window.localStorage)) {
+                setDisclaimerAccepted(true);
+                return;
+              }
+            } catch {
+              // Accessing localStorage itself can fail when storage is disabled.
+            }
+            toast("Unable to save acknowledgment. Check that app storage is available.", "error");
+          }}
+        />
       ) : state.wallet.status === "missing" ? (
         <OnboardingView
           colorScheme={colorScheme}
@@ -697,6 +720,93 @@ function WalletApplication({
         VaultForge v{appVersion}
       </Text>
       <PageScrollbar />
+    </Box>
+  );
+}
+
+function FirstRunDisclaimer({ onAccept }: { onAccept: () => void }) {
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [licenseVisible, setLicenseVisible] = useState(false);
+
+  return (
+    <Box
+      alignItems="center"
+      display="flex"
+      justifyContent="center"
+      minHeight="100dvh"
+      padding={3}
+      width="100%"
+    >
+      <ContentCard
+        background="bgElevation1"
+        borderRadius={400}
+        gap={3}
+        maxWidth="640px"
+        padding={4}
+        width="100%"
+      >
+        <VStack gap={1}>
+          <Text color="fgWarning" font="label2">
+            Before you continue
+          </Text>
+          <Text as="h1" font="title1">
+            Understand the risks
+          </Text>
+        </VStack>
+        <VStack gap={2}>
+          <Text as="p" font="body">
+            VaultForge is a self-custody wallet. You are responsible for safeguarding your recovery
+            phrase and verifying every transaction. Lost credentials, mistakes, software defects, or
+            security vulnerabilities can result in irreversible loss of funds.
+          </Text>
+          <Text as="p" color="fgMuted" font="body">
+            VaultForge is licensed under the MIT License and provided “as is,” without warranty. The
+            license disclaims liability for losses arising from use of the software, including lost
+            funds, to the extent permitted by applicable law.
+          </Text>
+          <Button onClick={() => setLicenseVisible(true)} variant="secondary">
+            Read MIT License
+          </Button>
+        </VStack>
+        <Checkbox
+          checked={acknowledged}
+          onChange={(event) => setAcknowledged(event.target.checked)}
+        >
+          I understand these risks and want to continue.
+        </Checkbox>
+        <Button block disabled={!acknowledged} onClick={onAccept} variant="primary">
+          Continue
+        </Button>
+      </ContentCard>
+      <Modal
+        accessibilityLabel="MIT License"
+        background="bgElevation2"
+        borderRadius={400}
+        onRequestClose={() => setLicenseVisible(false)}
+        padding={4}
+        visible={licenseVisible}
+      >
+        <VStack gap={3}>
+          <Text as="h2" font="title2">
+            MIT License
+          </Text>
+          <Box maxHeight="60dvh" overflow="auto">
+            <VStack gap={2}>
+              {licenseText
+                .trim()
+                .split(/\n\s*\n/)
+                .map((paragraph) => (
+                  <Text as="p" font="body" key={paragraph}>
+                    {paragraph}
+                  </Text>
+                ))}
+            </VStack>
+          </Box>
+          <Button block onClick={() => setLicenseVisible(false)} variant="secondary">
+            Close
+          </Button>
+        </VStack>
+      </Modal>
     </Box>
   );
 }
