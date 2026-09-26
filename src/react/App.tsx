@@ -53,7 +53,7 @@ import {
   weiToNumber,
 } from "../format";
 import { networkById, networkDisplayName, networks } from "../networks";
-import { hasValidRecoveryPhraseWordCount } from "../recoveryPhrase";
+import { hasValidRecoveryPhraseWordCount, sanitizeRecoveryPhraseInput } from "../recoveryPhrase";
 import {
   installScrollbarBehavior,
   syncHorizontalScrollbars,
@@ -1589,7 +1589,10 @@ function SetupRecovery({
           autoComplete="off"
           className="native-textarea"
           onChange={(event) =>
-            updateWizard((current) => ({ ...current, recoveryPhrase: event.target.value }))
+            updateWizard((current) => ({
+              ...current,
+              recoveryPhrase: sanitizeRecoveryPhraseInput(event.target.value),
+            }))
           }
           placeholder="12, 15, 18, 21, or 24 word phrase"
           spellCheck={false}
