@@ -1,6 +1,7 @@
 use sha3::Keccak256;
 use sha3::digest::Digest;
 
+/// Validates an EVM address, requiring EIP-55 checksum only for mixed case.
 pub(crate) fn validate_address(address: &str) -> Result<(), String> {
     let hex_part = address
         .strip_prefix("0x")

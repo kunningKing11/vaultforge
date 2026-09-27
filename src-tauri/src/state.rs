@@ -67,6 +67,8 @@ impl AppState {
     }
 }
 
+/// Builds a frontend session from runtime state, using Bitcoin's next receive
+/// address when account discovery has completed.
 pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
     let Some(wallet) = state.wallet.as_ref() else {
         if let Some(stored_wallet) = state.stored_wallet.as_ref() {

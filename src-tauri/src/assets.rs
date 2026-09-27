@@ -1,6 +1,7 @@
 use crate::dto::Asset;
 use crate::registry::network_by_id;
 
+/// Compares token identifiers case-insensitively on EVM and exactly elsewhere.
 pub(crate) fn token_addresses_match(network_id: &str, left: &str, right: &str) -> bool {
     if network_by_id(network_id).is_some_and(|network| network.kind == "evm") {
         left.eq_ignore_ascii_case(right)

@@ -77,6 +77,7 @@ pub(crate) async fn fetch_evm_token_balance(
         .map_err(|e| format!("Invalid token balance hex: {e}"))
 }
 
+/// Fetches native and token balances, reusing cached values on RPC failure.
 pub(crate) async fn fetch_evm_assets(
     client: &reqwest::Client,
     config: &EvmNetworkConfig,
@@ -138,6 +139,7 @@ pub(crate) async fn fetch_evm_assets(
     }
 }
 
+/// Fetches the account's pending nonce without reserving it locally.
 pub(crate) async fn fetch_evm_nonce(
     client: &reqwest::Client,
     config: &EvmNetworkConfig,
@@ -176,6 +178,7 @@ pub(crate) async fn fetch_evm_gas_price(
         .map_err(|e| format!("Invalid gas price hex: {e}"))
 }
 
+/// Estimates EIP-1559 fees, falling back to `gasPrice` if `feeHistory` fails.
 pub(crate) async fn fetch_evm_fee_estimate(
     client: &reqwest::Client,
     config: &EvmNetworkConfig,
@@ -199,6 +202,7 @@ pub(crate) async fn fetch_evm_fee_estimate(
     }
 }
 
+/// Calculates max fee from twice the latest base fee plus median priority tip.
 pub(crate) fn parse_evm_fee_history(json: &serde_json::Value) -> Result<EvmFeeEstimate, String> {
     let result = json_rpc_result(json, "EVM fee history")?;
     let base_fees = result["baseFeePerGas"]

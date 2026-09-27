@@ -1,6 +1,7 @@
 use sha2::Digest;
 use sha2::Sha256;
 
+/// Validates transparent Zcash t1/t3 addresses, rejecting shielded addresses.
 pub(crate) fn validate_address(address: &str) -> Result<(), String> {
     let bytes = bs58::decode(address)
         .into_vec()

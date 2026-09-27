@@ -1,6 +1,7 @@
 use bech32::hrp;
 use bech32::segwit;
 
+/// Validates mainnet P2WPKH, P2PKH, and P2SH recipient addresses.
 pub(crate) fn validate_address(address: &str) -> Result<(), String> {
     if address.starts_with("bc1") {
         let (decoded_hrp, version, program) = segwit::decode(address)

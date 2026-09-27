@@ -3,6 +3,7 @@ use chrono::Utc;
 use rand::RngExt;
 use sha2::{Digest, Sha256};
 
+/// Creates a local activity entry marked confirmed with a placeholder hash.
 pub(crate) fn activity(kind: &str, title: &str, subtitle: &str, amount: &str) -> Activity {
     Activity {
         id: random_hex(8),

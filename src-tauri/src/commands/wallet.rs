@@ -22,6 +22,7 @@ use crate::storage::{
 };
 use crate::validation::{clean_name, validate_wallet_password};
 
+/// Derives and inserts a missing Filecoin address into an older wallet.
 pub(crate) fn refresh_filecoin_address(wallet: &mut Wallet) -> Result<(), String> {
     let addresses = derive_addresses_from_mnemonic_filtered(&wallet.mnemonic, &["filecoin"])?;
     let filecoin_address = addresses

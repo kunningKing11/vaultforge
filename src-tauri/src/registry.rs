@@ -56,6 +56,7 @@ impl NetworkConfig {
 
 static REGISTRY: OnceLock<NetworkRegistry> = OnceLock::new();
 
+/// Loads and validates the bundled network registry once per process.
 pub(crate) fn registry() -> &'static NetworkRegistry {
     REGISTRY.get_or_init(|| {
         let registry: NetworkRegistry =

@@ -174,6 +174,7 @@ pub(crate) async fn sign_solana_token_transfer(
     })
 }
 
+/// Selects SPL source accounts, preferring the sender's ATA then larger balances.
 pub(crate) fn select_solana_token_sources(
     wallet_address: &str,
     mint: &str,

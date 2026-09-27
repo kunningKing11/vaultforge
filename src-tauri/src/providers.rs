@@ -47,6 +47,7 @@ pub(crate) struct PortfolioAssetRefresh {
     pub(crate) bitcoin_account: Option<BitcoinAccountSnapshot>,
 }
 
+/// Fetches chain balances concurrently, retaining cached assets for failed reads.
 pub(crate) async fn fetch_portfolio_assets(
     client: &Client,
     addresses: &HashMap<String, String>,
@@ -407,6 +408,7 @@ impl ChainProvider for ZcashProvider {
     }
 }
 
+/// Selects a provider by ticker, falling back to the EVM provider.
 #[allow(dead_code)]
 pub(crate) fn get_provider(symbol: &str) -> Option<Box<dyn ChainProvider>> {
     match symbol {

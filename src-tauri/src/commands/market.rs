@@ -21,6 +21,7 @@ pub(crate) struct PortfolioRefresh {
     pub(crate) usd_exchange_rate: f64,
 }
 
+/// Refreshes the portfolio and discards results if the wallet changed mid-read.
 #[tauri::command]
 pub(crate) async fn refresh_portfolio(
     state: State<'_, Mutex<AppState>>,
@@ -80,6 +81,7 @@ pub(crate) async fn refresh_portfolio(
     Ok(refresh_result_from_state(&state, refreshed.warnings))
 }
 
+/// Refreshes wallet assets while retaining cached balances on provider failure.
 pub(crate) async fn refresh_wallet_portfolio(
     client: &reqwest::Client,
     addresses: &HashMap<String, String>,
@@ -133,6 +135,7 @@ fn exchange_rate_or_cached(
     }
 }
 
+/// Refreshes prices via CoinGecko IDs or GeckoTerminal for unlisted tokens.
 pub(crate) async fn refresh_asset_prices(
     client: &reqwest::Client,
     assets: &mut [Asset],

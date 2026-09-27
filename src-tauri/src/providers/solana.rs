@@ -57,6 +57,7 @@ pub(crate) async fn fetch_solana_token_accounts(
     parse_solana_token_accounts(&json, address)
 }
 
+/// Fetches native and classic SPL balances, retaining cached values on failure.
 pub(crate) async fn fetch_solana_assets(
     client: &reqwest::Client,
     address: &str,
@@ -407,6 +408,7 @@ pub(crate) fn parse_solana_rent_exemption(json: &serde_json::Value) -> Result<u6
         .ok_or_else(|| "Solana rent exemption RPC missing result".to_string())
 }
 
+/// Fetches the latest finalized Solana blockhash for transaction signing.
 pub(crate) async fn fetch_latest_solana_blockhash(
     client: &reqwest::Client,
 ) -> Result<String, String> {

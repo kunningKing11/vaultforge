@@ -597,6 +597,7 @@ pub(crate) async fn send_transaction(
     Ok(session_from_state(&state))
 }
 
+/// Simulates a swap in local state with a 0.5% fee; it does not broadcast.
 #[tauri::command(rename_all = "camelCase")]
 pub(crate) fn swap_tokens(
     state: State<'_, Mutex<AppState>>,

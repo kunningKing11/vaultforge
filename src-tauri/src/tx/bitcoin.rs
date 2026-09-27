@@ -224,6 +224,7 @@ pub(crate) fn bitcoin_estimated_vbytes(input_count: usize, output_count: usize) 
     weight.saturating_add(3) / 4
 }
 
+/// Selects confirmed UTXOs first and includes change only above the dust limit.
 pub(crate) fn bitcoin_select_coins(
     utxos: &[BitcoinUtxo],
     amount: u64,

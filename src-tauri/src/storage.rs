@@ -71,6 +71,8 @@ pub(crate) fn read_stored_wallet(path: &PathBuf) -> Result<Option<StoredWalletFi
     Ok(Some(stored))
 }
 
+/// Persists an unlocked wallet; does nothing if none is loaded and updates
+/// locked metadata after a successful write.
 pub(crate) fn persist_state_wallet(state: &mut AppState) -> Result<(), String> {
     let Some(wallet) = state.wallet.as_ref() else {
         return Ok(());
@@ -95,6 +97,7 @@ pub(crate) fn persist_state_wallet(state: &mut AppState) -> Result<(), String> {
     Ok(())
 }
 
+/// Encrypts a wallet into a version-6 AES-GCM envelope with a fresh nonce.
 pub(crate) fn encrypt_wallet(
     wallet: &Wallet,
     key: &[u8; 32],
@@ -133,6 +136,7 @@ pub(crate) fn encrypt_wallet(
     })
 }
 
+/// Decrypts stored versions 2–6, filling preferences absent from older payloads.
 pub(crate) fn decrypt_wallet(
     stored: &StoredWalletFile,
     wallet_password: &str,
@@ -200,6 +204,7 @@ pub(crate) fn decrypt_wallet(
     })
 }
 
+/// Derives the Argon2 storage key, generating a 16-byte salt when none is given.
 pub(crate) fn derive_storage_key(
     wallet_password: &str,
     salt: Option<&[u8]>,

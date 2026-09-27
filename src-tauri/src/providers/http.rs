@@ -19,6 +19,7 @@ impl ProviderClients {
     }
 }
 
+/// Posts JSON-RPC and retries transient failures up to three attempts.
 pub(crate) async fn rpc_post(
     client: &reqwest::Client,
     url: &str,
@@ -81,6 +82,8 @@ pub(crate) async fn http_get_json(
 ) -> Result<serde_json::Value, String> {
     http_get_json_with_client(client, url).await
 }
+
+/// Fetches JSON with `Retry-After` handling and URL-jittered retries.
 pub(crate) async fn http_get_json_with_client(
     client: &reqwest::Client,
     url: &str,

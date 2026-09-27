@@ -138,6 +138,7 @@ fn bitcoin_api_url() -> Result<&'static str, String> {
         .api_url()
 }
 
+/// Parses Esplora chain and mempool totals into balance and address usage.
 pub(crate) fn parse_bitcoin_address_stats(
     json: &serde_json::Value,
 ) -> Result<BitcoinAddressStats, String> {
@@ -176,6 +177,7 @@ fn required_u128(json: &serde_json::Value, field: &str) -> Result<u128, String> 
         .ok_or_else(|| format!("Bitcoin address response is missing {field}"))
 }
 
+/// Scans receive and change addresses until each branch reaches the gap limit.
 pub(crate) async fn scan_bitcoin_account(
     client: &reqwest::Client,
     account: &BitcoinAccount,
@@ -368,6 +370,7 @@ pub(crate) async fn fetch_bitcoin_fee_rate(client: &reqwest::Client) -> Result<u
     parse_bitcoin_fee_rate(&json)
 }
 
+/// Selects an Esplora fee estimate and rounds it up to integer sat/vB.
 pub(crate) fn parse_bitcoin_fee_rate(json: &serde_json::Value) -> Result<u64, String> {
     for target in ["3", "6", "12", "1"] {
         if let Some(rate) = json[target].as_f64()
@@ -402,6 +405,7 @@ pub(crate) async fn fetch_bitcoin_tx_status(
     }
 }
 
+/// Refreshes UTXOs, selects coins, and signs a Bitcoin transfer.
 pub(crate) async fn sign_bitcoin_transfer(
     client: &reqwest::Client,
     mnemonic: &str,

@@ -64,6 +64,7 @@ fn parse_u32(value: &Value, field: &str) -> Result<u32, String> {
         .map_err(|_| format!("XRP Ledger response has out-of-range {field}"))
 }
 
+/// Converts decimal XRP text into exact integer drops without floating point.
 fn xrp_to_drops(value: &Value, field: &str) -> Result<u64, String> {
     let value = value
         .as_str()
@@ -97,6 +98,7 @@ fn xrp_to_drops(value: &Value, field: &str) -> Result<u64, String> {
         .ok_or_else(|| format!("XRP Ledger response has out-of-range {field}"))
 }
 
+/// Parses account info, returning `None` for an unfunded (`actNotFound`) account.
 pub(crate) fn parse_xrpl_account_info(json: &Value) -> Result<Option<XrplAccountInfo>, String> {
     let result = json_rpc_result(json, "XRP Ledger account_info")?;
     if matches!(rpc_error(result), Some("actNotFound")) {
@@ -193,6 +195,7 @@ pub(crate) async fn fetch_xrpl_assets(
     }
 }
 
+/// Submits a signed XRP blob and verifies its engine result and returned hash.
 pub(crate) async fn broadcast_xrpl_transaction(
     client: &reqwest::Client,
     raw_tx_hex: &str,
@@ -223,6 +226,7 @@ pub(crate) async fn broadcast_xrpl_transaction(
     Ok(hash.to_string())
 }
 
+/// Maps validated ledger results to confirmed or failed, and others to pending.
 pub(crate) async fn fetch_xrpl_tx_status(
     client: &reqwest::Client,
     tx_hash: &str,

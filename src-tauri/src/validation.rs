@@ -26,6 +26,7 @@ pub(crate) fn clean_name(name: String) -> String {
     }
 }
 
+/// Validates a transfer against addresses, amounts, and cached asset balances.
 pub(crate) fn validate_transfer(
     wallet: &Wallet,
     to: &str,
@@ -110,6 +111,7 @@ fn validate_token_identifier(network: &str, token_address: &str) -> Result<(), S
     }
 }
 
+/// Validates an address with its chain-specific validator or the EVM fallback.
 pub(crate) fn validate_address_for_network(address: &str, network: &str) -> Result<(), String> {
     let config = network_by_id(network).ok_or_else(|| format!("Unsupported network {network}"))?;
     match network {

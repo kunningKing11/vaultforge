@@ -1,5 +1,6 @@
 use xrpl::core::addresscodec::is_valid_classic_address;
 
+/// Validates classic XRP Ledger addresses; X-addresses are not accepted.
 pub(crate) fn validate_address(address: &str) -> Result<(), String> {
     if is_valid_classic_address(address) {
         Ok(())

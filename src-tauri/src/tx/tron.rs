@@ -11,6 +11,7 @@ pub(crate) struct SignedTronTransfer {
     pub(crate) fee_sun: u64,
 }
 
+/// Verifies a provider-built Tron transfer's sender and txID before signing it.
 pub(crate) fn sign_tron_unsigned_transfer(
     mnemonic: &str,
     from: &str,
