@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::State;
+use zeroize::Zeroize;
 
 use crate::dto::{RefreshWarning, Wallet, WalletRefreshResult, WalletSession};
 use crate::providers::bitcoin::BitcoinAccountSnapshot;
 use crate::storage::read_stored_wallet;
 
 pub(crate) fn clear_secret_string(s: &mut str) {
-    let buf = unsafe { s.as_bytes_mut() };
-    buf.fill(0);
+    s.zeroize();
 }
 
 pub(crate) fn validate_unlocked(state: &State<'_, Mutex<AppState>>) -> Result<(), String> {

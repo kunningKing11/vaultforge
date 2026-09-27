@@ -36,7 +36,7 @@ use crate::tx::solana::{
 use crate::tx::tron::sign_tron_transfer;
 use crate::tx::xrpl::sign_xrpl_payment;
 use crate::validation::validate_transfer;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 pub(crate) fn required_native_debit(
     is_native_transfer: bool,
@@ -108,7 +108,7 @@ pub(crate) async fn sign_transaction(
             &amount,
         )?;
         (
-            wallet.mnemonic.clone(),
+            Zeroizing::new(wallet.mnemonic.clone()),
             wallet.addresses.clone(),
             wallet.assets.clone(),
             state.bitcoin_account.clone(),
