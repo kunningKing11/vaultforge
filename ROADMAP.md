@@ -63,8 +63,6 @@ The below items are the priorities for this project and an item will probably ge
   - [ ] gasless/sponsored swaps (using paymaster/ERC-4337 or smart contract deposits)
 - [x] Public GitHub repository
 - [ ] Live pre-sign balance refresh
-  - [ ] EVM native and ERC-20
-  - [x] SOL native and SPL
   - [ ] reconcile stale cached balances after broadcast
 - [ ] Proper fee estimation engine + preflight checks
   - [ ] EVM: `eth_feeHistory` / priority fee strategy

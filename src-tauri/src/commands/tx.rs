@@ -13,7 +13,8 @@ use crate::providers::bitcoin::{
 };
 use crate::providers::evm::{
     broadcast_evm_tx, evm_config_by_id, fetch_evm_estimated_gas, fetch_evm_fee_estimate,
-    fetch_evm_nonce, fetch_evm_tx_status,
+    fetch_evm_native_balance, fetch_evm_nonce, fetch_evm_token_balance_for_contract,
+    fetch_evm_tx_status,
 };
 use crate::providers::http::ProviderClients;
 use crate::providers::solana::{
@@ -72,6 +73,18 @@ pub(crate) fn ensure_native_balance_covers_debit(
         Err(format!(
             "Insufficient {native_symbol} balance for {fee_context}"
         ))
+    }
+}
+
+pub(crate) fn ensure_token_balance_covers_amount(
+    balance: u128,
+    amount: u128,
+    symbol: &str,
+) -> Result<(), String> {
+    if balance >= amount {
+        Ok(())
+    } else {
+        Err(format!("Insufficient {symbol} balance"))
     }
 }
 
@@ -364,6 +377,23 @@ pub(crate) async fn sign_transaction(
                 )
             };
 
+            let native_balance = fetch_evm_native_balance(client, config, &address).await?;
+            let token_balance = if is_native {
+                None
+            } else {
+                let token_address = asset
+                    .token_address
+                    .as_deref()
+                    .ok_or_else(|| format!("{symbol} token address is not available"))?;
+                Some(
+                    fetch_evm_token_balance_for_contract(client, config, token_address, &address)
+                        .await?,
+                )
+            };
+            if let Some(token_balance) = token_balance {
+                ensure_token_balance_covers_amount(token_balance, value, &symbol)?;
+            }
+
             let nonce = fetch_evm_nonce(client, config, &address).await?;
             let fee_estimate = fetch_evm_fee_estimate(client, config).await?;
             let gas_limit = if tx_data.is_empty() {
@@ -376,16 +406,6 @@ pub(crate) async fn sign_transaction(
             let max_fee_per_gas = fee_estimate.max_fee_per_gas;
             let total_fee_wei: u128 = gas_limit as u128 * max_fee_per_gas as u128;
 
-            let native_asset = assets
-                .iter()
-                .find(|a| a.network == config.id && a.symbol == native_symbol)
-                .ok_or_else(|| format!("{native_symbol} balance is not available"))?;
-
-            let native_balance: u128 = native_asset
-                .balance
-                .parse()
-                .map_err(|_| format!("Invalid {native_symbol} balance"))?;
-
             let required_native =
                 required_native_debit(is_native, value, total_fee_wei, native_symbol)?;
             ensure_native_balance_covers_debit(
@@ -395,7 +415,6 @@ pub(crate) async fn sign_transaction(
                 is_native,
                 "transaction fee",
             )?;
-
             let signing_key = signing_key_from_mnemonic(&mnemonic)?;
             let (_, tx_hash, raw_tx_hex, r_hex, s_hex) = sign_eip1559_transfer(&Eip1559TxDraft {
                 signing_key: &signing_key,
@@ -417,12 +436,15 @@ pub(crate) async fn sign_transaction(
             };
             let signature_str = format!("0x{}{}", r_hex, s_hex);
 
-            let post_balance = if is_native {
-                native_balance.saturating_sub(required_native).to_string()
-            } else {
-                let token_balance: u128 = asset.balance.parse().unwrap_or(0);
-                token_balance.saturating_sub(value).to_string()
-            };
+            let post_balance = match token_balance {
+                None => native_balance
+                    .checked_sub(required_native)
+                    .ok_or_else(|| format!("Insufficient {native_symbol} balance"))?,
+                Some(token_balance) => token_balance
+                    .checked_sub(value)
+                    .ok_or_else(|| format!("Insufficient {symbol} balance"))?,
+            }
+            .to_string();
 
             Ok(SignedTransaction {
                 from: address,

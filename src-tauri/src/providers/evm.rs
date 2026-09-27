@@ -36,18 +36,26 @@ pub(crate) async fn fetch_evm_native_balance(
     });
 
     let json = rpc_post(client, config.rpc_url()?, &body).await?;
-    let balance_hex = json_rpc_result(&json, "EVM balance")?
-        .as_str()
-        .ok_or_else(|| "EVM balance RPC result is not a hex quantity".to_string())?;
-
-    u128::from_str_radix(balance_hex.trim_start_matches("0x"), 16)
-        .map_err(|e| format!("Invalid balance hex: {e}"))
+    parse_evm_balance(&json, "EVM balance")
 }
 
 pub(crate) async fn fetch_evm_token_balance(
     client: &reqwest::Client,
     config: &EvmNetworkConfig,
     token: &EvmTokenConfig,
+    address: &str,
+) -> Result<u128, String> {
+    let token_address = token
+        .token_address
+        .as_deref()
+        .ok_or_else(|| "ERC-20 token contract is missing".to_string())?;
+    fetch_evm_token_balance_for_contract(client, config, token_address, address).await
+}
+
+pub(crate) async fn fetch_evm_token_balance_for_contract(
+    client: &reqwest::Client,
+    config: &EvmNetworkConfig,
+    token_address: &str,
     address: &str,
 ) -> Result<u128, String> {
     let addr_hex = address.trim_start_matches("0x");
@@ -62,19 +70,22 @@ pub(crate) async fn fetch_evm_token_balance(
         "jsonrpc": "2.0",
         "method": "eth_call",
         "params": [{
-            "to": token.token_address.as_deref().ok_or_else(|| "ERC-20 token contract is missing".to_string())?,
+            "to": token_address,
             "data": format!("0x{}", hex::encode(&data))
         }, "latest"],
         "id": 1,
     });
 
     let json = rpc_post(client, config.rpc_url()?, &body).await?;
-    let hex_str = json_rpc_result(&json, "EVM token balance")?
-        .as_str()
-        .ok_or_else(|| "EVM token balance RPC result is not a hex quantity".to_string())?;
+    parse_evm_balance(&json, "EVM token balance")
+}
 
-    u128::from_str_radix(hex_str.trim_start_matches("0x"), 16)
-        .map_err(|e| format!("Invalid token balance hex: {e}"))
+fn parse_evm_balance(json: &serde_json::Value, context: &str) -> Result<u128, String> {
+    let balance_hex = json_rpc_result(json, context)?
+        .as_str()
+        .ok_or_else(|| format!("{context} RPC result is not a hex quantity"))?;
+    u128::from_str_radix(balance_hex.trim_start_matches("0x"), 16)
+        .map_err(|_| format!("Invalid {context} hex quantity"))
 }
 
 /// Fetches native and token balances, reusing cached values on RPC failure.

@@ -1,4 +1,4 @@
-use super::{evm_config_by_id, parse_evm_fee_history};
+use super::{evm_config_by_id, parse_evm_balance, parse_evm_fee_history};
 
 #[test]
 fn looks_up_evm_network_configs() {
@@ -40,4 +40,27 @@ fn parses_evm_fee_history() {
         parse_evm_fee_history(&error).err().unwrap(),
         "EVM fee history RPC error: {\"code\":-32000,\"message\":\"rate limited\"}"
     );
+}
+
+#[test]
+fn parses_live_evm_balance_rpc_responses_as_base_units() {
+    let response = serde_json::json!({
+        "jsonrpc": "2.0",
+        "result": "0xde0b6b3a7640000",
+        "id": 1
+    });
+    assert_eq!(
+        parse_evm_balance(&response, "EVM balance").unwrap(),
+        1_000_000_000_000_000_000
+    );
+
+    let error = serde_json::json!({
+        "jsonrpc": "2.0",
+        "error": { "code": -32000, "message": "unavailable" },
+        "id": 1
+    });
+    assert!(parse_evm_balance(&error, "EVM token balance").is_err());
+
+    let malformed = serde_json::json!({ "result": "0xnot-hex" });
+    assert!(parse_evm_balance(&malformed, "EVM balance").is_err());
 }

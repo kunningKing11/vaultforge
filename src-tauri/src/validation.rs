@@ -80,7 +80,7 @@ pub(crate) fn validate_transfer(
         return Err(format!("{symbol} amount is too large"));
     }
 
-    if network != "solana" {
+    if network != "solana" && network_config.kind != "evm" {
         let balance: u128 = asset
             .balance
             .parse()

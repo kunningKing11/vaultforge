@@ -7,6 +7,61 @@ use crate::address::evm::validate_address as validate_evm_address;
 use crate::dto::{Asset, FiatCurrency, Wallet};
 
 #[test]
+fn evm_transfer_validation_does_not_reject_using_cached_balances() {
+    let wallet = Wallet {
+        name: "Test Wallet".to_string(),
+        mnemonic: "test mnemonic".to_string(),
+        created_at: "2025-01-01T00:00:00Z".to_string(),
+        addresses: HashMap::new(),
+        wallet_password_hash: "unused".to_string(),
+        fiat_currency: FiatCurrency::Usd,
+        usd_exchange_rate: 1.0,
+        assets: vec![
+            Asset {
+                symbol: "ETH".to_string(),
+                unicode_symbol: None,
+                name: "Ether".to_string(),
+                balance: "0".to_string(),
+                decimals: 18,
+                price_usd: 0.0,
+                change_24h: 0.0,
+                network: "ethereum".to_string(),
+                token_address: None,
+            },
+            Asset {
+                symbol: "USDC".to_string(),
+                unicode_symbol: None,
+                name: "USD Coin".to_string(),
+                balance: "0".to_string(),
+                decimals: 6,
+                price_usd: 0.0,
+                change_24h: 0.0,
+                network: "ethereum".to_string(),
+                token_address: Some("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string()),
+            },
+        ],
+        activity: vec![],
+        enabled_networks: vec!["ethereum".to_string()],
+        auto_lock_timeout_secs: None,
+        use_crypto_symbols: false,
+    };
+    let recipient = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+
+    assert!(validate_transfer(&wallet, recipient, "ETH", "ethereum", None, "1").is_ok());
+    assert!(
+        validate_transfer(
+            &wallet,
+            recipient,
+            "USDC",
+            "ethereum",
+            Some("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
+            "1",
+        )
+        .is_ok()
+    );
+}
+
+#[test]
 fn injective_requires_the_standard_bech32_account_encoding() {
     let wrong_hrp = bech32::encode::<Bech32>(Hrp::parse("cosmos").unwrap(), &[0; 20]).unwrap();
     let wrong_length = bech32::encode::<Bech32>(Hrp::parse("inj").unwrap(), &[0; 19]).unwrap();

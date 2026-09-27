@@ -1,4 +1,15 @@
-use super::{ensure_native_balance_covers_debit, required_native_debit};
+use super::{
+    ensure_native_balance_covers_debit, ensure_token_balance_covers_amount, required_native_debit,
+};
+
+#[test]
+fn erc20_send_requires_live_token_amount() {
+    assert_eq!(
+        ensure_token_balance_covers_amount(999, 1_000, "USDC").unwrap_err(),
+        "Insufficient USDC balance"
+    );
+    assert!(ensure_token_balance_covers_amount(1_000, 1_000, "USDC").is_ok());
+}
 
 #[test]
 fn erc20_transfer_requires_native_fee_balance() {

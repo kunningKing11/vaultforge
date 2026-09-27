@@ -28,6 +28,7 @@ A local-first crypto wallet desktop app built with a React frontend, Coinbase De
 - Sign and review chain-specific transactions before broadcasting them
 - Basic real transfer paths for BTC, EVM native/ERC-20, Solana native/classic SPL assets, Tron native, and XRP Ledger native XRP
 - Review provider-derived fees, total debit, selected fiat value, and post-send balance estimates
+- EVM native and ERC-20 sends recheck live chain balances before signing
 - Solana native/classic SPL sends recheck live RPC balances; classic SPL sends validate the mint, draw from live wallet-owned token accounts with ATA priority, account for recipient ATA rent, and simulate the signed transaction before broadcast
 - XRP Ledger native sends use live account balance, reserve, fee, and sequence data; they support classic addresses, destination tags, and short on-ledger memos
 - Encrypted local wallet persistence using the app data directory
