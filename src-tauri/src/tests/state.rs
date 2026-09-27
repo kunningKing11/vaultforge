@@ -1,8 +1,15 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use super::{AppState, StoredWalletMetadata, session_from_state};
+use super::{AppState, StoredWalletMetadata, clear_secret_string, session_from_state};
 use crate::dto::{Asset, FiatCurrency, Wallet};
+
+#[test]
+fn clear_secret_string_zeroizes_utf8_bytes() {
+    let mut secret = String::from("sëcret");
+    clear_secret_string(&mut secret);
+    assert_eq!(secret.as_bytes(), &[0; 7]);
+}
 
 #[test]
 fn locked_session_does_not_expose_secrets() {
