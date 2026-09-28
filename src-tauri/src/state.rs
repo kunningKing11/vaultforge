@@ -6,6 +6,7 @@ use zeroize::Zeroize;
 use crate::dto::{RefreshWarning, Wallet, WalletRefreshResult, WalletSession};
 use crate::providers::bitcoin::BitcoinAccountSnapshot;
 use crate::storage::read_stored_wallet;
+use crate::tx::evm_nonces::EvmNonceManager;
 
 pub(crate) fn clear_secret_string(s: &mut str) {
     s.zeroize();
@@ -28,9 +29,10 @@ pub(crate) struct AppState {
     pub(crate) stored_wallet: Option<StoredWalletMetadata>,
     pub(crate) encryption_key: Option<[u8; 32]>,
     pub(crate) storage_salt: Option<Vec<u8>>,
-    pub(crate) bitcoin_account: Option<BitcoinAccountSnapshot>,
     pub(crate) wallet_generation: u64,
     pub(crate) storage_path: PathBuf,
+    pub(crate) bitcoin_account: Option<BitcoinAccountSnapshot>,
+    pub(crate) evm_nonces: EvmNonceManager,
 }
 
 #[derive(Clone)]
@@ -52,9 +54,10 @@ impl AppState {
             stored_wallet,
             encryption_key: None,
             storage_salt: None,
-            bitcoin_account: None,
             wallet_generation: 0,
             storage_path,
+            bitcoin_account: None,
+            evm_nonces: EvmNonceManager::default(),
         }
     }
 

@@ -1,6 +1,10 @@
 use super::{
-    ensure_native_balance_covers_debit, ensure_token_balance_covers_amount, required_native_debit,
+    EvmNonceReservationGuard, ensure_native_balance_covers_debit,
+    ensure_token_balance_covers_amount, required_native_debit,
 };
+use crate::state::AppState;
+use std::path::PathBuf;
+use std::sync::Mutex;
 
 #[test]
 fn erc20_send_requires_live_token_amount() {
@@ -38,6 +42,62 @@ fn evm_native_requires_amount_plus_fee() {
     assert!(
         ensure_native_balance_covers_debit(1_021_000, required, "ETH", true, "transaction fee",)
             .is_ok()
+    );
+}
+
+#[test]
+fn evm_nonce_reservation_guard_keeps_committed_reservation() {
+    let state = Mutex::new(AppState::from_storage(PathBuf::from(
+        "/nonexistent/wallet.json",
+    )));
+    state
+        .lock()
+        .unwrap()
+        .evm_nonces
+        .reserve(1, "0xabc", 7)
+        .unwrap();
+
+    let mut reservation = EvmNonceReservationGuard::new(&state, 1, "0xabc".to_string(), 7);
+    reservation.keep();
+    drop(reservation);
+
+    assert!(
+        state
+            .lock()
+            .unwrap()
+            .evm_nonces
+            .reserve(1, "0xabc", 7)
+            .is_err()
+    );
+}
+
+#[test]
+fn evm_nonce_reservation_guard_releases_on_drop() {
+    let state = Mutex::new(AppState::from_storage(PathBuf::from(
+        "/nonexistent/wallet.json",
+    )));
+    state
+        .lock()
+        .unwrap()
+        .evm_nonces
+        .reserve(1, "0xabc", 7)
+        .unwrap();
+
+    drop(EvmNonceReservationGuard::new(
+        &state,
+        1,
+        "0xabc".to_string(),
+        7,
+    ));
+
+    assert_eq!(
+        state
+            .lock()
+            .unwrap()
+            .evm_nonces
+            .reserve(1, "0xabc", 7)
+            .unwrap(),
+        7
     );
 }
 

@@ -488,6 +488,12 @@ function WalletApplication({
             send: { ...current.send, signedTransaction },
           }));
           toast("Transaction signed locally.", "success");
+        } else {
+          await walletApi.cancelSignedTransaction({
+            network: signedTransaction.network,
+            from: signedTransaction.from,
+            nonce: signedTransaction.nonce,
+          });
         }
       } catch (error) {
         toast(formatError(error), "error");
@@ -511,6 +517,27 @@ function WalletApplication({
       }));
     }
   }, [runSessionCommand]);
+
+  const cancelSignedTransaction = useCallback(async () => {
+    const signed = stateRef.current.send.signedTransaction;
+    if (!signed || !beginOperation()) return;
+    try {
+      await walletApi.cancelSignedTransaction({
+        network: signed.network,
+        from: signed.from,
+        nonce: signed.nonce,
+      });
+      setState((current) => ({
+        ...current,
+        send: { ...current.send, signedTransaction: null },
+      }));
+      toast("Signed transaction canceled.", "success");
+    } catch (error) {
+      toast(formatError(error), "error");
+    } finally {
+      endOperation();
+    }
+  }, [beginOperation, endOperation, toast]);
 
   const swapTokens = useCallback(
     async (fromSymbol: string, toSymbol: string, amount: string) => {
@@ -703,6 +730,7 @@ function WalletApplication({
           copyText={copyText}
           isOffline={isOffline}
           onBroadcast={broadcastSignedTransaction}
+          onCancelSignedTransaction={cancelSignedTransaction}
           onLock={() => void lockWallet()}
           onRefresh={() => void refreshPortfolio()}
           onSign={signTransaction}
@@ -1208,6 +1236,7 @@ function WalletShell({
   copyText,
   isOffline,
   onBroadcast,
+  onCancelSignedTransaction,
   onLock,
   onRefresh,
   onSign,
@@ -1225,6 +1254,7 @@ function WalletShell({
   copyText: (value: string, message: string) => Promise<void>;
   isOffline: boolean;
   onBroadcast: () => Promise<void>;
+  onCancelSignedTransaction: () => Promise<void>;
   onLock: () => void;
   onRefresh: () => void;
   onSign: (draft: SendDraft) => Promise<void>;
@@ -1328,6 +1358,7 @@ function WalletShell({
             colorScheme={colorScheme}
             copyText={copyText}
             onBroadcast={onBroadcast}
+            onCancelSignedTransaction={onCancelSignedTransaction}
             onSign={onSign}
             onSaveSettings={onSaveSettings}
             onSwap={onSwap}
@@ -1350,6 +1381,7 @@ function WalletView({
   colorScheme,
   copyText,
   onBroadcast,
+  onCancelSignedTransaction,
   onSign,
   onSaveSettings,
   onSwap,
@@ -1365,6 +1397,7 @@ function WalletView({
   colorScheme: ColorScheme;
   copyText: (value: string, message: string) => Promise<void>;
   onBroadcast: () => Promise<void>;
+  onCancelSignedTransaction: () => Promise<void>;
   onSign: (draft: SendDraft) => Promise<void>;
   onSaveSettings: (
     settings: Parameters<typeof walletApi.updateWalletSettings>[0],
@@ -1382,6 +1415,7 @@ function WalletView({
       <SendView
         busy={state.operation.busy}
         onBroadcast={onBroadcast}
+        onCancelSignedTransaction={onCancelSignedTransaction}
         onSign={onSign}
         setState={setState}
         state={state}
@@ -2147,6 +2181,7 @@ function DashboardView({
 function SendView({
   busy,
   onBroadcast,
+  onCancelSignedTransaction,
   onSign,
   setState,
   state,
@@ -2154,6 +2189,7 @@ function SendView({
 }: {
   busy: boolean;
   onBroadcast: () => Promise<void>;
+  onCancelSignedTransaction: () => Promise<void>;
   onSign: (draft: SendDraft) => Promise<void>;
   setState: React.Dispatch<React.SetStateAction<AppState>>;
   state: AppState;
@@ -2164,7 +2200,7 @@ function SendView({
       <SignedTransactionView
         busy={busy}
         onBroadcast={onBroadcast}
-        setState={setState}
+        onCancel={onCancelSignedTransaction}
         signed={state.send.signedTransaction}
         wallet={wallet}
       />
@@ -2296,14 +2332,14 @@ function SendForm({
 
 function SignedTransactionView({
   busy,
+  onCancel,
   onBroadcast,
-  setState,
   signed,
   wallet,
 }: {
   busy: boolean;
+  onCancel: () => Promise<void>;
   onBroadcast: () => Promise<void>;
-  setState: React.Dispatch<React.SetStateAction<AppState>>;
   signed: SignedTransaction;
   wallet: Extract<WalletState, { status: "unlocked" }>;
 }) {
@@ -2357,15 +2393,7 @@ function SignedTransactionView({
         <Button loading={busy} onClick={() => void onBroadcast()}>
           Broadcast signed transaction
         </Button>
-        <Button
-          onClick={() =>
-            setState((current) => ({
-              ...current,
-              send: { ...current.send, signedTransaction: null },
-            }))
-          }
-          variant="secondary"
-        >
+        <Button loading={busy} onClick={() => void onCancel()} variant="secondary">
           Edit transaction
         </Button>
       </HStack>

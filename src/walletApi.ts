@@ -50,6 +50,8 @@ export const walletApi = {
     note: string;
     destinationTag: number | null;
   }) => invoke<SignedTransaction>("sign_transaction", args),
+  cancelSignedTransaction: (args: { network: NetworkId; from: string; nonce: string }) =>
+    invoke<null>("cancel_signed_transaction", args),
   sendTransaction: (args: { signed: SignedTransaction }) =>
     invoke<WalletSession>("send_transaction", args),
   swapTokens: (args: { fromSymbol: string; toSymbol: string; amount: string }) =>

@@ -67,6 +67,7 @@ pub fn run() {
             commands::wallet::clear_wallet,
             commands::tx::sign_transaction,
             commands::tx::send_transaction,
+            commands::tx::cancel_signed_transaction,
             commands::tx::swap_tokens,
             commands::tx::check_transaction_status,
         ])

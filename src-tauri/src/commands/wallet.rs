@@ -318,6 +318,7 @@ pub(crate) async fn unlock_wallet(
 #[tauri::command]
 pub(crate) fn lock_wallet(state: State<'_, Mutex<AppState>>) -> Result<(), String> {
     let mut state = state.lock().map_err(|_| "State lock failed")?;
+    state.evm_nonces.cancel_all_unbroadcast();
     if let Some(ref mut wallet) = state.wallet {
         clear_secret_string(&mut wallet.mnemonic);
     }
@@ -342,6 +343,7 @@ pub(crate) fn clear_wallet(state: State<'_, Mutex<AppState>>) -> Result<WalletSe
     if state.storage_path.exists() {
         fs::remove_file(&state.storage_path).map_err(|_| "Failed to remove stored wallet")?;
     }
+    state.evm_nonces.cancel_all_unbroadcast();
     if let Some(ref mut wallet) = state.wallet {
         clear_secret_string(&mut wallet.mnemonic);
     }

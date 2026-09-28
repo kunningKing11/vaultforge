@@ -39,6 +39,43 @@ use crate::tx::xrpl::sign_xrpl_payment;
 use crate::validation::validate_transfer;
 use zeroize::{Zeroize, Zeroizing};
 
+struct EvmNonceReservationGuard<'a> {
+    state: &'a Mutex<AppState>,
+    chain_id: u64,
+    address: String,
+    nonce: u64,
+    armed: bool,
+}
+
+impl<'a> EvmNonceReservationGuard<'a> {
+    fn new(state: &'a Mutex<AppState>, chain_id: u64, address: String, nonce: u64) -> Self {
+        Self {
+            state,
+            chain_id,
+            address,
+            nonce,
+            armed: true,
+        }
+    }
+
+    fn keep(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for EvmNonceReservationGuard<'_> {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        if let Ok(mut state) = self.state.lock() {
+            state
+                .evm_nonces
+                .cancel_unbroadcast(self.chain_id, &self.address, self.nonce);
+        }
+    }
+}
+
 pub(crate) fn required_native_debit(
     is_native_transfer: bool,
     amount: u128,
@@ -394,7 +431,7 @@ pub(crate) async fn sign_transaction(
                 ensure_token_balance_covers_amount(token_balance, value, &symbol)?;
             }
 
-            let nonce = fetch_evm_nonce(client, config, &address).await?;
+            let rpc_pending_nonce = fetch_evm_nonce(client, config, &address).await?;
             let fee_estimate = fetch_evm_fee_estimate(client, config).await?;
             let gas_limit = if tx_data.is_empty() {
                 fetch_evm_estimated_gas(client, config, &address, &tx_to, value, &[]).await?
@@ -415,10 +452,19 @@ pub(crate) async fn sign_transaction(
                 is_native,
                 "transaction fee",
             )?;
+            let chain_id = config.chain_id()?;
             let signing_key = signing_key_from_mnemonic(&mnemonic)?;
+            let nonce = {
+                let mut app_state = state.lock().map_err(|_| "State lock failed")?;
+                app_state
+                    .evm_nonces
+                    .reserve(chain_id, &address, rpc_pending_nonce)?
+            };
+            let mut nonce_reservation =
+                EvmNonceReservationGuard::new(state.inner(), chain_id, address.clone(), nonce);
             let (_, tx_hash, raw_tx_hex, r_hex, s_hex) = sign_eip1559_transfer(&Eip1559TxDraft {
                 signing_key: &signing_key,
-                chain_id: config.chain_id()?,
+                chain_id,
                 nonce,
                 max_priority_fee_per_gas,
                 max_fee_per_gas,
@@ -446,7 +492,7 @@ pub(crate) async fn sign_transaction(
             }
             .to_string();
 
-            Ok(SignedTransaction {
+            let signed = SignedTransaction {
                 from: address,
                 to: display_to,
                 symbol: symbol.clone(),
@@ -466,7 +512,9 @@ pub(crate) async fn sign_transaction(
                 fiat_value: (value as f64) * asset.price_usd,
                 raw_tx: Some(raw_tx_hex),
                 tx_hash: Some(tx_hash),
-            })
+            };
+            nonce_reservation.keep();
+            Ok(signed)
         }
         "xrpl" if symbol == "XRP" => {
             let from = addresses
@@ -536,6 +584,27 @@ pub(crate) async fn sign_transaction(
     }
 }
 
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) fn cancel_signed_transaction(
+    state: State<'_, Mutex<AppState>>,
+    network: String,
+    from: String,
+    nonce: String,
+) -> Result<(), String> {
+    let Some(config) = evm_config_by_id(&network) else {
+        return Ok(());
+    };
+    let chain_id = config.chain_id()?;
+    let nonce = nonce
+        .parse::<u64>()
+        .map_err(|_| "Invalid EVM nonce in canceled transaction".to_string())?;
+    let mut state = state.lock().map_err(|_| "State lock failed")?;
+    if !state.evm_nonces.cancel_unbroadcast(chain_id, &from, nonce) {
+        return Err("EVM transaction is no longer awaiting broadcast".to_string());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub(crate) async fn send_transaction(
     state: State<'_, Mutex<AppState>>,
@@ -582,7 +651,25 @@ pub(crate) async fn send_transaction(
         network_id if evm_config_by_id(network_id).is_some() => {
             let config = evm_config_by_id(network_id)
                 .ok_or_else(|| format!("No EVM chain configured for {network_id}"))?;
-            broadcast_evm_tx(client, config, raw_tx).await?
+            let chain_id = config.chain_id()?;
+            let nonce = signed
+                .nonce
+                .parse::<u64>()
+                .map_err(|_| "Invalid EVM nonce in signed transaction".to_string())?;
+            {
+                let mut state = state.lock().map_err(|_| "State lock failed")?;
+                state
+                    .evm_nonces
+                    .begin_broadcast(chain_id, &signed.from, nonce)?;
+            }
+            let tx_hash = broadcast_evm_tx(client, config, raw_tx).await?;
+            {
+                let mut state = state.lock().map_err(|_| "State lock failed")?;
+                state
+                    .evm_nonces
+                    .mark_broadcast(chain_id, &signed.from, nonce)?;
+            }
+            tx_hash
         }
         network_id => return Err(format!("Unsupported network: {network_id}")),
     };

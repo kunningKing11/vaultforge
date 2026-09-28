@@ -28,7 +28,7 @@ The below items are the priorities for this project and an item will probably ge
     - [x] ERC-20 transfers
     - [x] native gas balance checks
     - [x] token contract address tracking
-    - [ ] pending nonce handling / local nonce manager
+    - [x] pending nonce handling / local nonce manager
     - [x] EIP-1559 fee estimation via `eth_feeHistory`
   - [x] Solana (SOL) basic transfers
     - [x] native SOL transfers
