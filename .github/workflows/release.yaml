@@ -236,11 +236,11 @@ jobs:
         run: |
           set -euo pipefail
           previous_tag="$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)"
-          current_lines="$(git ls-files -- . ':(exclude)package-lock.json' ':(exclude)src-tauri/Cargo.lock' | xargs wc -l | tail -n 1 | awk '{print $1}')"
+          current_lines="$(git ls-files -- . ':(exclude)bun.lock' ':(exclude)src-tauri/Cargo.lock' | xargs wc -l | tail -n 1 | awk '{print $1}')"
 
           count_lines_at_ref() {
             git ls-tree -r --name-only "$1" \
-              | grep -Ev '^(package-lock\.json|src-tauri/Cargo\.lock)$' \
+              | grep -Ev '^(bun\.lock|src-tauri/Cargo\.lock)$' \
               | while IFS= read -r path; do
                   git cat-file blob "$1:$path"
                 done \
