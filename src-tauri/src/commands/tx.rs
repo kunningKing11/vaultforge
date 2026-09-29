@@ -229,6 +229,134 @@ pub(crate) async fn sign_transaction(
                 tx_hash: Some(signed_btc.txid),
             })
         }
+        network_id if evm_config_by_id(network_id).is_some() => {
+            let config = evm_config_by_id(network_id)
+                .ok_or_else(|| format!("No EVM chain configured for network {network_id}"))?;
+
+            let native_symbol = config.native_asset.symbol.as_str();
+            let is_native = symbol == native_symbol;
+            let address = addresses
+                .get("evm")
+                .cloned()
+                .ok_or_else(|| "Wallet EVM address is not available".to_string())?;
+
+            let (tx_to, tx_data, display_to) = if is_native {
+                (to.clone(), Vec::new(), to.clone())
+            } else {
+                let token_address = asset
+                    .token_address
+                    .as_deref()
+                    .ok_or_else(|| format!("{symbol} token address is not available"))?;
+                validate_evm_address(token_address)?;
+                (
+                    token_address.to_string(),
+                    encode_erc20_transfer(&to, value)?,
+                    to.clone(),
+                )
+            };
+
+            let native_balance = fetch_evm_native_balance(client, config, &address).await?;
+            let token_balance = if is_native {
+                None
+            } else {
+                let token_address = asset
+                    .token_address
+                    .as_deref()
+                    .ok_or_else(|| format!("{symbol} token address is not available"))?;
+                Some(
+                    fetch_evm_token_balance_for_contract(client, config, token_address, &address)
+                        .await?,
+                )
+            };
+            if let Some(token_balance) = token_balance {
+                ensure_token_balance_covers_amount(token_balance, value, &symbol)?;
+            }
+
+            let rpc_pending_nonce = fetch_evm_nonce(client, config, &address).await?;
+            let fee_estimate = fetch_evm_fee_estimate(client, config).await?;
+            let gas_limit = if tx_data.is_empty() {
+                fetch_evm_estimated_gas(client, config, &address, &tx_to, value, &[]).await?
+            } else {
+                fetch_evm_estimated_gas(client, config, &address, &tx_to, 0, &tx_data).await?
+            };
+
+            let max_priority_fee_per_gas = fee_estimate.max_priority_fee_per_gas;
+            let max_fee_per_gas = fee_estimate.max_fee_per_gas;
+            let total_fee_wei: u128 = gas_limit as u128 * max_fee_per_gas as u128;
+
+            let required_native =
+                required_native_debit(is_native, value, total_fee_wei, native_symbol)?;
+            ensure_native_balance_covers_debit(
+                native_balance,
+                required_native,
+                native_symbol,
+                is_native,
+                "transaction fee",
+            )?;
+            let chain_id = config.chain_id()?;
+            let signing_key = signing_key_from_mnemonic(&mnemonic)?;
+            let nonce = {
+                let mut app_state = state.lock().map_err(|_| "State lock failed")?;
+                app_state
+                    .evm_nonces
+                    .reserve(chain_id, &address, rpc_pending_nonce)?
+            };
+            let mut nonce_reservation =
+                EvmNonceReservationGuard::new(state.inner(), chain_id, address.clone(), nonce);
+            let (_, tx_hash, raw_tx_hex, r_hex, s_hex) = sign_eip1559_transfer(&Eip1559TxDraft {
+                signing_key: &signing_key,
+                chain_id,
+                nonce,
+                max_priority_fee_per_gas,
+                max_fee_per_gas,
+                gas_limit,
+                to: &tx_to,
+                value: if tx_data.is_empty() { value } else { 0 },
+                data: &tx_data,
+            })?;
+
+            let fee_str = total_fee_wei.to_string();
+            let total_debit_str = if is_native {
+                required_native.to_string()
+            } else {
+                total_fee_wei.to_string()
+            };
+            let signature_str = format!("0x{}{}", r_hex, s_hex);
+
+            let post_balance = match token_balance {
+                None => native_balance
+                    .checked_sub(required_native)
+                    .ok_or_else(|| format!("Insufficient {native_symbol} balance"))?,
+                Some(token_balance) => token_balance
+                    .checked_sub(value)
+                    .ok_or_else(|| format!("Insufficient {symbol} balance"))?,
+            }
+            .to_string();
+
+            let signed = SignedTransaction {
+                from: address,
+                to: display_to,
+                symbol: symbol.clone(),
+                amount: value.to_string(),
+                note: note.trim().to_string(),
+                destination_tag: None,
+                network: config.id.to_string(),
+                nonce: nonce.to_string(),
+                signed_at: Utc::now().to_rfc3339(),
+                payload_hash: tx_hash.clone(),
+                signature: signature_str,
+                fee_amount: fee_str,
+                fee_symbol: native_symbol.to_string(),
+                total_debit: total_debit_str,
+                post_balance,
+                decimals,
+                fiat_value: (value as f64) * asset.price_usd,
+                raw_tx: Some(raw_tx_hex),
+                tx_hash: Some(tx_hash),
+            };
+            nonce_reservation.keep();
+            Ok(signed)
+        }
         "solana" => {
             let from = addresses
                 .get("solana")
@@ -388,134 +516,6 @@ pub(crate) async fn sign_transaction(
                 tx_hash: Some(signed_trx.txid),
             })
         }
-        network_id if evm_config_by_id(network_id).is_some() => {
-            let config = evm_config_by_id(network_id)
-                .ok_or_else(|| format!("No EVM chain configured for network {network_id}"))?;
-
-            let native_symbol = config.native_asset.symbol.as_str();
-            let is_native = symbol == native_symbol;
-            let address = addresses
-                .get("evm")
-                .cloned()
-                .ok_or_else(|| "Wallet EVM address is not available".to_string())?;
-
-            let (tx_to, tx_data, display_to) = if is_native {
-                (to.clone(), Vec::new(), to.clone())
-            } else {
-                let token_address = asset
-                    .token_address
-                    .as_deref()
-                    .ok_or_else(|| format!("{symbol} token address is not available"))?;
-                validate_evm_address(token_address)?;
-                (
-                    token_address.to_string(),
-                    encode_erc20_transfer(&to, value)?,
-                    to.clone(),
-                )
-            };
-
-            let native_balance = fetch_evm_native_balance(client, config, &address).await?;
-            let token_balance = if is_native {
-                None
-            } else {
-                let token_address = asset
-                    .token_address
-                    .as_deref()
-                    .ok_or_else(|| format!("{symbol} token address is not available"))?;
-                Some(
-                    fetch_evm_token_balance_for_contract(client, config, token_address, &address)
-                        .await?,
-                )
-            };
-            if let Some(token_balance) = token_balance {
-                ensure_token_balance_covers_amount(token_balance, value, &symbol)?;
-            }
-
-            let rpc_pending_nonce = fetch_evm_nonce(client, config, &address).await?;
-            let fee_estimate = fetch_evm_fee_estimate(client, config).await?;
-            let gas_limit = if tx_data.is_empty() {
-                fetch_evm_estimated_gas(client, config, &address, &tx_to, value, &[]).await?
-            } else {
-                fetch_evm_estimated_gas(client, config, &address, &tx_to, 0, &tx_data).await?
-            };
-
-            let max_priority_fee_per_gas = fee_estimate.max_priority_fee_per_gas;
-            let max_fee_per_gas = fee_estimate.max_fee_per_gas;
-            let total_fee_wei: u128 = gas_limit as u128 * max_fee_per_gas as u128;
-
-            let required_native =
-                required_native_debit(is_native, value, total_fee_wei, native_symbol)?;
-            ensure_native_balance_covers_debit(
-                native_balance,
-                required_native,
-                native_symbol,
-                is_native,
-                "transaction fee",
-            )?;
-            let chain_id = config.chain_id()?;
-            let signing_key = signing_key_from_mnemonic(&mnemonic)?;
-            let nonce = {
-                let mut app_state = state.lock().map_err(|_| "State lock failed")?;
-                app_state
-                    .evm_nonces
-                    .reserve(chain_id, &address, rpc_pending_nonce)?
-            };
-            let mut nonce_reservation =
-                EvmNonceReservationGuard::new(state.inner(), chain_id, address.clone(), nonce);
-            let (_, tx_hash, raw_tx_hex, r_hex, s_hex) = sign_eip1559_transfer(&Eip1559TxDraft {
-                signing_key: &signing_key,
-                chain_id,
-                nonce,
-                max_priority_fee_per_gas,
-                max_fee_per_gas,
-                gas_limit,
-                to: &tx_to,
-                value: if tx_data.is_empty() { value } else { 0 },
-                data: &tx_data,
-            })?;
-
-            let fee_str = total_fee_wei.to_string();
-            let total_debit_str = if is_native {
-                required_native.to_string()
-            } else {
-                total_fee_wei.to_string()
-            };
-            let signature_str = format!("0x{}{}", r_hex, s_hex);
-
-            let post_balance = match token_balance {
-                None => native_balance
-                    .checked_sub(required_native)
-                    .ok_or_else(|| format!("Insufficient {native_symbol} balance"))?,
-                Some(token_balance) => token_balance
-                    .checked_sub(value)
-                    .ok_or_else(|| format!("Insufficient {symbol} balance"))?,
-            }
-            .to_string();
-
-            let signed = SignedTransaction {
-                from: address,
-                to: display_to,
-                symbol: symbol.clone(),
-                amount: value.to_string(),
-                note: note.trim().to_string(),
-                destination_tag: None,
-                network: config.id.to_string(),
-                nonce: nonce.to_string(),
-                signed_at: Utc::now().to_rfc3339(),
-                payload_hash: tx_hash.clone(),
-                signature: signature_str,
-                fee_amount: fee_str,
-                fee_symbol: native_symbol.to_string(),
-                total_debit: total_debit_str,
-                post_balance,
-                decimals,
-                fiat_value: (value as f64) * asset.price_usd,
-                raw_tx: Some(raw_tx_hex),
-                tx_hash: Some(tx_hash),
-            };
-            nonce_reservation.keep();
-            Ok(signed)
-        }
         "xrpl" if symbol == "XRP" => {
             let from = addresses
                 .get("xrpl")
@@ -639,15 +639,6 @@ pub(crate) async fn send_transaction(
         "bitcoin" if signed.symbol == "BTC" => {
             broadcast_bitcoin_transaction(client, raw_tx).await?
         }
-        "solana" => broadcast_solana_transaction(client, raw_tx).await?,
-        "tron" if signed.symbol == "TRX" => {
-            let tx: serde_json::Value = serde_json::from_str(raw_tx)
-                .map_err(|_| "Invalid signed Tron transaction JSON".to_string())?;
-            broadcast_tron_transaction(client, &tx).await?
-        }
-        "xrpl" if signed.symbol == "XRP" => {
-            broadcast_xrpl_transaction(client, raw_tx, &signed.payload_hash).await?
-        }
         network_id if evm_config_by_id(network_id).is_some() => {
             let config = evm_config_by_id(network_id)
                 .ok_or_else(|| format!("No EVM chain configured for {network_id}"))?;
@@ -670,6 +661,15 @@ pub(crate) async fn send_transaction(
                     .mark_broadcast(chain_id, &signed.from, nonce)?;
             }
             tx_hash
+        }
+        "solana" => broadcast_solana_transaction(client, raw_tx).await?,
+        "tron" if signed.symbol == "TRX" => {
+            let tx: serde_json::Value = serde_json::from_str(raw_tx)
+                .map_err(|_| "Invalid signed Tron transaction JSON".to_string())?;
+            broadcast_tron_transaction(client, &tx).await?
+        }
+        "xrpl" if signed.symbol == "XRP" => {
+            broadcast_xrpl_transaction(client, raw_tx, &signed.payload_hash).await?
         }
         network_id => return Err(format!("Unsupported network: {network_id}")),
     };
