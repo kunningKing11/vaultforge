@@ -49,7 +49,7 @@
         }
       },
       "rpm": {
-        "release": "2",
+        "release": "1",
         "files": {
           "/usr/share/metainfo/com.vaultforge.wallet.metainfo.xml": "linux/com.vaultforge.wallet.metainfo.xml",
           "/usr/share/icons/hicolor/scalable/apps/vaultforge-wallet.svg": "icons/icon.svg"
