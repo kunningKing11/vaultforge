@@ -11,6 +11,7 @@ use crate::providers::prices::{
     CoinGeckoPriceResponse, TokenMetadata, fetch_market_prices, fetch_token_metadata,
     fetch_usd_exchange_rate, price_id_for_asset,
 };
+use crate::registry::network_by_id;
 use crate::state::{AppState, refresh_result_from_state};
 use crate::storage::persist_state_wallet;
 
@@ -209,11 +210,10 @@ pub(crate) async fn refresh_asset_prices(
         }
     }
 
-    warnings.extend(
-        failed_token_networks
-            .into_iter()
-            .map(|network| value_warning(format!("{network} token prices"))),
-    );
+    warnings.extend(failed_token_networks.into_iter().map(|network| {
+        let name = network_by_id(&network).map_or(network.as_str(), |config| &config.name);
+        value_warning(format!("{name} token prices"))
+    }));
     if missing_simple_prices && !market_prices_failed {
         warnings.push(value_warning("Market prices"));
     }
