@@ -11,7 +11,7 @@ use crate::providers::solana::SolanaTokenAccount;
 #[test]
 fn combines_classic_spl_token_accounts_with_ata_priority() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-    let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, ALL_NETWORKS).unwrap();
+    let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, "", ALL_NETWORKS).unwrap();
     let owner = addresses.get("solana").unwrap();
     let mint = "So11111111111111111111111111111111111111112";
     let ata = solana_associated_token_address(owner, mint).unwrap();
@@ -49,6 +49,7 @@ fn combines_classic_spl_token_accounts_with_ata_priority() {
 
     let signed = sign_solana_token_transfer_with_blockhash(SolanaTokenTransferDraft {
         mnemonic,
+        bip39_passphrase: "",
         from: owner,
         to: "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
         mint,
@@ -79,10 +80,11 @@ fn derives_solana_associated_token_address() {
 #[test]
 fn signs_solana_native_transfer() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-    let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, ALL_NETWORKS).unwrap();
+    let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, "", ALL_NETWORKS).unwrap();
     let from = addresses.get("solana").unwrap();
     let signed = sign_solana_transfer_with_blockhash(
         mnemonic,
+        "",
         from,
         "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
         1_000_000,
@@ -103,7 +105,7 @@ fn signs_solana_native_transfer() {
 #[test]
 fn signs_solana_spl_token_transfer() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-    let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, ALL_NETWORKS).unwrap();
+    let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, "", ALL_NETWORKS).unwrap();
     let from = addresses.get("solana").unwrap();
     let source = SolanaTokenSource {
         address: solana_associated_token_address(
@@ -115,6 +117,7 @@ fn signs_solana_spl_token_transfer() {
     };
     let signed = sign_solana_token_transfer_with_blockhash(SolanaTokenTransferDraft {
         mnemonic,
+        bip39_passphrase: "",
         from,
         to: "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ",
         mint: "So11111111111111111111111111111111111111112",

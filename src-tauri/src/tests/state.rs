@@ -17,6 +17,7 @@ fn locked_session_does_not_expose_secrets() {
     let wallet = Wallet {
         name: "Secret Wallet".to_string(),
         mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about".to_string(),
+        bip39_passphrase: "private passphrase".to_string(),
         created_at: "2025-01-01T00:00:00Z".to_string(),
         addresses: HashMap::new(),
         wallet_password_hash: "deadbeef".to_string(),
@@ -41,6 +42,11 @@ fn locked_session_does_not_expose_secrets() {
     assert!(session.usd_exchange_rate.is_none());
     assert!(session.assets.is_empty());
     assert!(session.activity.is_empty());
+    assert!(
+        !serde_json::to_string(&session)
+            .unwrap()
+            .contains("private passphrase")
+    );
 }
 
 fn unlocked_tron_state() -> AppState {
@@ -48,6 +54,7 @@ fn unlocked_tron_state() -> AppState {
     state.wallet = Some(Wallet {
         name: "Tron wallet".to_string(),
         mnemonic: "test mnemonic".to_string(),
+        bip39_passphrase: String::new(),
         created_at: "2026-08-28T00:00:00Z".to_string(),
         addresses: HashMap::from([(
             "tron".to_string(),

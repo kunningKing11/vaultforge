@@ -14,10 +14,11 @@ pub(crate) struct SignedTronTransfer {
 /// Verifies a provider-built Tron transfer's sender and txID before signing it.
 pub(crate) fn sign_tron_unsigned_transfer(
     mnemonic: &str,
+    bip39_passphrase: &str,
     from: &str,
     mut unsigned_tx: serde_json::Value,
 ) -> Result<SignedTronTransfer, String> {
-    let private_key = tron_private_key_from_mnemonic(mnemonic)?;
+    let private_key = tron_private_key_from_mnemonic(mnemonic, bip39_passphrase)?;
     let derived = tron_address_from_private_key(&private_key)?;
     if derived != from {
         return Err("Tron signing key does not match from address".to_string());
@@ -80,10 +81,11 @@ fn recovery_id_for_signature(
 pub(crate) async fn sign_tron_transfer(
     client: &reqwest::Client,
     mnemonic: &str,
+    bip39_passphrase: &str,
     from: &str,
     to: &str,
     amount_sun: u64,
 ) -> Result<SignedTronTransfer, String> {
     let unsigned_tx = create_tron_transfer(client, from, to, amount_sun).await?;
-    sign_tron_unsigned_transfer(mnemonic, from, unsigned_tx)
+    sign_tron_unsigned_transfer(mnemonic, bip39_passphrase, from, unsigned_tx)
 }

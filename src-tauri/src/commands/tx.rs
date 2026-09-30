@@ -143,7 +143,7 @@ pub(crate) async fn sign_transaction(
 ) -> Result<SignedTransaction, String> {
     validate_unlocked(&state)?;
 
-    let (mnemonic, addresses, assets, bitcoin_account) = {
+    let (mnemonic, bip39_passphrase, addresses, assets, bitcoin_account) = {
         let state = state.lock().map_err(|_| "State lock failed")?;
         let wallet = state
             .wallet
@@ -159,6 +159,7 @@ pub(crate) async fn sign_transaction(
         )?;
         (
             Zeroizing::new(wallet.mnemonic.clone()),
+            Zeroizing::new(wallet.bip39_passphrase.clone()),
             wallet.addresses.clone(),
             wallet.assets.clone(),
             state.bitcoin_account.clone(),
@@ -203,9 +204,16 @@ pub(crate) async fn sign_transaction(
             let bitcoin_account = bitcoin_account
                 .as_ref()
                 .ok_or_else(|| "Bitcoin account discovery is unavailable".to_string())?;
-            let signed_btc =
-                sign_bitcoin_transfer(client, &mnemonic, &from, &to, amount_sats, bitcoin_account)
-                    .await?;
+            let signed_btc = sign_bitcoin_transfer(
+                client,
+                &mnemonic,
+                &bip39_passphrase,
+                &from,
+                &to,
+                amount_sats,
+                bitcoin_account,
+            )
+            .await?;
 
             Ok(SignedTransaction {
                 from,
@@ -294,7 +302,7 @@ pub(crate) async fn sign_transaction(
                 "transaction fee",
             )?;
             let chain_id = config.chain_id()?;
-            let signing_key = signing_key_from_mnemonic(&mnemonic)?;
+            let signing_key = signing_key_from_mnemonic(&mnemonic, &bip39_passphrase)?;
             let nonce = {
                 let mut app_state = state.lock().map_err(|_| "State lock failed")?;
                 app_state
@@ -370,7 +378,8 @@ pub(crate) async fn sign_transaction(
             let mut source_token_balance = None;
 
             let signed_sol = if symbol == "SOL" {
-                sign_solana_transfer(client, &mnemonic, &from, &to, amount_u64).await?
+                sign_solana_transfer(client, &mnemonic, &bip39_passphrase, &from, &to, amount_u64)
+                    .await?
             } else {
                 let mint = asset
                     .token_address
@@ -401,6 +410,7 @@ pub(crate) async fn sign_transaction(
                 sign_solana_token_transfer(
                     client,
                     &mnemonic,
+                    &bip39_passphrase,
                     &from,
                     &to,
                     mint,
@@ -481,7 +491,9 @@ pub(crate) async fn sign_transaction(
                 .balance
                 .parse()
                 .map_err(|_| "Invalid TRX balance".to_string())?;
-            let signed_trx = sign_tron_transfer(client, &mnemonic, &from, &to, amount_sun).await?;
+            let signed_trx =
+                sign_tron_transfer(client, &mnemonic, &bip39_passphrase, &from, &to, amount_sun)
+                    .await?;
             let fee_sun = signed_trx.fee_sun as u128;
             let required_trx = required_native_debit(true, value, fee_sun, "TRX")?;
             ensure_native_balance_covers_debit(
@@ -538,7 +550,7 @@ pub(crate) async fn sign_transaction(
                 ));
             }
 
-            let mut private_key = xrpl_private_key_from_mnemonic(&mnemonic)?;
+            let mut private_key = xrpl_private_key_from_mnemonic(&mnemonic, &bip39_passphrase)?;
             let signed = sign_xrpl_payment(
                 &private_key,
                 &from,

@@ -23,6 +23,7 @@ A local-first crypto wallet desktop app built with a React frontend, Coinbase De
 ## Features
 
 - Create, import, lock, and unlock a wallet session
+- Optional BIP-39 passphrase when creating or importing a wallet
 - Portfolio dashboard with token balances, allocation, weighted 24h change, optional Unicode crypto symbols, and USD, EUR, GBP, or JPY valuation selectable during setup or in settings
 - Save the wallet name, display currency, auto-lock timeout, and crypto-symbol preference together from settings
 - Sign and review chain-specific transactions before broadcasting them

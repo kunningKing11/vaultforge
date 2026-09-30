@@ -1,7 +1,7 @@
 use chrono::Utc;
 use std::{fs, sync::Mutex};
 use tauri::State;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::activity::{activity, hash_secret};
 use crate::commands::market::refresh_wallet_portfolio;
@@ -24,7 +24,11 @@ use crate::validation::{clean_name, validate_wallet_password};
 
 /// Derives and inserts a missing Filecoin address into an older wallet.
 pub(crate) fn refresh_filecoin_address(wallet: &mut Wallet) -> Result<(), String> {
-    let addresses = derive_addresses_from_mnemonic_filtered(&wallet.mnemonic, &["filecoin"])?;
+    let addresses = derive_addresses_from_mnemonic_filtered(
+        &wallet.mnemonic,
+        &wallet.bip39_passphrase,
+        &["filecoin"],
+    )?;
     let filecoin_address = addresses
         .get("filecoin")
         .cloned()
@@ -37,13 +41,14 @@ pub(crate) fn refresh_filecoin_address(wallet: &mut Wallet) -> Result<(), String
 
 fn initialize_bitcoin_account(
     mnemonic: &str,
+    bip39_passphrase: &str,
     enabled_networks: &[String],
 ) -> Result<Option<BitcoinAccountSnapshot>, String> {
     if !enabled_networks.iter().any(|network| network == "bitcoin") {
         return Ok(None);
     }
     Ok(Some(BitcoinAccountSnapshot::new(
-        BitcoinAccount::from_mnemonic(mnemonic)?,
+        BitcoinAccount::from_mnemonic(mnemonic, bip39_passphrase)?,
     )))
 }
 
@@ -136,15 +141,19 @@ pub(crate) async fn create_wallet(
     auto_lock_timeout_secs: Option<u64>,
     use_crypto_symbols: bool,
     mnemonic: Option<String>,
+    bip39_passphrase: Option<String>,
 ) -> Result<WalletRefreshResult, String> {
     validate_wallet_password(&wallet_password)?;
+    let mut bip39_passphrase = Zeroizing::new(bip39_passphrase.unwrap_or_default());
     let mnemonic = match mnemonic {
         Some(m) if !m.trim().is_empty() => m.trim().to_string(),
         _ => generate_mnemonic(12)?,
     };
     let network_refs: Vec<&str> = enabled_networks.iter().map(|s| s.as_str()).collect();
-    let addresses = derive_addresses_from_mnemonic_filtered(&mnemonic, &network_refs)?;
-    let bitcoin_account = initialize_bitcoin_account(&mnemonic, &enabled_networks)?;
+    let addresses =
+        derive_addresses_from_mnemonic_filtered(&mnemonic, &bip39_passphrase, &network_refs)?;
+    let bitcoin_account =
+        initialize_bitcoin_account(&mnemonic, &bip39_passphrase, &enabled_networks)?;
     let refreshed = refresh_wallet_portfolio(
         clients.http(),
         &addresses,
@@ -159,6 +168,7 @@ pub(crate) async fn create_wallet(
     let wallet = Wallet {
         name: clean_name(name),
         mnemonic,
+        bip39_passphrase: std::mem::take(&mut *bip39_passphrase),
         created_at: Utc::now().to_rfc3339(),
         addresses,
         wallet_password_hash: hash_secret(&wallet_password),
@@ -199,14 +209,18 @@ pub(crate) async fn import_wallet(
     enabled_networks: Vec<String>,
     auto_lock_timeout_secs: Option<u64>,
     use_crypto_symbols: bool,
+    bip39_passphrase: Option<String>,
 ) -> Result<WalletRefreshResult, String> {
+    let mut bip39_passphrase = Zeroizing::new(bip39_passphrase.unwrap_or_default());
     let mnemonic = mnemonic.trim().to_string();
     validate_recovery_phrase_word_count(&mnemonic)?;
     validate_wallet_password(&wallet_password)?;
 
     let network_refs: Vec<&str> = enabled_networks.iter().map(|s| s.as_str()).collect();
-    let addresses = derive_addresses_from_mnemonic_filtered(&mnemonic, &network_refs)?;
-    let bitcoin_account = initialize_bitcoin_account(&mnemonic, &enabled_networks)?;
+    let addresses =
+        derive_addresses_from_mnemonic_filtered(&mnemonic, &bip39_passphrase, &network_refs)?;
+    let bitcoin_account =
+        initialize_bitcoin_account(&mnemonic, &bip39_passphrase, &enabled_networks)?;
     let refreshed = refresh_wallet_portfolio(
         clients.http(),
         &addresses,
@@ -221,6 +235,7 @@ pub(crate) async fn import_wallet(
     let wallet = Wallet {
         name: clean_name(name.unwrap_or_else(|| "Imported Wallet".to_string())),
         mnemonic,
+        bip39_passphrase: std::mem::take(&mut *bip39_passphrase),
         created_at: Utc::now().to_rfc3339(),
         addresses,
         wallet_password_hash: hash_secret(&wallet_password),
@@ -266,23 +281,29 @@ pub(crate) async fn unlock_wallet(
                 wallet.wallet_password_hash.clone(),
                 wallet.enabled_networks.clone(),
                 wallet.mnemonic.clone(),
+                wallet.bip39_passphrase.clone(),
             )
         });
 
-        if let Some((stored_hash, enabled_networks, mut mnemonic)) = in_memory {
+        if let Some((stored_hash, enabled_networks, mut mnemonic, mut bip39_passphrase)) = in_memory
+        {
             if stored_hash != wallet_password_hash {
                 clear_secret_string(&mut mnemonic);
+                clear_secret_string(&mut bip39_passphrase);
                 return Err("Invalid wallet password".to_string());
             }
             let bitcoin_account = if enabled_networks.iter().any(|network| network == "bitcoin") {
                 match cached_bitcoin_account {
                     Some(account) => Ok(Some(account)),
-                    None => initialize_bitcoin_account(&mnemonic, &enabled_networks),
+                    None => {
+                        initialize_bitcoin_account(&mnemonic, &bip39_passphrase, &enabled_networks)
+                    }
                 }
             } else {
                 Ok(None)
             };
             clear_secret_string(&mut mnemonic);
+            clear_secret_string(&mut bip39_passphrase);
             let bitcoin_account = bitcoin_account?;
             state.locked = false;
             bitcoin_account
@@ -298,8 +319,11 @@ pub(crate) async fn unlock_wallet(
                 wallet_name: stored.wallet_name,
             });
             let enabled_networks = decrypted.wallet().enabled_networks.clone();
-            let bitcoin_account =
-                initialize_bitcoin_account(&decrypted.wallet().mnemonic, &enabled_networks)?;
+            let bitcoin_account = initialize_bitcoin_account(
+                &decrypted.wallet().mnemonic,
+                &decrypted.wallet().bip39_passphrase,
+                &enabled_networks,
+            )?;
             let (wallet, key, salt) = decrypted.into_parts();
             state.encryption_key = Some(key);
             state.storage_salt = Some(salt);
@@ -321,6 +345,7 @@ pub(crate) fn lock_wallet(state: State<'_, Mutex<AppState>>) -> Result<(), Strin
     state.evm_nonces.cancel_all_unbroadcast();
     if let Some(ref mut wallet) = state.wallet {
         clear_secret_string(&mut wallet.mnemonic);
+        clear_secret_string(&mut wallet.bip39_passphrase);
     }
     state.wallet = None;
     if let Some(ref mut key) = state.encryption_key {
@@ -346,6 +371,7 @@ pub(crate) fn clear_wallet(state: State<'_, Mutex<AppState>>) -> Result<WalletSe
     state.evm_nonces.cancel_all_unbroadcast();
     if let Some(ref mut wallet) = state.wallet {
         clear_secret_string(&mut wallet.mnemonic);
+        clear_secret_string(&mut wallet.bip39_passphrase);
     }
     state.wallet = None;
     state.stored_wallet = None;

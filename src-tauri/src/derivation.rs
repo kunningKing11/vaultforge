@@ -11,7 +11,7 @@ use sha2::{Digest as Sha2Digest, Sha256, Sha512};
 use sha3::Keccak256;
 use sha3::digest::Digest as Sha3Digest;
 use std::collections::HashMap;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::address::filecoin::filecoin_mainnet_secp256k1_address;
 use crate::registry::network_by_id;
@@ -110,8 +110,8 @@ pub(crate) struct BitcoinAccount {
 }
 
 impl BitcoinAccount {
-    pub(crate) fn from_mnemonic(mnemonic: &str) -> Result<Self, String> {
-        let mut seed = mnemonic_seed(mnemonic)?;
+    pub(crate) fn from_mnemonic(mnemonic: &str, bip39_passphrase: &str) -> Result<Self, String> {
+        let mut seed = mnemonic_seed(mnemonic, bip39_passphrase)?;
         let result = (|| {
             let path: DerivationPath = BITCOIN_BIP84_ACCOUNT_PATH
                 .parse()
@@ -151,14 +151,21 @@ impl BitcoinAccount {
     }
 }
 
-pub(crate) fn signing_key_from_mnemonic(mnemonic: &str) -> Result<k256::ecdsa::SigningKey, String> {
-    let private_key = secp256k1_private_key_from_mnemonic(mnemonic, EVM_DERIVATION_PATH)?;
+pub(crate) fn signing_key_from_mnemonic(
+    mnemonic: &str,
+    bip39_passphrase: &str,
+) -> Result<k256::ecdsa::SigningKey, String> {
+    let private_key =
+        secp256k1_private_key_from_mnemonic(mnemonic, bip39_passphrase, EVM_DERIVATION_PATH)?;
     k256::ecdsa::SigningKey::from_bytes((&private_key).into())
         .map_err(|_| "Failed to create signing key".to_string())
 }
 
-pub(crate) fn tron_private_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32], String> {
-    secp256k1_private_key_from_mnemonic(mnemonic, TRON_DERIVATION_PATH)
+pub(crate) fn tron_private_key_from_mnemonic(
+    mnemonic: &str,
+    bip39_passphrase: &str,
+) -> Result<[u8; 32], String> {
+    secp256k1_private_key_from_mnemonic(mnemonic, bip39_passphrase, TRON_DERIVATION_PATH)
 }
 
 pub(crate) fn generate_mnemonic(word_count: u32) -> Result<String, String> {
@@ -188,17 +195,18 @@ pub(crate) fn validate_recovery_phrase_word_count(mnemonic: &str) -> Result<(), 
     }
 }
 
-fn mnemonic_seed(mnemonic: &str) -> Result<[u8; 64], String> {
+fn mnemonic_seed(mnemonic: &str, bip39_passphrase: &str) -> Result<[u8; 64], String> {
     let mnemonic = Mnemonic::parse_in_normalized(Language::English, mnemonic)
         .map_err(|_| "Invalid recovery phrase".to_string())?;
-    Ok(mnemonic.to_seed(""))
+    Ok(mnemonic.to_seed(bip39_passphrase))
 }
 
 pub(crate) fn secp256k1_private_key_from_mnemonic(
     mnemonic: &str,
+    bip39_passphrase: &str,
     path: &str,
 ) -> Result<[u8; 32], String> {
-    let mut seed = mnemonic_seed(mnemonic)?;
+    let seed = Zeroizing::new(mnemonic_seed(mnemonic, bip39_passphrase)?);
     let result = (|| {
         let path: DerivationPath = path
             .parse()
@@ -208,17 +216,19 @@ pub(crate) fn secp256k1_private_key_from_mnemonic(
         let bytes = child.private_key().to_bytes();
         Ok(bytes.into())
     })();
-    seed.zeroize();
     result
 }
 
-pub(crate) fn solana_secret_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32], String> {
+pub(crate) fn solana_secret_key_from_mnemonic(
+    mnemonic: &str,
+    bip39_passphrase: &str,
+) -> Result<[u8; 32], String> {
     type HmacSha512 = Hmac<Sha512>;
 
-    let seed = mnemonic_seed(mnemonic)?;
+    let seed = Zeroizing::new(mnemonic_seed(mnemonic, bip39_passphrase)?);
     let mut mac = HmacSha512::new_from_slice(b"ed25519 seed")
         .map_err(|_| "Failed to initialize Solana derivation".to_string())?;
-    mac.update(&seed);
+    mac.update(seed.as_slice());
     let result = mac.finalize().into_bytes();
     let mut key = [0u8; 32];
     let mut chain_code = [0u8; 32];
@@ -243,16 +253,40 @@ pub(crate) fn solana_secret_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32]
     Ok(key)
 }
 
-fn derive_wallet_keys(mnemonic: &str) -> Result<DerivedWalletKeys, String> {
+fn derive_wallet_keys(mnemonic: &str, bip39_passphrase: &str) -> Result<DerivedWalletKeys, String> {
     Ok(DerivedWalletKeys {
-        bitcoin: secp256k1_private_key_from_mnemonic(mnemonic, BITCOIN_DERIVATION_PATH)?,
-        evm: secp256k1_private_key_from_mnemonic(mnemonic, EVM_DERIVATION_PATH)?,
-        filecoin: secp256k1_private_key_from_mnemonic(mnemonic, FILECOIN_DERIVATION_PATH)?,
-        injective: secp256k1_private_key_from_mnemonic(mnemonic, INJECTIVE_DERIVATION_PATH)?,
-        solana: solana_secret_key_from_mnemonic(mnemonic)?,
-        tron: secp256k1_private_key_from_mnemonic(mnemonic, TRON_DERIVATION_PATH)?,
-        xrpl: secp256k1_private_key_from_mnemonic(mnemonic, XRPL_DERIVATION_PATH)?,
-        zcash: secp256k1_private_key_from_mnemonic(mnemonic, ZCASH_DERIVATION_PATH)?,
+        bitcoin: secp256k1_private_key_from_mnemonic(
+            mnemonic,
+            bip39_passphrase,
+            BITCOIN_DERIVATION_PATH,
+        )?,
+        evm: secp256k1_private_key_from_mnemonic(mnemonic, bip39_passphrase, EVM_DERIVATION_PATH)?,
+        filecoin: secp256k1_private_key_from_mnemonic(
+            mnemonic,
+            bip39_passphrase,
+            FILECOIN_DERIVATION_PATH,
+        )?,
+        injective: secp256k1_private_key_from_mnemonic(
+            mnemonic,
+            bip39_passphrase,
+            INJECTIVE_DERIVATION_PATH,
+        )?,
+        solana: solana_secret_key_from_mnemonic(mnemonic, bip39_passphrase)?,
+        tron: secp256k1_private_key_from_mnemonic(
+            mnemonic,
+            bip39_passphrase,
+            TRON_DERIVATION_PATH,
+        )?,
+        xrpl: secp256k1_private_key_from_mnemonic(
+            mnemonic,
+            bip39_passphrase,
+            XRPL_DERIVATION_PATH,
+        )?,
+        zcash: secp256k1_private_key_from_mnemonic(
+            mnemonic,
+            bip39_passphrase,
+            ZCASH_DERIVATION_PATH,
+        )?,
     })
 }
 
@@ -262,9 +296,10 @@ pub(crate) fn address_key_for_network(network_id: &str) -> Option<&'static str> 
 
 pub(crate) fn derive_addresses_from_mnemonic_filtered(
     mnemonic: &str,
+    bip39_passphrase: &str,
     enabled: &[&str],
 ) -> Result<HashMap<String, String>, String> {
-    let keys = derive_wallet_keys(mnemonic)?;
+    let keys = derive_wallet_keys(mnemonic, bip39_passphrase)?;
     let mut addresses = HashMap::new();
 
     for network_id in enabled {
@@ -353,8 +388,11 @@ pub(crate) fn tron_address_from_private_key(private_key: &[u8; 32]) -> Result<St
     Ok(bs58::encode(address).with_check().into_string())
 }
 
-pub(crate) fn xrpl_private_key_from_mnemonic(mnemonic: &str) -> Result<[u8; 32], String> {
-    secp256k1_private_key_from_mnemonic(mnemonic, XRPL_DERIVATION_PATH)
+pub(crate) fn xrpl_private_key_from_mnemonic(
+    mnemonic: &str,
+    bip39_passphrase: &str,
+) -> Result<[u8; 32], String> {
+    secp256k1_private_key_from_mnemonic(mnemonic, bip39_passphrase, XRPL_DERIVATION_PATH)
 }
 
 pub(crate) fn xrpl_classic_address_from_private_key(

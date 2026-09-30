@@ -36,6 +36,7 @@ pub(crate) struct SignedSolanaTransfer {
 
 pub(crate) struct SolanaTransferDraft<'a> {
     pub(crate) mnemonic: &'a str,
+    pub(crate) bip39_passphrase: &'a str,
     pub(crate) from: &'a str,
     pub(crate) recent_blockhash: &'a str,
     pub(crate) fee_lamports: u64,
@@ -44,6 +45,7 @@ pub(crate) struct SolanaTransferDraft<'a> {
 
 pub(crate) struct SolanaTokenTransferDraft<'a> {
     pub(crate) mnemonic: &'a str,
+    pub(crate) bip39_passphrase: &'a str,
     pub(crate) from: &'a str,
     pub(crate) to: &'a str,
     pub(crate) mint: &'a str,
@@ -53,13 +55,14 @@ pub(crate) struct SolanaTokenTransferDraft<'a> {
     pub(crate) fee_lamports: u64,
 }
 
-fn solana_keypair_from_mnemonic(mnemonic: &str) -> Result<Keypair, String> {
-    let secret = solana_secret_key_from_mnemonic(mnemonic)?;
+fn solana_keypair_from_mnemonic(mnemonic: &str, bip39_passphrase: &str) -> Result<Keypair, String> {
+    let secret = solana_secret_key_from_mnemonic(mnemonic, bip39_passphrase)?;
     keypair_from_seed(&secret).map_err(|_| "Failed to create Solana keypair".to_string())
 }
 
 pub(crate) fn sign_solana_transfer_with_blockhash(
     mnemonic: &str,
+    bip39_passphrase: &str,
     from: &str,
     to: &str,
     lamports: u64,
@@ -69,6 +72,7 @@ pub(crate) fn sign_solana_transfer_with_blockhash(
     let instructions = native_transfer_instructions(from, to, lamports)?;
     sign_solana_instructions(SolanaTransferDraft {
         mnemonic,
+        bip39_passphrase,
         from,
         recent_blockhash,
         fee_lamports,
@@ -89,6 +93,7 @@ pub(crate) fn sign_solana_token_transfer_with_blockhash(
 
     sign_solana_instructions(SolanaTransferDraft {
         mnemonic: draft.mnemonic,
+        bip39_passphrase: draft.bip39_passphrase,
         from: draft.from,
         recent_blockhash: draft.recent_blockhash,
         fee_lamports: draft.fee_lamports,
@@ -99,7 +104,7 @@ pub(crate) fn sign_solana_token_transfer_with_blockhash(
 fn sign_solana_instructions(draft: SolanaTransferDraft) -> Result<SignedSolanaTransfer, String> {
     let from_pubkey = parse_pubkey(draft.from, "from")?;
     let blockhash = parse_blockhash(draft.recent_blockhash)?;
-    let keypair = solana_keypair_from_mnemonic(draft.mnemonic)?;
+    let keypair = solana_keypair_from_mnemonic(draft.mnemonic, draft.bip39_passphrase)?;
 
     if keypair.pubkey() != from_pubkey {
         return Err("Solana signing key does not match from address".to_string());
@@ -132,6 +137,7 @@ fn sign_solana_instructions(draft: SolanaTransferDraft) -> Result<SignedSolanaTr
 pub(crate) async fn sign_solana_transfer(
     client: &reqwest::Client,
     mnemonic: &str,
+    bip39_passphrase: &str,
     from: &str,
     to: &str,
     lamports: u64,
@@ -141,6 +147,7 @@ pub(crate) async fn sign_solana_transfer(
     let fee_lamports = estimate_solana_fee(client, from, instructions, &recent_blockhash).await?;
     sign_solana_transfer_with_blockhash(
         mnemonic,
+        bip39_passphrase,
         from,
         to,
         lamports,
@@ -152,6 +159,7 @@ pub(crate) async fn sign_solana_transfer(
 pub(crate) async fn sign_solana_token_transfer(
     client: &reqwest::Client,
     mnemonic: &str,
+    bip39_passphrase: &str,
     from: &str,
     to: &str,
     mint: &str,
@@ -164,6 +172,7 @@ pub(crate) async fn sign_solana_token_transfer(
 
     sign_solana_token_transfer_with_blockhash(SolanaTokenTransferDraft {
         mnemonic,
+        bip39_passphrase,
         from,
         to,
         mint,

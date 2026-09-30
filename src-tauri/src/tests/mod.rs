@@ -55,7 +55,7 @@ pub(crate) const BITCOIN_TEST_MNEMONIC: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 pub(crate) fn bitcoin_test_owner(origin: BitcoinKeyOrigin) -> BitcoinDerivedAddress {
-    BitcoinAccount::from_mnemonic(BITCOIN_TEST_MNEMONIC)
+    BitcoinAccount::from_mnemonic(BITCOIN_TEST_MNEMONIC, "")
         .unwrap()
         .derive_address(origin)
         .unwrap()

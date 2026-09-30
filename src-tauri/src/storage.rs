@@ -45,6 +45,7 @@ impl DecryptedWallet {
     fn zeroize_remaining(&mut self) {
         if let Some(wallet) = &mut self.wallet {
             clear_secret_string(&mut wallet.mnemonic);
+            clear_secret_string(&mut wallet.bip39_passphrase);
         }
         if let Some(key) = &mut self.key {
             key.zeroize();
@@ -97,7 +98,7 @@ pub(crate) fn persist_state_wallet(state: &mut AppState) -> Result<(), String> {
     Ok(())
 }
 
-/// Encrypts a wallet into a version-6 AES-GCM envelope with a fresh nonce.
+/// Encrypts a wallet with a fresh nonce; passphrase wallets require version 7.
 pub(crate) fn encrypt_wallet(
     wallet: &Wallet,
     key: &[u8; 32],
@@ -106,9 +107,10 @@ pub(crate) fn encrypt_wallet(
     let mut nonce_bytes = [0u8; 12];
     rand::rng().fill(&mut nonce_bytes);
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| "Failed to initialize encryption")?;
-    let payload = WalletPayload {
+    let mut payload = WalletPayload {
         wallet_name: wallet.name.clone(),
         mnemonic: wallet.mnemonic.clone(),
+        bip39_passphrase: wallet.bip39_passphrase.clone(),
         created_at: wallet.created_at.clone(),
         addresses: wallet.addresses.clone(),
         wallet_password_hash: wallet.wallet_password_hash.clone(),
@@ -120,14 +122,21 @@ pub(crate) fn encrypt_wallet(
         auto_lock_timeout_secs: wallet.auto_lock_timeout_secs,
         use_crypto_symbols: wallet.use_crypto_symbols,
     };
-    let plaintext = serde_json::to_vec(&payload).map_err(|_| "Failed to encode wallet")?;
+    let plaintext = serde_json::to_vec(&payload);
+    clear_secret_string(&mut payload.mnemonic);
+    clear_secret_string(&mut payload.bip39_passphrase);
+    let mut plaintext = plaintext.map_err(|_| "Failed to encode wallet")?;
     let nonce = Nonce::try_from(nonce_bytes.as_slice()).map_err(|_| "Failed to create nonce")?;
-    let ciphertext = cipher
-        .encrypt(&nonce, plaintext.as_ref())
-        .map_err(|_| "Failed to encrypt wallet")?;
+    let ciphertext = cipher.encrypt(&nonce, plaintext.as_ref());
+    plaintext.zeroize();
+    let ciphertext = ciphertext.map_err(|_| "Failed to encrypt wallet")?;
 
     Ok(StoredWalletFile {
-        version: 6,
+        version: if wallet.bip39_passphrase.is_empty() {
+            6
+        } else {
+            7
+        },
         wallet_name: wallet.name.clone(),
         network: "ethereum".to_string(),
         salt: BASE64.encode(salt),
@@ -136,12 +145,12 @@ pub(crate) fn encrypt_wallet(
     })
 }
 
-/// Decrypts stored versions 2–6, filling preferences absent from older payloads.
+/// Decrypts stored versions 2–7, filling preferences absent from older payloads.
 pub(crate) fn decrypt_wallet(
     stored: &StoredWalletFile,
     wallet_password: &str,
 ) -> Result<DecryptedWallet, String> {
-    if !matches!(stored.version, 2..=6) {
+    if !matches!(stored.version, 2..=7) {
         return Err("Unsupported wallet version".to_string());
     }
     let salt = BASE64
@@ -176,6 +185,7 @@ pub(crate) fn decrypt_wallet(
         wallet: Some(Wallet {
             name: payload.wallet_name,
             mnemonic: payload.mnemonic,
+            bip39_passphrase: payload.bip39_passphrase,
             created_at: payload.created_at,
             addresses: payload.addresses,
             wallet_password_hash: payload.wallet_password_hash,

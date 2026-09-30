@@ -21,6 +21,7 @@ fn encrypts_and_decrypts_wallet_payload() {
     let wallet = Wallet {
         name: "Test Wallet".to_string(),
         mnemonic: "test mnemonic".to_string(),
+        bip39_passphrase: "TREZOR".to_string(),
         created_at: Utc::now().to_rfc3339(),
         addresses: HashMap::new(),
         wallet_password_hash: hash_secret(wallet_password),
@@ -34,11 +35,13 @@ fn encrypts_and_decrypts_wallet_payload() {
     };
     let (key, salt) = derive_storage_key(wallet_password, None).unwrap();
     let mut stored = encrypt_wallet(&wallet, &key, &salt).unwrap();
-    assert_eq!(stored.version, 6);
+    assert_eq!(stored.version, 7);
+    assert!(!serde_json::to_string(&stored).unwrap().contains("TREZOR"));
 
     let decrypted = decrypt_wallet(&stored, wallet_password).unwrap();
     assert_eq!(decrypted.wallet().name, wallet.name);
     assert_eq!(decrypted.wallet().mnemonic, wallet.mnemonic);
+    assert_eq!(decrypted.wallet().bip39_passphrase, wallet.bip39_passphrase);
     assert_eq!(decrypted.wallet().created_at, wallet.created_at);
     assert_eq!(decrypted.wallet().fiat_currency, wallet.fiat_currency);
     assert_eq!(
@@ -58,6 +61,18 @@ fn encrypts_and_decrypts_wallet_payload() {
     assert_eq!(decrypted_wallet.mnemonic, wallet.mnemonic);
     assert_eq!(decrypted_key, key);
     assert_eq!(decrypted_salt, salt);
+
+    let mut ordinary_wallet = wallet.clone();
+    ordinary_wallet.bip39_passphrase.clear();
+    let ordinary_stored = encrypt_wallet(&ordinary_wallet, &key, &salt).unwrap();
+    assert_eq!(ordinary_stored.version, 6);
+    assert!(
+        decrypt_wallet(&ordinary_stored, wallet_password)
+            .unwrap()
+            .wallet()
+            .bip39_passphrase
+            .is_empty()
+    );
 
     stored.version = 5;
     let migrated = decrypt_wallet(&stored, wallet_password).unwrap();

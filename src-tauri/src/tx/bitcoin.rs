@@ -279,6 +279,7 @@ pub(crate) fn bitcoin_select_coins(
 
 pub(crate) fn bitcoin_signed_transfer(
     mnemonic: &str,
+    bip39_passphrase: &str,
     from_address: &str,
     to_address: &str,
     amount_sats: u64,
@@ -290,7 +291,7 @@ pub(crate) fn bitcoin_signed_transfer(
         return Err("Amount must be greater than zero".to_string());
     }
 
-    let account = BitcoinAccount::from_mnemonic(mnemonic)?;
+    let account = BitcoinAccount::from_mnemonic(mnemonic, bip39_passphrase)?;
     if account.primary_address()?.address != from_address {
         return Err("Derived BTC key does not match wallet BTC address".to_string());
     }
@@ -325,7 +326,7 @@ pub(crate) fn bitcoin_signed_transfer(
             }
             index
         } else {
-            let context = bitcoin_signing_context(mnemonic, &utxo.owner)?;
+            let context = bitcoin_signing_context(mnemonic, bip39_passphrase, &utxo.owner)?;
             let index = contexts.len();
             contexts.push(context);
             context_by_origin.insert(origin, index);
@@ -406,10 +407,11 @@ pub(crate) fn bitcoin_signed_transfer(
 
 fn bitcoin_signing_context(
     mnemonic: &str,
+    bip39_passphrase: &str,
     derived: &BitcoinDerivedAddress,
 ) -> Result<BitcoinSigningContext, String> {
     let path = derived.origin.derivation_path();
-    let mut private_key = secp256k1_private_key_from_mnemonic(mnemonic, &path)?;
+    let mut private_key = secp256k1_private_key_from_mnemonic(mnemonic, bip39_passphrase, &path)?;
     let result = (|| {
         let signing_key = signing_key_from_private_key(&private_key)?;
         let public_key = signing_key

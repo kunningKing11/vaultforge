@@ -37,6 +37,7 @@ export type SetupWizardState = {
   walletPassword: string;
   confirmWalletPassword: string;
   recoveryPhrase: string;
+  bip39Passphrase: string;
   recoveryPhraseVisible: boolean;
   acknowledgedBackup: boolean;
   wordCount: 12 | 15 | 18 | 21 | 24;
@@ -96,6 +97,7 @@ export function createSetupWizardState(): SetupWizardState {
     walletPassword: "",
     confirmWalletPassword: "",
     recoveryPhrase: "",
+    bip39Passphrase: "",
     recoveryPhraseVisible: false,
     acknowledgedBackup: false,
     wordCount: 12,

@@ -390,6 +390,7 @@ function WalletApplication({
           ? walletApi.importWallet({
               name: wizard.name || undefined,
               mnemonic: wizard.recoveryPhrase.trim(),
+              bip39Passphrase: wizard.bip39Passphrase,
               walletPassword: wizard.walletPassword,
               fiatCurrency: wizard.fiatCurrency,
               enabledNetworks: wizard.enabledNetworks,
@@ -404,6 +405,7 @@ function WalletApplication({
               autoLockTimeoutSecs: wizard.autoLockTimeoutSecs,
               useCryptoSymbols: wizard.useCryptoSymbols,
               mnemonic: wizard.recoveryPhrase,
+              bip39Passphrase: wizard.bip39Passphrase,
             }),
     );
 
@@ -1038,6 +1040,7 @@ function OnboardingView({
       flow,
       step: 2,
       recoveryPhrase: "",
+      bip39Passphrase: "",
       recoveryPhraseVisible: false,
       acknowledgedBackup: false,
     }));
@@ -1699,6 +1702,7 @@ function SetupRecovery({
           spellCheck={false}
           value={wizard.recoveryPhrase}
         />
+        <Bip39PassphraseInput updateWizard={updateWizard} wizard={wizard} />
       </VStack>
     );
   }
@@ -1743,6 +1747,34 @@ function SetupRecovery({
         ]}
         value={[15, 18, 21].includes(wizard.wordCount) ? String(wizard.wordCount) : "15"}
       />
+      <Bip39PassphraseInput updateWizard={updateWizard} wizard={wizard} />
+    </VStack>
+  );
+}
+
+function Bip39PassphraseInput({
+  updateWizard,
+  wizard,
+}: {
+  updateWizard: (update: (current: AppState["onboarding"]) => AppState["onboarding"]) => void;
+  wizard: AppState["onboarding"];
+}) {
+  return (
+    <VStack gap={1}>
+      <PasswordInput
+        autoComplete="off"
+        label="BIP-39 passphrase (not recommended for most users)"
+        onChange={(bip39Passphrase) =>
+          updateWizard((current) => ({ ...current, bip39Passphrase, acknowledgedBackup: false }))
+        }
+        placeholder="Optional; leave blank for a standard recovery phrase"
+        value={wizard.bip39Passphrase}
+      />
+      <Text color="fgMuted" font="body">
+        This is separate from your wallet password. Every passphrase opens a different wallet. If
+        you forget it or enter it differently during recovery, your funds may be inaccessible. Back
+        it up separately and enter it exactly as written.
+      </Text>
     </VStack>
   );
 }
@@ -1821,6 +1853,7 @@ function SetupConfirm({
   updateWizard: (update: (current: AppState["onboarding"]) => AppState["onboarding"]) => void;
   wizard: AppState["onboarding"];
 }) {
+  const [passphraseVisible, setPassphraseVisible] = useState(false);
   const visiblePhrase = wizard.recoveryPhraseVisible
     ? wizard.recoveryPhrase
     : wizard.recoveryPhrase.replace(/\S/g, "•");
@@ -1852,6 +1885,30 @@ function SetupConfirm({
       >
         {wizard.recoveryPhraseVisible ? "Hide recovery phrase" : "Show recovery phrase"}
       </Button>
+      {wizard.bip39Passphrase && (
+        <VStack gap={1}>
+          <TextInput
+            autoComplete="off"
+            end={
+              <Button
+                onClick={() => setPassphraseVisible((visible) => !visible)}
+                size="s"
+                transparent
+                type="button"
+              >
+                {passphraseVisible ? "Hide passphrase" : "Show passphrase"}
+              </Button>
+            }
+            label="BIP-39 passphrase"
+            readOnly
+            type={passphraseVisible ? "text" : "password"}
+            value={wizard.bip39Passphrase}
+          />
+          <Text color="fgWarning" font="body">
+            Keep it with your backup; the recovery phrase alone will open a different wallet.
+          </Text>
+        </VStack>
+      )}
       {wizard.flow === "create" && (
         <Checkbox
           checked={wizard.acknowledgedBackup}
@@ -1859,7 +1916,9 @@ function SetupConfirm({
             updateWizard((current) => ({ ...current, acknowledgedBackup: event.target.checked }))
           }
         >
-          I wrote down recovery phrase and understand it is needed for recovery.
+          {wizard.bip39Passphrase
+            ? "I backed up my recovery phrase and BIP-39 passphrase and understand both are needed to recover this wallet."
+            : "I backed up my recovery phrase and understand it is needed to recover this wallet."}
         </Checkbox>
       )}
       <Text color="fgMuted" font="body">

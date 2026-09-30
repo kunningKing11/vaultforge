@@ -7,7 +7,7 @@ use crate::tests::bitcoin_test_owner;
 
 #[test]
 fn bitcoin_account_balance_includes_receive_and_change_branches() {
-    let account = BitcoinAccount::from_mnemonic(MNEMONIC).unwrap();
+    let account = BitcoinAccount::from_mnemonic(MNEMONIC, "").unwrap();
     let receive = account.primary_address().unwrap();
     let next_receive = account
         .derive_address(BitcoinKeyOrigin::external(1))

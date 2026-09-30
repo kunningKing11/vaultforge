@@ -1,14 +1,33 @@
 use bip39::{Language, Mnemonic};
 
 use super::{
-    ALL_NETWORKS, BIP39_WORD_COUNTS, derive_addresses_from_mnemonic_filtered,
+    ALL_NETWORKS, BIP39_WORD_COUNTS, derive_addresses_from_mnemonic_filtered, mnemonic_seed,
     validate_recovery_phrase_word_count,
 };
 
 #[test]
+fn derives_distinct_wallets_from_bip39_passphrases() {
+    let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    let seed = mnemonic_seed(mnemonic, "TREZOR").unwrap();
+    assert!(hex::encode(seed).starts_with("c55257c360c07c72029aebc1b53c05ed"));
+
+    let ordinary = derive_addresses_from_mnemonic_filtered(mnemonic, "", ALL_NETWORKS).unwrap();
+    let protected =
+        derive_addresses_from_mnemonic_filtered(mnemonic, "TREZOR", ALL_NETWORKS).unwrap();
+    assert_eq!(
+        protected,
+        derive_addresses_from_mnemonic_filtered(mnemonic, "TREZOR", ALL_NETWORKS).unwrap()
+    );
+    assert_eq!(ordinary.len(), protected.len());
+    for network in ordinary.keys() {
+        assert_ne!(ordinary.get(network), protected.get(network));
+    }
+}
+
+#[test]
 fn derives_documented_wallet_paths_deterministically() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-    let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, ALL_NETWORKS).unwrap();
+    let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, "", ALL_NETWORKS).unwrap();
     assert_eq!(addresses.len(), 8);
     assert_eq!(
         addresses.get("bitcoin").unwrap(),
@@ -54,12 +73,13 @@ fn validates_standard_bip39_recovery_phrase_lengths_and_checksums() {
         assert_eq!(mnemonic.split_whitespace().count(), expected_word_count);
         assert!(BIP39_WORD_COUNTS.contains(&expected_word_count));
         assert!(validate_recovery_phrase_word_count(&mnemonic).is_ok());
-        assert!(derive_addresses_from_mnemonic_filtered(&mnemonic, ALL_NETWORKS).is_ok());
+        assert!(derive_addresses_from_mnemonic_filtered(&mnemonic, "", ALL_NETWORKS).is_ok());
     }
 
     assert!(validate_recovery_phrase_word_count("abandon abandon abandon").is_err());
     assert!(derive_addresses_from_mnemonic_filtered(
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon",
+        "",
         ALL_NETWORKS,
     )
     .is_err());

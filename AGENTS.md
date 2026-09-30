@@ -59,7 +59,7 @@ Command modules orchestrate domain modules. Keep storage, encryption, derivation
 ## Wallet Data And Security Contracts
 
 - `Wallet`: unlocked in-memory identity, encrypted-wallet metadata, derived accounts, active selections, and provider-derived cached portfolio/activity. It must not treat cached assets as authoritative funds.
-- `WalletPayload`: encrypted persisted name, timestamp, mnemonic/seed, account and derivation metadata, and persistent preferences. Cached balances are allowed only as explicitly stale snapshots. Any shape change must intentionally handle `StoredWalletFile.version`.
+- `WalletPayload`: encrypted persisted name, timestamp, mnemonic/seed, optional BIP-39 passphrase, account and derivation metadata, and persistent preferences. Cached balances are allowed only as explicitly stale snapshots. Any shape change must intentionally handle `StoredWalletFile.version`.
 - `StoredWalletFile`: unencrypted envelope containing only version, wallet name, active network, salt, nonce, and ciphertext unless another plaintext field has a documented security reason.
 - `StoredWalletMetadata`: minimal locked summary such as wallet name, active network, and storage version. It must not expose decrypted wallet or provider data.
 - `WalletSession`: frontend DTO. It must match the frontend type in the same patch.

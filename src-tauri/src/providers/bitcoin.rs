@@ -409,6 +409,7 @@ pub(crate) async fn fetch_bitcoin_tx_status(
 pub(crate) async fn sign_bitcoin_transfer(
     client: &reqwest::Client,
     mnemonic: &str,
+    bip39_passphrase: &str,
     from: &str,
     to: &str,
     amount_sats: u64,
@@ -425,6 +426,7 @@ pub(crate) async fn sign_bitcoin_transfer(
     let change_destination = account.account().primary_address()?;
     bitcoin_signed_transfer(
         mnemonic,
+        bip39_passphrase,
         from,
         to,
         amount_sats,

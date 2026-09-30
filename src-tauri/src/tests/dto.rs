@@ -21,6 +21,7 @@ fn decrypts_legacy_wallet_password_hash_payloads() {
     assert_eq!(payload.fiat_currency, FiatCurrency::Usd);
     assert_eq!(payload.usd_exchange_rate, 1.0);
     assert!(!payload.use_crypto_symbols);
+    assert!(payload.bip39_passphrase.is_empty());
 }
 
 #[test]
@@ -28,7 +29,7 @@ fn default_enabled_networks_derives_evm_and_tron_addresses() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     let enabled_networks = default_enabled_networks();
     let enabled: Vec<&str> = enabled_networks.iter().map(String::as_str).collect();
-    let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, &enabled).unwrap();
+    let addresses = derive_addresses_from_mnemonic_filtered(mnemonic, "", &enabled).unwrap();
 
     assert!(addresses.contains_key("evm"));
     assert!(addresses.contains_key("tron"));

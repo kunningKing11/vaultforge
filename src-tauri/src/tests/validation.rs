@@ -11,6 +11,7 @@ fn evm_transfer_validation_does_not_reject_using_cached_balances() {
     let wallet = Wallet {
         name: "Test Wallet".to_string(),
         mnemonic: "test mnemonic".to_string(),
+        bip39_passphrase: String::new(),
         created_at: "2025-01-01T00:00:00Z".to_string(),
         addresses: HashMap::new(),
         wallet_password_hash: "unused".to_string(),
@@ -93,6 +94,7 @@ fn token_transfer_validation_uses_contract_or_mint_identity() {
     let wallet = Wallet {
         name: "Test".to_string(),
         mnemonic: "test mnemonic".to_string(),
+        bip39_passphrase: String::new(),
         created_at: Utc::now().to_rfc3339(),
         addresses: HashMap::new(),
         wallet_password_hash: "deadbeef".to_string(),
@@ -159,6 +161,7 @@ fn transfer_validation_rejects_malformed_amounts_and_mints() {
     let wallet = Wallet {
         name: "Test Wallet".to_string(),
         mnemonic: "test mnemonic".to_string(),
+        bip39_passphrase: String::new(),
         created_at: "2025-01-01T00:00:00Z".to_string(),
         addresses: HashMap::new(),
         wallet_password_hash: "unused".to_string(),
@@ -278,6 +281,7 @@ fn validates_solana_token_transfer_recipient_as_solana_address() {
     let wallet = Wallet {
         name: "Test Wallet".to_string(),
         mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about".to_string(),
+        bip39_passphrase: String::new(),
         created_at: "2025-01-01T00:00:00Z".to_string(),
         addresses: HashMap::new(),
         wallet_password_hash: "deadbeef".to_string(),

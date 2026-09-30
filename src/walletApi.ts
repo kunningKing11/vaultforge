@@ -21,10 +21,12 @@ export const walletApi = {
     autoLockTimeoutSecs: number | null;
     useCryptoSymbols: boolean;
     mnemonic?: string;
+    bip39Passphrase: string;
   }) => invoke<WalletRefreshResult>("create_wallet", args),
   importWallet: (args: {
     name?: string;
     mnemonic: string;
+    bip39Passphrase: string;
     walletPassword: string;
     fiatCurrency: FiatCurrency;
     enabledNetworks: string[];

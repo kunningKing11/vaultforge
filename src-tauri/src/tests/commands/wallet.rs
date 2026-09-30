@@ -8,6 +8,7 @@ fn applies_all_wallet_settings_together() {
     let mut wallet = Wallet {
         name: "Old name".to_string(),
         mnemonic: String::new(),
+        bip39_passphrase: String::new(),
         created_at: String::new(),
         addresses: HashMap::new(),
         wallet_password_hash: String::new(),
@@ -42,6 +43,7 @@ fn unlock_migrates_legacy_filecoin_addresses() {
     let mut wallet = Wallet {
         name: "Test Wallet".to_string(),
         mnemonic: mnemonic.to_string(),
+        bip39_passphrase: String::new(),
         created_at: "2025-01-01T00:00:00Z".to_string(),
         addresses: HashMap::from([(
             "filecoin".to_string(),

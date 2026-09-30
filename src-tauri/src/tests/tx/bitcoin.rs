@@ -3,6 +3,7 @@ use crate::derivation::{
     BitcoinAccount, BitcoinKeyOrigin, secp256k1_private_key_from_mnemonic,
     signing_key_from_private_key,
 };
+use crate::providers::bitcoin::BitcoinUtxo;
 use crate::tests::{BITCOIN_TEST_MNEMONIC, bitcoin_test_owner, bitcoin_test_utxo};
 
 #[test]
@@ -35,7 +36,7 @@ fn bitcoin_coin_selection_handles_no_change_and_segwit_dust() {
 
 #[test]
 fn derives_standard_bip84_receive_and_change_addresses() {
-    let account = BitcoinAccount::from_mnemonic(BITCOIN_TEST_MNEMONIC).unwrap();
+    let account = BitcoinAccount::from_mnemonic(BITCOIN_TEST_MNEMONIC, "").unwrap();
     assert_eq!(
         account.primary_address().unwrap().address,
         "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
@@ -56,6 +57,7 @@ fn rejects_bitcoin_utxo_with_forged_key_origin() {
     forged.owner.address = bitcoin_test_owner(BitcoinKeyOrigin::change(0)).address;
     let error = bitcoin_signed_transfer(
         BITCOIN_TEST_MNEMONIC,
+        "",
         &from.address,
         "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
         10_000,
@@ -92,6 +94,7 @@ fn signs_bitcoin_inputs_from_different_bip84_paths() {
     ];
     let signed = bitcoin_signed_transfer(
         BITCOIN_TEST_MNEMONIC,
+        "",
         &from.address,
         "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
         10_000,
@@ -105,6 +108,7 @@ fn signs_bitcoin_inputs_from_different_bip84_paths() {
     for owner in [&from, &second_owner] {
         let private_key = secp256k1_private_key_from_mnemonic(
             BITCOIN_TEST_MNEMONIC,
+            "",
             &owner.origin.derivation_path(),
         )
         .unwrap();
@@ -128,6 +132,7 @@ fn signs_bitcoin_p2wpkh_transfer() {
     )];
     let signed = bitcoin_signed_transfer(
         BITCOIN_TEST_MNEMONIC,
+        "",
         &from.address,
         "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
         10_000,
@@ -142,4 +147,45 @@ fn signs_bitcoin_p2wpkh_transfer() {
     assert!(!signed.first_signature_hex.is_empty());
     assert_eq!(signed.fee_sats, bitcoin_estimated_vbytes(1, 2) * 2);
     assert_eq!(signed.post_balance, 50_000 - 10_000 - signed.fee_sats);
+}
+
+#[test]
+fn signs_bitcoin_p2wpkh_transfer_with_passphrase() {
+    let passphrase = "TREZOR";
+    let account = BitcoinAccount::from_mnemonic(BITCOIN_TEST_MNEMONIC, passphrase).unwrap();
+    let owner = account.primary_address().unwrap();
+    let utxo = BitcoinUtxo {
+        txid: "01".repeat(32),
+        vout: 0,
+        value: 50_000,
+        confirmed: true,
+        owner: owner.clone(),
+    };
+    let recipient = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
+    assert!(
+        bitcoin_signed_transfer(
+            BITCOIN_TEST_MNEMONIC,
+            passphrase,
+            &owner.address,
+            recipient,
+            10_000,
+            std::slice::from_ref(&utxo),
+            2,
+            &owner,
+        )
+        .is_ok()
+    );
+    assert!(
+        bitcoin_signed_transfer(
+            BITCOIN_TEST_MNEMONIC,
+            "",
+            &owner.address,
+            recipient,
+            10_000,
+            &[utxo],
+            2,
+            &owner,
+        )
+        .is_err()
+    );
 }

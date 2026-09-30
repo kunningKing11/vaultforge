@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use zeroize::Zeroize;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
@@ -33,6 +34,8 @@ fn default_usd_exchange_rate() -> f64 {
 pub(crate) struct Wallet {
     pub(crate) name: String,
     pub(crate) mnemonic: String,
+    #[serde(default)]
+    pub(crate) bip39_passphrase: String,
     pub(crate) created_at: String,
     pub(crate) addresses: HashMap<String, String>,
     #[serde(alias = "passphrase_hash")]
@@ -51,10 +54,19 @@ pub(crate) struct Wallet {
     pub(crate) use_crypto_symbols: bool,
 }
 
+impl Drop for Wallet {
+    fn drop(&mut self) {
+        self.mnemonic.zeroize();
+        self.bip39_passphrase.zeroize();
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct WalletPayload {
     pub(crate) wallet_name: String,
     pub(crate) mnemonic: String,
+    #[serde(default)]
+    pub(crate) bip39_passphrase: String,
     pub(crate) created_at: String,
     pub(crate) addresses: HashMap<String, String>,
     #[serde(alias = "passphrase_hash")]
