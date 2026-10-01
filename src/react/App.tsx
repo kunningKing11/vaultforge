@@ -205,12 +205,17 @@ function WalletApplication({
     setState((current) => ({ ...current, operation: { busy } }));
   }, []);
 
-  const beginOperation = useCallback(() => {
-    if (operationRef.current || lockRequestedRef.current) return false;
-    operationRef.current = true;
-    setBusy(true);
-    return true;
-  }, [setBusy]);
+  const beginOperation = useCallback(
+    (command?: SessionCommand) => {
+      if (operationRef.current || (lockRequestedRef.current && command !== "clear_wallet")) {
+        return false;
+      }
+      operationRef.current = true;
+      setBusy(true);
+      return true;
+    },
+    [setBusy],
+  );
 
   const endOperation = useCallback(() => {
     operationRef.current = false;
@@ -270,7 +275,12 @@ function WalletApplication({
 
   const runSessionCommand = useCallback(
     async (command: SessionCommand, action: () => Promise<WalletSession | null>) => {
-      if (!beginOperation()) return false;
+      if (!beginOperation(command)) {
+        if (command === "clear_wallet") {
+          toast("Another operation is still running. Please wait and try deleting again.", "error");
+        }
+        return false;
+      }
       try {
         const session = await action();
         if (session) commitSession(session);
@@ -576,12 +586,18 @@ function WalletApplication({
     invalidatePortfolioRefresh();
     const success = await runSessionCommand("clear_wallet", () => walletApi.clearWallet());
     if (success) {
+      lockRequestedRef.current = false;
       setState((current) => ({
         ...current,
         navigation: { currentView: "dashboard", selectedActivityId: "" },
         onboarding: createSetupWizardState(),
         send: { draft: emptySendDraft(), signedTransaction: null },
         dialogs: { ...current.dialogs, deleteWallet: { step: "idle", secondsRemaining: 10 } },
+      }));
+    } else {
+      setState((current) => ({
+        ...current,
+        dialogs: { ...current.dialogs, deleteWallet: { step: "confirm", secondsRemaining: 10 } },
       }));
     }
   }, [invalidatePortfolioRefresh, runSessionCommand]);
@@ -911,13 +927,23 @@ function useDeleteCountdown(
   setState: React.Dispatch<React.SetStateAction<AppState>>,
 ) {
   useEffect(() => {
+    if (step === "deleting") {
+      void clearWallet();
+      return;
+    }
     if (step !== "countdown") return;
     let seconds = 10;
     const timer = window.setInterval(() => {
       seconds -= 1;
       if (seconds <= 0) {
         window.clearInterval(timer);
-        void clearWallet();
+        setState((current) => ({
+          ...current,
+          dialogs: {
+            ...current.dialogs,
+            deleteWallet: { step: "deleting", secondsRemaining: 0 },
+          },
+        }));
         return;
       }
       setState((current) => ({
@@ -2855,31 +2881,43 @@ function DeleteWalletDialog({
       ...current,
       dialogs: { ...current.dialogs, deleteWallet: { step: "idle", secondsRemaining: 10 } },
     }));
-  if (dialog.step === "countdown") {
+  if (dialog.step === "countdown" || dialog.step === "deleting") {
+    const deleting = dialog.step === "deleting";
     return (
       <Modal
-        accessibilityLabel="Wallet deletion countdown"
+        accessibilityLabel={deleting ? "Deleting wallet" : "Wallet deletion countdown"}
         background="bgElevation2"
         borderRadius={400}
         disableOverlayPress
-        onRequestClose={cancel}
+        onRequestClose={() => {
+          if (!deleting) cancel();
+        }}
         padding={4}
         role="alertdialog"
+        shouldCloseOnEscPress={!deleting}
         visible
       >
         <VStack alignItems="center" gap={2}>
           <Text color="fgNegative" font="label2">
-            Deletion pending
+            {deleting ? "Deletion in progress" : "Deletion pending"}
           </Text>
           <Text as="h2" font="title1">
-            Deleting wallet files in
+            {deleting ? "Deleting..." : "Deleting wallet files in"}
           </Text>
-          <Text color="fgNegative" font="display2">
-            {dialog.secondsRemaining}
-          </Text>
-          <Button block onClick={cancel} variant="secondary">
-            Cancel
-          </Button>
+          {deleting ? (
+            <Text aria-live="polite" color="fgMuted" font="body" role="status">
+              Removing the stored wallet and clearing wallet data. Please wait.
+            </Text>
+          ) : (
+            <>
+              <Text color="fgNegative" font="display2">
+                {dialog.secondsRemaining}
+              </Text>
+              <Button block onClick={cancel} variant="secondary">
+                Cancel
+              </Button>
+            </>
+          )}
         </VStack>
       </Modal>
     );

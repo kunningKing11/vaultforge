@@ -68,7 +68,7 @@ export type AppState = {
   dialogs: {
     unlockPasswordVisible: boolean;
     deleteWallet: {
-      step: "idle" | "confirm" | "countdown";
+      step: "idle" | "confirm" | "countdown" | "deleting";
       secondsRemaining: number;
     };
   };
