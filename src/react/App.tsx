@@ -63,6 +63,7 @@ import {
 import type {
   Activity,
   Asset,
+  AssetIdentity,
   FiatCurrency,
   NetworkId,
   QrResilience,
@@ -82,10 +83,12 @@ import {
   addressForNetwork,
   applyWalletSession,
   type AppState,
+  assetKey,
   type ColorScheme,
   createInitialAppState,
   createSetupWizardState,
   emptySendDraft,
+  findAsset,
   networkLabel,
   receivePayload,
   selectedActivity,
@@ -466,14 +469,7 @@ function WalletApplication({
         return;
       }
 
-      const asset = wallet.assets.find((candidate) => {
-        if (candidate.network !== draft.network) return false;
-        if (draft.token_address === null) return candidate.token_address == null;
-        if (candidate.token_address == null) return false;
-        return selectedNetwork.kind === "evm"
-          ? candidate.token_address.toLowerCase() === draft.token_address.toLowerCase()
-          : candidate.token_address === draft.token_address;
-      });
+      const asset = findAsset(wallet.assets, draft);
       if (!asset) {
         toast("Selected asset is no longer available.", "error");
         return;
@@ -552,17 +548,19 @@ function WalletApplication({
   }, [beginOperation, endOperation, toast]);
 
   const swapTokens = useCallback(
-    async (fromSymbol: string, toSymbol: string, amount: string) => {
+    async (fromAsset: AssetIdentity, toAsset: AssetIdentity, amount: string) => {
       const wallet = stateRef.current.wallet;
-      const decimals =
-        wallet.status === "unlocked"
-          ? (wallet.assets.find((asset) => asset.symbol === fromSymbol)?.decimals ?? 18)
-          : 18;
+      if (wallet.status !== "unlocked") return;
+      const source = findAsset(wallet.assets, fromAsset);
+      if (!source || !findAsset(wallet.assets, toAsset)) {
+        toast("Selected asset is no longer available.", "error");
+        return;
+      }
       await runSessionCommand("swap_tokens", () =>
-        walletApi.swapTokens({ fromSymbol, toSymbol, amount: toWei(amount, decimals) }),
+        walletApi.swapTokens({ fromAsset, toAsset, amount: toWei(amount, source.decimals) }),
       );
     },
-    [runSessionCommand],
+    [runSessionCommand, toast],
   );
 
   const saveWalletSettings = useCallback(
@@ -1290,7 +1288,7 @@ function WalletShell({
   onSaveSettings: (
     settings: Parameters<typeof walletApi.updateWalletSettings>[0],
   ) => Promise<boolean>;
-  onSwap: (fromSymbol: string, toSymbol: string, amount: string) => Promise<void>;
+  onSwap: (fromAsset: AssetIdentity, toAsset: AssetIdentity, amount: string) => Promise<void>;
   selectView: (view: View) => void;
   setColorScheme: (scheme: ColorScheme) => void;
   setState: React.Dispatch<React.SetStateAction<AppState>>;
@@ -1431,7 +1429,7 @@ function WalletView({
   onSaveSettings: (
     settings: Parameters<typeof walletApi.updateWalletSettings>[0],
   ) => Promise<boolean>;
-  onSwap: (fromSymbol: string, toSymbol: string, amount: string) => Promise<void>;
+  onSwap: (fromAsset: AssetIdentity, toAsset: AssetIdentity, amount: string) => Promise<void>;
   selectView: (view: View) => void;
   setColorScheme: (scheme: ColorScheme) => void;
   setState: React.Dispatch<React.SetStateAction<AppState>>;
@@ -2315,7 +2313,7 @@ function SendForm({
   setState: React.Dispatch<React.SetStateAction<AppState>>;
   wallet: Extract<WalletState, { status: "unlocked" }>;
 }) {
-  const selectedAssetId = `${draft.network}:${draft.token_address ?? "native"}`;
+  const selectedAssetId = assetKey(draft);
   const selectedSymbol = draft.symbol || "ETH";
   const updateDraft = (update: (current: SendDraft) => SendDraft) => {
     setState((current) => ({
@@ -2354,22 +2352,18 @@ function SendForm({
             <CdsSelect
               label="Asset"
               onChange={(value) => {
-                const [network, tokenAddress] = value.split(":");
-                const asset = wallet.assets.find(
-                  (candidate) =>
-                    `${candidate.network}:${candidate.token_address ?? "native"}` === value,
-                );
-                if (!asset || !networkById(network)) return;
+                const asset = wallet.assets.find((candidate) => assetKey(candidate) === value);
+                if (!asset) return;
                 updateDraft((current) => ({
                   ...current,
                   symbol: asset.symbol,
-                  network: network as NetworkId,
-                  token_address: tokenAddress === "native" ? null : tokenAddress,
+                  network: asset.network,
+                  token_address: asset.token_address ?? null,
                 }));
               }}
               options={wallet.assets.map((asset) => ({
                 label: `${displayAssetSymbol(asset, wallet)} - ${asset.name} (${networkDisplayName(asset.network)})`,
-                value: `${asset.network}:${asset.token_address ?? "native"}`,
+                value: assetKey(asset),
               }))}
               value={selectedAssetId}
             />
@@ -2428,7 +2422,7 @@ function SignedTransactionView({
   signed: SignedTransaction;
   wallet: Extract<WalletState, { status: "unlocked" }>;
 }) {
-  const feeDecimals = decimalsForAsset(signed.feeSymbol, signed.network, signed.decimals, wallet);
+  const feeDecimals = networkById(signed.network)?.nativeAsset.decimals ?? signed.decimals;
   return (
     <ContentCard background="bgElevation1" borderRadius={400} gap={3} maxWidth="960px" padding={4}>
       <VStack gap={1}>
@@ -2641,23 +2635,31 @@ function SwapView({
   wallet,
 }: {
   busy: boolean;
-  onSwap: (fromSymbol: string, toSymbol: string, amount: string) => Promise<void>;
+  onSwap: (fromAsset: AssetIdentity, toAsset: AssetIdentity, amount: string) => Promise<void>;
   wallet: Extract<WalletState, { status: "unlocked" }>;
 }) {
-  const [fromSymbol, setFromSymbol] = useState(wallet.assets[0]?.symbol ?? "ETH");
-  const [toSymbol, setToSymbol] = useState(
-    wallet.assets.find((asset) => asset.symbol === "USDC")?.symbol ??
-      wallet.assets[1]?.symbol ??
-      "USDC",
-  );
+  const [fromKey, setFromKey] = useState(wallet.assets[0] ? assetKey(wallet.assets[0]) : "");
+  const [toKey, setToKey] = useState(() => {
+    const destination =
+      wallet.assets.find((asset, index) => index !== 0 && asset.symbol === "USDC") ??
+      wallet.assets[1];
+    return destination ? assetKey(destination) : "";
+  });
   const [amount, setAmount] = useState("");
   const submit: SubmitEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault();
-    void onSwap(fromSymbol, toSymbol, amount);
+    const from = wallet.assets.find((asset) => assetKey(asset) === fromKey);
+    const to = wallet.assets.find((asset) => assetKey(asset) === toKey);
+    if (!from || !to) return;
+    void onSwap(
+      { network: from.network, token_address: from.token_address ?? null },
+      { network: to.network, token_address: to.token_address ?? null },
+      amount,
+    );
   };
   const options = wallet.assets.map((asset) => ({
-    label: `${displayAssetSymbol(asset, wallet)} - ${asset.name}`,
-    value: asset.symbol,
+    label: `${displayAssetSymbol(asset, wallet)} - ${asset.name} (${networkDisplayName(asset.network)})`,
+    value: assetKey(asset),
   }));
   return (
     <ContentCard background="bgElevation1" borderRadius={400} gap={3} maxWidth="760px" padding={4}>
@@ -2672,8 +2674,8 @@ function SwapView({
       <form onSubmit={submit}>
         <VStack gap={2}>
           <Grid columnMin="200px" gap={2}>
-            <CdsSelect label="From" onChange={setFromSymbol} options={options} value={fromSymbol} />
-            <CdsSelect label="To" onChange={setToSymbol} options={options} value={toSymbol} />
+            <CdsSelect label="From" onChange={setFromKey} options={options} value={fromKey} />
+            <CdsSelect label="To" onChange={setToKey} options={options} value={toKey} />
           </Grid>
           <TextInput
             label="Amount"
@@ -3245,34 +3247,18 @@ function portfolioChange(assets: Asset[]) {
   return assets.reduce((sum, asset) => sum + asset.change_24h * (assetValueUsd(asset) / total), 0);
 }
 
-function assetKey(asset: Asset) {
-  return `${asset.network}:${asset.token_address ?? "native"}`;
-}
-
 function displayAssetSymbol(asset: Asset, wallet: Extract<WalletState, { status: "unlocked" }>) {
   return cryptoDisplaySymbol(asset.symbol, asset.unicode_symbol, wallet.useCryptoSymbols);
-}
-
-function decimalsForAsset(
-  symbol: string,
-  network: NetworkId,
-  fallback: number,
-  wallet: Extract<WalletState, { status: "unlocked" }>,
-) {
-  return (
-    wallet.assets.find((asset) => asset.symbol === symbol && asset.network === network)?.decimals ??
-    wallet.assets.find((asset) => asset.symbol === symbol)?.decimals ??
-    fallback
-  );
 }
 
 function displaySymbolForSigned(
   signed: SignedTransaction,
   wallet: Extract<WalletState, { status: "unlocked" }>,
 ) {
-  const asset = wallet.assets.find(
-    (candidate) => candidate.symbol === signed.symbol && candidate.network === signed.network,
-  );
+  const asset = findAsset(wallet.assets, {
+    network: signed.network,
+    token_address: signed.tokenAddress,
+  });
   return cryptoDisplaySymbol(signed.symbol, asset?.unicode_symbol, wallet.useCryptoSymbols);
 }
 

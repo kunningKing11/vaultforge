@@ -1,5 +1,23 @@
-use super::{FiatCurrency, WalletPayload, default_enabled_networks};
+use super::{Activity, AssetIdentity, FiatCurrency, WalletPayload, default_enabled_networks};
+use crate::activity::activity;
 use crate::derivation::derive_addresses_from_mnemonic_filtered;
+
+#[test]
+fn activity_identity_is_optional_for_old_wallets_and_round_trips_for_new_entries() {
+    let mut entry = activity("send", "Sent", "", "1 ETH");
+    let legacy_json = serde_json::to_value(&entry).unwrap();
+    assert!(legacy_json.get("asset").is_none());
+    assert!(legacy_json.get("counter_asset").is_none());
+    let legacy: Activity = serde_json::from_value(legacy_json).unwrap();
+    assert!(legacy.asset.is_none());
+    assert!(legacy.counter_asset.is_none());
+
+    entry.asset = Some(AssetIdentity::new("ethereum", Some("0xABC")));
+    entry.counter_asset = Some(AssetIdentity::new("base", Some("0xABC")));
+    let restored: Activity = serde_json::from_str(&serde_json::to_string(&entry).unwrap()).unwrap();
+    assert_eq!(restored.asset, entry.asset);
+    assert_eq!(restored.counter_asset, entry.counter_asset);
+}
 
 #[test]
 fn decrypts_legacy_wallet_password_hash_payloads() {

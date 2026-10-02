@@ -1,6 +1,11 @@
 export type FiatCurrency = "USD" | "EUR" | "GBP" | "JPY";
 
-export type Asset = {
+export type AssetIdentity = {
+  network: NetworkId;
+  token_address: string | null;
+};
+
+export type Asset = AssetIdentity & {
   symbol: string;
   unicode_symbol?: string | null;
   name: string;
@@ -8,11 +13,11 @@ export type Asset = {
   decimals: number;
   price_usd: number;
   change_24h: number;
-  network: NetworkId;
-  token_address?: string | null;
 };
 
 export type Activity = {
+  asset?: AssetIdentity | null;
+  counter_asset?: AssetIdentity | null;
   id: string;
   kind: string;
   title: string;
@@ -54,6 +59,7 @@ export type WalletRefreshResult = {
 };
 
 export type SignedTransaction = {
+  tokenAddress: string | null;
   from: string;
   to: string;
   symbol: string;

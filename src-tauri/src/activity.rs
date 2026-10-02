@@ -6,6 +6,8 @@ use sha2::{Digest, Sha256};
 /// Creates a local activity entry marked confirmed with a placeholder hash.
 pub(crate) fn activity(kind: &str, title: &str, subtitle: &str, amount: &str) -> Activity {
     Activity {
+        asset: None,
+        counter_asset: None,
         id: random_hex(8),
         kind: kind.to_string(),
         title: title.to_string(),

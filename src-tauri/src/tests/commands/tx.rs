@@ -1,8 +1,10 @@
 use super::{
     EvmNonceReservationGuard, ensure_native_balance_covers_debit,
-    ensure_token_balance_covers_amount, required_native_debit,
+    ensure_token_balance_covers_amount, required_native_debit, swap_asset_indices,
 };
+use crate::dto::AssetIdentity;
 use crate::state::AppState;
+use crate::tests::starter_assets;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -149,4 +151,57 @@ fn solana_token_requires_sol_for_fee() {
         "Solana transaction fee",
     )
     .is_ok());
+}
+
+#[test]
+fn swap_selection_distinguishes_same_symbol_assets_and_rejects_same_identity() {
+    let mut assets = starter_assets("ethereum");
+    let mut token = assets[0].clone();
+    token.token_address = Some("0xABC".into());
+    let mut other_chain = token.clone();
+    other_chain.network = "base".into();
+    let mut other_token = token.clone();
+    other_token.token_address = Some("0xDEF".into());
+    assets = vec![assets[0].clone(), token, other_chain, other_token];
+    let native = AssetIdentity::new("ethereum", None);
+    let token = AssetIdentity::new("ethereum", Some("0xabc"));
+    let other_chain = AssetIdentity::new("base", Some("0xabc"));
+    assert_eq!(
+        swap_asset_indices(&assets, &native, &token).unwrap(),
+        (0, 1)
+    );
+    assert_eq!(
+        swap_asset_indices(&assets, &token, &other_chain).unwrap(),
+        (1, 2)
+    );
+    assert_eq!(
+        swap_asset_indices(
+            &assets,
+            &token,
+            &AssetIdentity::new("ethereum", Some("0xdef"))
+        )
+        .unwrap(),
+        (1, 3)
+    );
+    assert_eq!(
+        swap_asset_indices(
+            &assets,
+            &token,
+            &AssetIdentity {
+                network: "ethereum".into(),
+                token_address: Some("0xABC".into())
+            }
+        )
+        .unwrap_err(),
+        "Choose two different assets"
+    );
+    assert!(swap_asset_indices(&assets, &AssetIdentity::new("solana", None), &token).is_err());
+    assert!(
+        swap_asset_indices(
+            &assets,
+            &token,
+            &AssetIdentity::new("ethereum", Some("0x456"))
+        )
+        .is_err()
+    );
 }

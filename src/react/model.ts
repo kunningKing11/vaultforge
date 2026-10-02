@@ -2,6 +2,7 @@ import { DEFAULT_NETWORK_ID, networkById, networks } from "../networks";
 import type {
   Activity,
   Asset,
+  AssetIdentity,
   FiatCurrency,
   Network,
   NetworkId,
@@ -13,6 +14,18 @@ import type {
 } from "../types";
 
 export type ColorScheme = "light" | "dark";
+
+export function assetKey(asset: AssetIdentity): string {
+  const address = asset.token_address ?? null;
+  const identifier =
+    networkById(asset.network)?.kind === "evm" ? (address?.toLowerCase() ?? null) : address;
+  return JSON.stringify([asset.network, identifier]);
+}
+
+export function findAsset(assets: readonly Asset[], identity: AssetIdentity): Asset | undefined {
+  const key = assetKey(identity);
+  return assets.find((asset) => assetKey(asset) === key);
+}
 
 export type WalletState =
   | { status: "missing" }

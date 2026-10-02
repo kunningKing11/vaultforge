@@ -91,10 +91,13 @@ pub(crate) fn configured_asset<'a>(
     match token_address {
         None => Some(&network.native_asset),
         Some(address) => network.tokens.iter().find(|token| {
-            token
-                .token_address
-                .as_deref()
-                .is_some_and(|configured| configured.eq_ignore_ascii_case(address))
+            token.token_address.as_deref().is_some_and(|configured| {
+                if network.kind == "evm" {
+                    configured.eq_ignore_ascii_case(address)
+                } else {
+                    configured == address
+                }
+            })
         }),
     }
 }

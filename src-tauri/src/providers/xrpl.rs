@@ -187,7 +187,7 @@ pub(crate) async fn fetch_xrpl_assets(
             balance_failed: false,
         },
         Err(_) => NetworkAssetRefresh {
-            assets: cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
+            assets: cached_asset(cached_assets, &config.id, None)
                 .into_iter()
                 .collect(),
             balance_failed: true,

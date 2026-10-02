@@ -8,7 +8,7 @@ use crate::dto::{Asset, FiatCurrency, Wallet};
 
 #[test]
 fn evm_transfer_validation_does_not_reject_using_cached_balances() {
-    let wallet = Wallet {
+    let mut wallet = Wallet {
         name: "Test Wallet".to_string(),
         mnemonic: "test mnemonic".to_string(),
         bip39_passphrase: String::new(),
@@ -59,6 +59,29 @@ fn evm_transfer_validation_does_not_reject_using_cached_balances() {
             "1",
         )
         .is_ok()
+    );
+    wallet.assets[1].symbol = "ETH".into();
+    assert!(
+        validate_transfer(
+            &wallet,
+            recipient,
+            "outdated ticker",
+            "ethereum",
+            Some("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
+            "1"
+        )
+        .is_ok()
+    );
+    assert!(
+        validate_transfer(
+            &wallet,
+            recipient,
+            "ETH",
+            "ethereum",
+            Some("0x1111111111111111111111111111111111111111"),
+            "1"
+        )
+        .is_err()
     );
 }
 

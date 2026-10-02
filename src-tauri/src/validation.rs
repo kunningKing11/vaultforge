@@ -6,7 +6,7 @@ use crate::address::solana::validate_address as validate_solana_address;
 use crate::address::tron::validate_address as validate_tron_address;
 use crate::address::xrpl::validate_address as validate_xrpl_address;
 use crate::address::zcash::validate_address as validate_zcash_address;
-use crate::assets::token_addresses_match;
+use crate::assets::asset_matches;
 use crate::dto::Wallet;
 use crate::registry::network_by_id;
 
@@ -30,7 +30,7 @@ pub(crate) fn clean_name(name: String) -> String {
 pub(crate) fn validate_transfer(
     wallet: &Wallet,
     to: &str,
-    symbol: &str,
+    _symbol: &str,
     network: &str,
     token_address: Option<&str>,
     amount: &str,
@@ -48,27 +48,18 @@ pub(crate) fn validate_transfer(
     let asset = wallet
         .assets
         .iter()
-        .find(|asset| {
-            asset.symbol == symbol
-                && asset.network == network
-                && match (token_address, asset.token_address.as_deref()) {
-                    (None, None) => true,
-                    (Some(expected), Some(actual)) => {
-                        token_addresses_match(network, actual, expected)
-                    }
-                    _ => false,
-                }
-        })
+        .find(|asset| asset_matches(asset, network, token_address))
         .ok_or_else(|| {
             "Asset not found for the requested network and token identifier".to_string()
         })?;
 
     match (token_address, asset.token_address.as_deref()) {
-        (None, None) if asset.symbol == network_config.native_asset.symbol => {}
-        (None, None) => return Err("Native asset symbol does not match its network".to_string()),
+        (None, None) => {}
         (Some(_), Some(token_address)) => validate_token_identifier(network, token_address)?,
         _ => return Err("Native and token asset identities do not match".to_string()),
     }
+
+    let symbol = asset.symbol.as_str();
 
     let amount: u128 = amount
         .parse()

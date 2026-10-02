@@ -1,6 +1,37 @@
 use std::collections::HashSet;
 
-use super::{evm_networks, network_by_id, registry};
+use super::{NetworkRegistry, configured_asset, evm_networks, network_by_id, registry};
+use crate::dto::AssetIdentity;
+
+#[test]
+fn configured_assets_match_case_only_on_evm() {
+    let ethereum = network_by_id("ethereum").unwrap();
+    let address = ethereum.tokens[0].token_address.as_deref().unwrap();
+    assert!(configured_asset(ethereum, Some(&address.to_ascii_lowercase())).is_some());
+    let mut source: NetworkRegistry =
+        serde_json::from_str(include_str!(concat!(env!("OUT_DIR"), "/networks.json"))).unwrap();
+    let solana = source
+        .networks
+        .iter_mut()
+        .find(|network| network.id == "solana")
+        .unwrap();
+    let mut token = source_token();
+    token.token_address = Some("So11111111111111111111111111111111111111112".into());
+    solana.tokens = vec![token];
+    assert!(
+        configured_asset(&solana, Some("So11111111111111111111111111111111111111112")).is_some()
+    );
+    assert!(
+        configured_asset(&solana, Some("so11111111111111111111111111111111111111112")).is_none()
+    );
+}
+
+fn source_token() -> super::AssetConfig {
+    serde_json::from_value(serde_json::json!({
+        "symbol": "SOL", "name": "Example token", "decimals": 9, "coinGeckoId": "example"
+    }))
+    .unwrap()
+}
 
 #[test]
 fn polygon_uses_pol_and_distinguishes_native_and_bridged_usdc() {
@@ -26,18 +57,18 @@ fn registry_has_unique_network_and_token_identifiers() {
     let mut network_ids = HashSet::new();
     for network in &registry().networks {
         assert!(network_ids.insert(&network.id));
-        let mut symbols = HashSet::new();
         let mut contracts = HashSet::new();
         for token in &network.tokens {
-            assert!(symbols.insert(&token.symbol));
             assert!(
-                contracts.insert(
-                    token
-                        .token_address
-                        .as_deref()
-                        .expect("configured token must have an address")
-                        .to_ascii_lowercase()
-                )
+                contracts.insert(AssetIdentity::new(
+                    &network.id,
+                    Some(
+                        token
+                            .token_address
+                            .as_deref()
+                            .expect("configured token must have an address")
+                    )
+                ))
             );
         }
     }

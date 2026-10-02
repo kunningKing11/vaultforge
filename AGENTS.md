@@ -82,7 +82,9 @@ type WalletSession = {
 };
 ```
 
-`Asset.token_address` is optional and nullable. Native assets use `null`; ERC-20 assets use the contract; SPL assets use the mint. `Asset.unicode_symbol` is optional display metadata; asset identity and signing continue to use the canonical ticker and token address. Signing must use the identifier, never the display name or alternate symbol.
+`Asset.token_address` is optional and nullable. Native assets use `null`; ERC-20 assets use the contract; SPL assets use the mint. Asset identity is the pair of network ID and nullable token identifier, never a ticker or display name. EVM contracts compare case-insensitively; Solana mints and Tron identifiers compare exactly. Use the shared identity helpers for selection and cache lookups. Both `symbol` and `unicode_symbol` are display metadata; native/token signing dispatch depends on the presence of `token_address`.
+
+`SignedTransaction.tokenAddress` retains the selected token identifier. New activity entries carry `asset`, and simulated swaps also carry `counter_asset`, using `{ network, token_address }`. These optional encrypted activity fields remain compatible with storage versions 2–7, so no envelope version bump is required. Older entries without them have unknown asset identity; do not reconstruct it from a ticker.
 
 Session states:
 

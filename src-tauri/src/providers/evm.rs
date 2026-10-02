@@ -112,9 +112,7 @@ pub(crate) async fn fetch_evm_assets(
         }),
         Err(_) => {
             balance_failed = true;
-            if let Some(cached) =
-                cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
-            {
+            if let Some(cached) = cached_asset(cached_assets, &config.id, None) {
                 assets.push(cached);
             }
         }
@@ -137,7 +135,9 @@ pub(crate) async fn fetch_evm_assets(
             }
             Err(_) => {
                 balance_failed = true;
-                if let Some(cached) = cached_asset(cached_assets, &config.id, &token.symbol) {
+                if let Some(cached) =
+                    cached_asset(cached_assets, &config.id, token.token_address.as_deref())
+                {
                     assets.push(cached);
                 }
             }

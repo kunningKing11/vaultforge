@@ -3,12 +3,14 @@ import { describe, expect, test } from "bun:test";
 import { networkById } from "../src/networks";
 import {
   applyWalletSession,
+  assetKey,
   createInitialAppState,
+  findAsset,
   receivePayload,
   sortAssetsByValue,
   walletStateFromSession,
 } from "../src/react/model";
-import type { WalletSession } from "../src/types";
+import type { Asset, WalletSession } from "../src/types";
 
 const unlockedSession: WalletSession = {
   has_wallet: true,
@@ -25,6 +27,26 @@ const unlockedSession: WalletSession = {
 };
 
 describe("React wallet session model", () => {
+  test("asset keys separate networks and native assets while preserving non-EVM case", () => {
+    expect(assetKey({ network: "ethereum", token_address: "0xABC" })).toBe(
+      assetKey({ network: "ethereum", token_address: "0xabc" }),
+    );
+    expect(assetKey({ network: "ethereum", token_address: "0xabc" })).not.toBe(
+      assetKey({ network: "base", token_address: "0xabc" }),
+    );
+    expect(assetKey({ network: "ethereum", token_address: null })).not.toBe(
+      assetKey({ network: "base", token_address: null }),
+    );
+    expect(assetKey({ network: "ethereum", token_address: null })).not.toBe(
+      assetKey({ network: "ethereum", token_address: "native" }),
+    );
+    for (const network of ["solana", "tron"] as const) {
+      expect(assetKey({ network, token_address: "AbC" })).not.toBe(
+        assetKey({ network, token_address: "abc" }),
+      );
+    }
+  });
+
   test("builds an XRP Ledger receive payload from derived classic address", () => {
     const wallet = walletStateFromSession(unlockedSession);
     const xrpl = networkById("xrpl");
@@ -83,6 +105,30 @@ describe("React wallet session model", () => {
     expect(next.receive.networkId).toBe("ethereum");
   });
 
+  test("selects same-ticker assets by network and identifier instead of symbol", () => {
+    const native: Asset = {
+      network: "ethereum",
+      symbol: "ETH",
+      name: "Ether",
+      balance: "0",
+      decimals: 18,
+      price_usd: 0,
+      change_24h: 0,
+      token_address: null,
+    };
+    const token = { ...native, token_address: "0xABC", decimals: 6 };
+    const otherToken = { ...token, token_address: "0xDEF", decimals: 8 };
+    const otherChain = { ...token, network: "base" as const };
+    const assets = [token, otherToken, otherChain, native];
+    expect(findAsset(assets, { network: "ethereum", token_address: null })).toBe(native);
+    expect(findAsset(assets, { network: "ethereum", token_address: "0xabc" })).toBe(token);
+    expect(findAsset(assets, { network: "ethereum", token_address: "0xdef" })).toBe(otherToken);
+    expect(findAsset(assets, { network: "base", token_address: "0xabc" })).toBe(otherChain);
+    expect(findAsset(assets, { network: "ethereum", token_address: "0x456" })).toBeUndefined();
+    token.symbol = "renamed";
+    expect(findAsset(assets, { network: "ethereum", token_address: "0xabc" })).toBe(token);
+  });
+
   test("sorts asset displays by fiat value with stable identifier ties", () => {
     const assets = sortAssetsByValue([
       {
@@ -93,6 +139,7 @@ describe("React wallet session model", () => {
         price_usd: 1,
         change_24h: 0,
         network: "base",
+        token_address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
       },
       {
         symbol: "BTC",
@@ -102,6 +149,7 @@ describe("React wallet session model", () => {
         price_usd: 100,
         change_24h: 0,
         network: "bitcoin",
+        token_address: null,
       },
       {
         symbol: "ETH",
@@ -111,6 +159,7 @@ describe("React wallet session model", () => {
         price_usd: 100,
         change_24h: 0,
         network: "ethereum",
+        token_address: null,
       },
     ]);
 

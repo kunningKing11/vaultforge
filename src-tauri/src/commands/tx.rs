@@ -4,10 +4,10 @@ use tauri::State;
 
 use crate::activity::{activity, random_hex, short_address};
 use crate::address::evm::validate_address as validate_evm_address;
-use crate::assets::token_addresses_match;
+use crate::assets::asset_matches;
 use crate::derivation::signing_key_from_mnemonic;
 use crate::derivation::xrpl_private_key_from_mnemonic;
-use crate::dto::{Activity, SignedTransaction, WalletSession};
+use crate::dto::{Activity, Asset, AssetIdentity, SignedTransaction, WalletSession};
 use crate::providers::bitcoin::{
     broadcast_bitcoin_transaction, fetch_bitcoin_tx_status, sign_bitcoin_transfer,
 };
@@ -173,19 +173,11 @@ pub(crate) async fn sign_transaction(
 
     let asset = assets
         .iter()
-        .find(|asset| {
-            asset.symbol == symbol
-                && asset.network == network
-                && match (token_address.as_deref(), asset.token_address.as_deref()) {
-                    (None, None) => true,
-                    (Some(expected), Some(actual)) => {
-                        token_addresses_match(&network, actual, expected)
-                    }
-                    _ => false,
-                }
-        })
+        .find(|asset| asset_matches(asset, &network, token_address.as_deref()))
         .ok_or_else(|| format!("Asset {symbol} on {network} not found in wallet"))?;
     let network_id = asset.network.as_str();
+    let symbol = asset.symbol.clone();
+    let is_native = asset.token_address.is_none();
     let mut decimals = asset.decimals;
 
     if destination_tag.is_some() && network_id != "xrpl" {
@@ -193,7 +185,7 @@ pub(crate) async fn sign_transaction(
     }
 
     match network_id {
-        "bitcoin" if symbol == "BTC" => {
+        "bitcoin" if is_native => {
             let from = addresses
                 .get("bitcoin")
                 .ok_or_else(|| "Wallet BTC address is not available".to_string())?
@@ -216,6 +208,7 @@ pub(crate) async fn sign_transaction(
             .await?;
 
             Ok(SignedTransaction {
+                token_address: asset.token_address.clone(),
                 from,
                 to,
                 symbol: symbol.clone(),
@@ -242,7 +235,6 @@ pub(crate) async fn sign_transaction(
                 .ok_or_else(|| format!("No EVM chain configured for network {network_id}"))?;
 
             let native_symbol = config.native_asset.symbol.as_str();
-            let is_native = symbol == native_symbol;
             let address = addresses
                 .get("evm")
                 .cloned()
@@ -319,7 +311,7 @@ pub(crate) async fn sign_transaction(
                 max_fee_per_gas,
                 gas_limit,
                 to: &tx_to,
-                value: if tx_data.is_empty() { value } else { 0 },
+                value: if is_native { value } else { 0 },
                 data: &tx_data,
             })?;
 
@@ -342,6 +334,7 @@ pub(crate) async fn sign_transaction(
             .to_string();
 
             let signed = SignedTransaction {
+                token_address: asset.token_address.clone(),
                 from: address,
                 to: display_to,
                 symbol: symbol.clone(),
@@ -377,7 +370,7 @@ pub(crate) async fn sign_transaction(
             let mut extra_sol_lamports = 0u64;
             let mut source_token_balance = None;
 
-            let signed_sol = if symbol == "SOL" {
+            let signed_sol = if is_native {
                 sign_solana_transfer(client, &mnemonic, &bip39_passphrase, &from, &to, amount_u64)
                     .await?
             } else {
@@ -422,7 +415,7 @@ pub(crate) async fn sign_transaction(
 
             let fee_lamports = signed_sol.fee_lamports as u128;
             let extra_sol_lamports = extra_sol_lamports as u128;
-            let required_sol = if symbol == "SOL" {
+            let required_sol = if is_native {
                 required_native_debit(true, value, fee_lamports, "SOL")?
             } else {
                 fee_lamports
@@ -431,7 +424,7 @@ pub(crate) async fn sign_transaction(
             };
 
             if sol_balance < required_sol {
-                return Err(if symbol == "SOL" {
+                return Err(if is_native {
                     "Insufficient SOL balance for amount plus fee".to_string()
                 } else if extra_sol_lamports > 0 {
                     "Insufficient SOL balance for Solana transaction fee and token account rent"
@@ -443,13 +436,13 @@ pub(crate) async fn sign_transaction(
 
             simulate_solana_transaction(client, &signed_sol.raw_tx_base64).await?;
 
-            let total_debit = if symbol == "SOL" {
+            let total_debit = if is_native {
                 required_sol.to_string()
             } else {
                 value.to_string()
             };
 
-            let post_balance = if symbol == "SOL" {
+            let post_balance = if is_native {
                 sol_balance.saturating_sub(required_sol).to_string()
             } else {
                 let balance = source_token_balance
@@ -458,6 +451,7 @@ pub(crate) async fn sign_transaction(
             };
 
             Ok(SignedTransaction {
+                token_address: asset.token_address.clone(),
                 from,
                 to,
                 symbol: symbol.clone(),
@@ -479,7 +473,7 @@ pub(crate) async fn sign_transaction(
                 tx_hash: Some(signed_sol.signature),
             })
         }
-        "tron" if symbol == "TRX" => {
+        "tron" if is_native => {
             let from = addresses
                 .get("tron")
                 .ok_or_else(|| "Wallet Tron address is not available".to_string())?
@@ -507,6 +501,7 @@ pub(crate) async fn sign_transaction(
                 .map_err(|_| "Failed to serialize signed Tron transaction".to_string())?;
 
             Ok(SignedTransaction {
+                token_address: asset.token_address.clone(),
                 from,
                 to,
                 symbol: symbol.clone(),
@@ -528,7 +523,7 @@ pub(crate) async fn sign_transaction(
                 tx_hash: Some(signed_trx.txid),
             })
         }
-        "xrpl" if symbol == "XRP" => {
+        "xrpl" if is_native => {
             let from = addresses
                 .get("xrpl")
                 .ok_or_else(|| "Wallet XRP Ledger address is not available".to_string())?
@@ -565,6 +560,7 @@ pub(crate) async fn sign_transaction(
             let signed = signed?;
 
             Ok(SignedTransaction {
+                token_address: asset.token_address.clone(),
                 from,
                 to,
                 symbol: symbol.clone(),
@@ -648,7 +644,7 @@ pub(crate) async fn send_transaction(
     let client = clients.http();
 
     let tx_hash = match signed.network.as_str() {
-        "bitcoin" if signed.symbol == "BTC" => {
+        "bitcoin" if signed.token_address.is_none() => {
             broadcast_bitcoin_transaction(client, raw_tx).await?
         }
         network_id if evm_config_by_id(network_id).is_some() => {
@@ -675,12 +671,12 @@ pub(crate) async fn send_transaction(
             tx_hash
         }
         "solana" => broadcast_solana_transaction(client, raw_tx).await?,
-        "tron" if signed.symbol == "TRX" => {
+        "tron" if signed.token_address.is_none() => {
             let tx: serde_json::Value = serde_json::from_str(raw_tx)
                 .map_err(|_| "Invalid signed Tron transaction JSON".to_string())?;
             broadcast_tron_transaction(client, &tx).await?
         }
-        "xrpl" if signed.symbol == "XRP" => {
+        "xrpl" if signed.token_address.is_none() => {
             broadcast_xrpl_transaction(client, raw_tx, &signed.payload_hash).await?
         }
         network_id => return Err(format!("Unsupported network: {network_id}")),
@@ -697,6 +693,11 @@ pub(crate) async fn send_transaction(
         wallet.activity.insert(
             0,
             Activity {
+                asset: Some(AssetIdentity::new(
+                    &signed.network,
+                    signed.token_address.as_deref(),
+                )),
+                counter_asset: None,
                 id: random_hex(8),
                 kind: "send".to_string(),
                 title: "Transfer sent".to_string(),
@@ -722,14 +723,11 @@ pub(crate) async fn send_transaction(
 #[tauri::command(rename_all = "camelCase")]
 pub(crate) fn swap_tokens(
     state: State<'_, Mutex<AppState>>,
-    from_symbol: String,
-    to_symbol: String,
+    from_asset: AssetIdentity,
+    to_asset: AssetIdentity,
     amount: String,
 ) -> Result<WalletSession, String> {
     validate_unlocked(&state)?;
-    if from_symbol == to_symbol {
-        return Err("Choose two different assets".to_string());
-    }
 
     let amount_wei: u128 = amount.parse().map_err(|_| "Invalid amount".to_string())?;
     if amount_wei == 0 {
@@ -742,16 +740,9 @@ pub(crate) fn swap_tokens(
         .as_mut()
         .ok_or_else(|| "No wallet exists yet".to_string())?;
 
-    let from_index = wallet
-        .assets
-        .iter()
-        .position(|asset| asset.symbol == from_symbol)
-        .ok_or_else(|| "Source asset not found".to_string())?;
-    let to_index = wallet
-        .assets
-        .iter()
-        .position(|asset| asset.symbol == to_symbol)
-        .ok_or_else(|| "Destination asset not found".to_string())?;
+    let (from_index, to_index) = swap_asset_indices(&wallet.assets, &from_asset, &to_asset)?;
+    let from_symbol = wallet.assets[from_index].symbol.clone();
+    let to_symbol = wallet.assets[to_index].symbol.clone();
 
     let from_balance: u128 = wallet.assets[from_index].balance.parse().unwrap_or(0);
     if from_balance < amount_wei {
@@ -769,17 +760,42 @@ pub(crate) fn swap_tokens(
     wallet.assets[from_index].balance = (from_balance - amount_wei).to_string();
     let to_balance: u128 = wallet.assets[to_index].balance.parse().unwrap_or(0);
     wallet.assets[to_index].balance = (to_balance + received_wei).to_string();
-    wallet.activity.insert(
-        0,
-        activity(
-            "swap",
-            "Swap executed",
-            &format!("{} to {} with 0.5% route fee", from_symbol, to_symbol),
-            &format!("{amount_wei} {from_symbol} -> {received_wei} {to_symbol}"),
-        ),
+    let mut entry = activity(
+        "swap",
+        "Swap executed",
+        &format!("{} to {} with 0.5% route fee", from_symbol, to_symbol),
+        &format!("{amount_wei} {from_symbol} -> {received_wei} {to_symbol}"),
     );
+    entry.asset = Some(AssetIdentity::new(
+        &from_asset.network,
+        from_asset.token_address.as_deref(),
+    ));
+    entry.counter_asset = Some(AssetIdentity::new(
+        &to_asset.network,
+        to_asset.token_address.as_deref(),
+    ));
+    wallet.activity.insert(0, entry);
     persist_state_wallet(&mut state)?;
     Ok(session_from_state(&state))
+}
+
+fn swap_asset_indices(
+    assets: &[Asset],
+    from: &AssetIdentity,
+    to: &AssetIdentity,
+) -> Result<(usize, usize), String> {
+    let from_index = assets
+        .iter()
+        .position(|asset| from.matches(asset))
+        .ok_or_else(|| "Source asset not found".to_string())?;
+    let to_index = assets
+        .iter()
+        .position(|asset| to.matches(asset))
+        .ok_or_else(|| "Destination asset not found".to_string())?;
+    if from_index == to_index {
+        return Err("Choose two different assets".to_string());
+    }
+    Ok((from_index, to_index))
 }
 
 #[tauri::command]

@@ -13,6 +13,16 @@ function networkSource(): NetworkDataSource {
 }
 
 describe("network registry normalization", () => {
+  test("allows same-symbol tokens with distinct contracts", () => {
+    const source = networkSource();
+    const ethereum = source.networks.find((network) => network.id === "ethereum")!;
+    ethereum.tokens!.push({
+      ...structuredClone(ethereum.tokens![0]!),
+      tokenAddress: "0x1111111111111111111111111111111111111111",
+    });
+    expect(() => normalizeNetworkRegistry(source)).not.toThrow();
+  });
+
   test("normalizes the configured registry", () => {
     const registry = normalizeNetworkRegistry(networkSource());
 
@@ -36,7 +46,7 @@ describe("network registry normalization", () => {
       tokenAddress: ethereum.tokens![0]!.tokenAddress.toLowerCase(),
     });
     expect(() => normalizeNetworkRegistry(evmDuplicate)).toThrow(
-      "ethereum contains a duplicate token symbol or contract",
+      "ethereum contains a duplicate token contract",
     );
 
     const solanaTokens = networkSource();
@@ -74,7 +84,7 @@ describe("network registry normalization", () => {
     const ethereum = duplicateToken.networks.find((network) => network.id === "ethereum")!;
     ethereum.tokens!.push(structuredClone(ethereum.tokens![0]!));
     expect(() => normalizeNetworkRegistry(duplicateToken)).toThrow(
-      "ethereum contains a duplicate token symbol or contract",
+      "ethereum contains a duplicate token contract",
     );
   });
 

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use super::{decrypt_wallet, derive_storage_key, encrypt_wallet};
 use crate::activity::{activity, hash_secret};
-use crate::dto::{FiatCurrency, Wallet};
+use crate::dto::{AssetIdentity, FiatCurrency, Wallet};
 use crate::tests::starter_assets;
 
 #[test]
@@ -18,7 +18,7 @@ fn derives_same_key_with_same_salt() {
 #[test]
 fn encrypts_and_decrypts_wallet_payload() {
     let wallet_password = "Correct horse battery staple 42!";
-    let wallet = Wallet {
+    let mut wallet = Wallet {
         name: "Test Wallet".to_string(),
         mnemonic: "test mnemonic".to_string(),
         bip39_passphrase: "TREZOR".to_string(),
@@ -33,6 +33,8 @@ fn encrypts_and_decrypts_wallet_payload() {
         auto_lock_timeout_secs: Some(300),
         use_crypto_symbols: true,
     };
+    wallet.activity[0].asset = Some(AssetIdentity::new("ethereum", Some("0xABC")));
+    wallet.activity[0].counter_asset = Some(AssetIdentity::new("base", Some("0xABC")));
     let (key, salt) = derive_storage_key(wallet_password, None).unwrap();
     let mut stored = encrypt_wallet(&wallet, &key, &salt).unwrap();
     assert_eq!(stored.version, 7);
@@ -43,6 +45,14 @@ fn encrypts_and_decrypts_wallet_payload() {
     assert_eq!(decrypted.wallet().mnemonic, wallet.mnemonic);
     assert_eq!(decrypted.wallet().bip39_passphrase, wallet.bip39_passphrase);
     assert_eq!(decrypted.wallet().created_at, wallet.created_at);
+    assert_eq!(
+        decrypted.wallet().activity[0].asset,
+        wallet.activity[0].asset
+    );
+    assert_eq!(
+        decrypted.wallet().activity[0].counter_asset,
+        wallet.activity[0].counter_asset
+    );
     assert_eq!(decrypted.wallet().fiat_currency, wallet.fiat_currency);
     assert_eq!(
         decrypted.wallet().usd_exchange_rate,

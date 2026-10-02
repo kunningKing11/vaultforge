@@ -77,7 +77,6 @@ function validateToken(token: NetworkTokenConfig, context: string, network: Netw
 }
 
 function validateNetworkTokens(network: Network) {
-  const tokenSymbols = new Set<string>();
   const tokenIdentifiers = new Set<string>();
 
   for (const token of network.tokens) {
@@ -85,10 +84,9 @@ function validateNetworkTokens(network: Network) {
     const identifier = tokenStandardDefinitions[token.standard].normalizeIdentifier(
       token.tokenAddress,
     );
-    if (tokenSymbols.has(token.symbol) || tokenIdentifiers.has(identifier)) {
-      throw new Error(`${network.id} contains a duplicate token symbol or contract`);
+    if (tokenIdentifiers.has(identifier)) {
+      throw new Error(`${network.id} contains a duplicate token contract`);
     }
-    tokenSymbols.add(token.symbol);
     tokenIdentifiers.add(identifier);
   }
 }

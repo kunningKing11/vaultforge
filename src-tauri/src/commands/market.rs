@@ -2,8 +2,10 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Mutex;
 use tauri::State;
 
-use crate::assets::{cached_asset, cached_asset_by_token_address};
-use crate::dto::{Asset, FiatCurrency, RefreshWarning, RefreshWarningKind, WalletRefreshResult};
+use crate::assets::cached_asset;
+use crate::dto::{
+    Asset, AssetIdentity, FiatCurrency, RefreshWarning, RefreshWarningKind, WalletRefreshResult,
+};
 use crate::providers::bitcoin::BitcoinAccountSnapshot;
 use crate::providers::fetch_portfolio_assets;
 use crate::providers::http::ProviderClients;
@@ -165,7 +167,7 @@ pub(crate) async fn refresh_asset_prices(
         }
     };
 
-    let mut dynamic_tokens = HashMap::<(String, String), TokenMetadata>::new();
+    let mut dynamic_tokens = HashMap::<AssetIdentity, TokenMetadata>::new();
     let mut failed_token_networks = BTreeSet::new();
     for asset in assets.iter() {
         if price_id_for_asset(asset).is_some() {
@@ -180,7 +182,7 @@ pub(crate) async fn refresh_asset_prices(
                     failed_token_networks.insert(asset.network.clone());
                 }
                 dynamic_tokens.insert(
-                    (asset.network.clone(), token_address.to_ascii_lowercase()),
+                    AssetIdentity::new(&asset.network, Some(token_address)),
                     metadata,
                 );
             }
@@ -200,7 +202,7 @@ pub(crate) async fn refresh_asset_prices(
             continue;
         };
         if let Some(metadata) =
-            dynamic_tokens.get(&(asset.network.clone(), token_address.to_ascii_lowercase()))
+            dynamic_tokens.get(&AssetIdentity::new(&asset.network, Some(token_address)))
         {
             asset.symbol.clone_from(&metadata.symbol);
             asset.name.clone_from(&metadata.name);
@@ -222,10 +224,11 @@ pub(crate) async fn refresh_asset_prices(
 
 fn preserve_cached_market_data(assets: &mut [Asset], cached_assets: &[Asset]) {
     for asset in assets {
-        let cached = asset.token_address.as_deref().and_then(|token_address| {
-            cached_asset_by_token_address(cached_assets, &asset.network, token_address)
-        });
-        let cached = cached.or_else(|| cached_asset(cached_assets, &asset.network, &asset.symbol));
+        let cached = cached_asset(
+            cached_assets,
+            &asset.network,
+            asset.token_address.as_deref(),
+        );
         if let Some(cached) = cached {
             asset.price_usd = cached.price_usd;
             asset.change_24h = cached.change_24h;

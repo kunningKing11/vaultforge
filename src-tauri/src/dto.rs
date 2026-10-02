@@ -113,8 +113,18 @@ pub(crate) struct Asset {
     pub(crate) token_address: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+pub(crate) struct AssetIdentity {
+    pub(crate) network: String,
+    pub(crate) token_address: Option<String>,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct Activity {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) asset: Option<AssetIdentity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) counter_asset: Option<AssetIdentity>,
     pub(crate) id: String,
     pub(crate) kind: String,
     pub(crate) title: String,
@@ -171,6 +181,7 @@ pub(crate) struct WalletRefreshResult {
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SignedTransaction {
+    pub(crate) token_address: Option<String>,
     pub(crate) from: String,
     pub(crate) to: String,
     pub(crate) symbol: String,

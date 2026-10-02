@@ -81,9 +81,7 @@ pub(crate) async fn fetch_solana_assets(
         }),
         Err(_) => {
             balance_failed = true;
-            if let Some(cached) =
-                cached_asset(cached_assets, &config.id, &config.native_asset.symbol)
-            {
+            if let Some(cached) = cached_asset(cached_assets, &config.id, None) {
                 assets.push(cached);
             }
         }
