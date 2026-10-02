@@ -92,7 +92,11 @@ import {
   networkLabel,
   receivePayload,
   selectedActivity,
+  sendAddressPlaceholder,
+  sendDraftForNetwork,
   sortAssetsByValue,
+  sortAssetsForSelection,
+  sortNetworksForSelection,
   type WalletState,
 } from "./model";
 import { PasswordInput } from "./PasswordInput";
@@ -2314,7 +2318,11 @@ function SendForm({
   wallet: Extract<WalletState, { status: "unlocked" }>;
 }) {
   const selectedAssetId = assetKey(draft);
-  const selectedSymbol = draft.symbol || "ETH";
+  const availableNetworks = sortNetworksForSelection(wallet.enabledNetworks, wallet.assets);
+  const availableAssets = sortAssetsForSelection(
+    wallet.assets.filter((asset) => asset.network === draft.network),
+  );
+  const hasSelectedAsset = !!findAsset(availableAssets, draft);
   const updateDraft = (update: (current: SendDraft) => SendDraft) => {
     setState((current) => ({
       ...current,
@@ -2323,6 +2331,7 @@ function SendForm({
   };
   const submit: SubmitEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault();
+    if (!hasSelectedAsset || !wallet.enabledNetworks.includes(draft.network)) return;
     void onSign(draft);
   };
   return (
@@ -2341,42 +2350,73 @@ function SendForm({
       </VStack>
       <form onSubmit={submit}>
         <VStack gap={2}>
+          <CdsSelect
+            label="Network"
+            onChange={(networkId) => {
+              const network = availableNetworks.find((candidate) => candidate.id === networkId);
+              if (network)
+                updateDraft((current) => sendDraftForNetwork(current, network.id, wallet.assets));
+            }}
+            options={availableNetworks.map((network) => ({
+              label: network.name,
+              value: network.id,
+            }))}
+            style={{ width: "100%" }}
+            value={draft.network}
+          />
+          <Grid
+            gap={2}
+            templateColumns="minmax(0, 1fr) minmax(0, min(220px, calc((100% - var(--space-2)) / 2)))"
+            width="100%"
+          >
+            <Box minWidth={0} width="100%">
+              <CdsSelect
+                label="Asset"
+                disabled={availableAssets.length === 0}
+                onChange={(value) => {
+                  const asset = availableAssets.find((candidate) => assetKey(candidate) === value);
+                  if (!asset) return;
+                  updateDraft((current) => ({
+                    ...current,
+                    symbol: asset.symbol,
+                    network: asset.network,
+                    token_address: asset.token_address ?? null,
+                    amount: assetKey(current) === assetKey(asset) ? current.amount : "",
+                  }));
+                }}
+                options={availableAssets.map((asset) => ({
+                  label: `${displayAssetSymbol(asset, wallet)} - ${asset.name}`,
+                  value: assetKey(asset),
+                }))}
+                style={{ width: "100%" }}
+                value={hasSelectedAsset ? selectedAssetId : ""}
+              />
+            </Box>
+            <Box minWidth={0} width="100%">
+              <TextInput
+                label="Amount"
+                inputMode="decimal"
+                onChange={(event) =>
+                  updateDraft((current) => ({ ...current, amount: event.target.value }))
+                }
+                required
+                value={draft.amount}
+                width="100%"
+              />
+            </Box>
+          </Grid>
+          {availableAssets.length === 0 && (
+            <Text color="fgMuted" font="body">
+              No assets are available on this network.
+            </Text>
+          )}
           <TextInput
             label="Recipient address"
             onChange={(event) => updateDraft((current) => ({ ...current, to: event.target.value }))}
-            placeholder={addressPlaceholder(selectedSymbol)}
+            placeholder={sendAddressPlaceholder(draft.network)}
             required
             value={draft.to}
           />
-          <Grid columnMin="200px" gap={2}>
-            <CdsSelect
-              label="Asset"
-              onChange={(value) => {
-                const asset = wallet.assets.find((candidate) => assetKey(candidate) === value);
-                if (!asset) return;
-                updateDraft((current) => ({
-                  ...current,
-                  symbol: asset.symbol,
-                  network: asset.network,
-                  token_address: asset.token_address ?? null,
-                }));
-              }}
-              options={wallet.assets.map((asset) => ({
-                label: `${displayAssetSymbol(asset, wallet)} - ${asset.name} (${networkDisplayName(asset.network)})`,
-                value: assetKey(asset),
-              }))}
-              value={selectedAssetId}
-            />
-            <TextInput
-              label="Amount"
-              inputMode="decimal"
-              onChange={(event) =>
-                updateDraft((current) => ({ ...current, amount: event.target.value }))
-              }
-              required
-              value={draft.amount}
-            />
-          </Grid>
           <TextInput
             label="Destination tag (XRP only)"
             max="4294967295"
@@ -2400,7 +2440,7 @@ function SendForm({
             placeholder="Optional transaction memo"
             value={draft.note}
           />
-          <Button loading={busy} type="submit">
+          <Button disabled={!hasSelectedAsset} loading={busy} type="submit">
             Sign transaction
           </Button>
         </VStack>
@@ -3174,6 +3214,7 @@ function EmptyState({ body, title }: { body: string; title: string }) {
 function CdsSelect({
   accessibilityLabel,
   className,
+  disabled,
   label,
   onChange,
   options,
@@ -3182,6 +3223,7 @@ function CdsSelect({
 }: {
   accessibilityLabel?: string;
   className?: string;
+  disabled?: boolean;
   label?: string;
   onChange: (value: string) => void;
   options: ReadonlyArray<{ label: string; value: string }>;
@@ -3192,6 +3234,7 @@ function CdsSelect({
     <Select
       accessibilityLabel={accessibilityLabel ?? label}
       className={className}
+      disabled={disabled}
       label={label}
       onChange={(next) => {
         if (next !== null) onChange(next);
@@ -3268,20 +3311,6 @@ function transactionReferenceLabel(network: NetworkId) {
   if (network === "tron") return "Resource model";
   if (network === "xrpl") return "Sequence";
   return "Nonce";
-}
-
-function addressPlaceholder(symbol: string) {
-  const placeholders: Record<string, string> = {
-    BTC: "bc1... / 1... / 3...",
-    ETH: "0x...",
-    FIL: "f1... / f3...",
-    INJ: "inj1...",
-    SOL: "Solana address",
-    TRX: "T...",
-    XRP: "r...",
-    ZEC: "t1... / t3...",
-  };
-  return placeholders[symbol] ?? "0x...";
 }
 
 function successMessage(command: SessionCommand) {

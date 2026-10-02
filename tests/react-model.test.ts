@@ -5,9 +5,14 @@ import {
   applyWalletSession,
   assetKey,
   createInitialAppState,
+  emptySendDraft,
   findAsset,
   receivePayload,
+  sendAddressPlaceholder,
+  sendDraftForNetwork,
   sortAssetsByValue,
+  sortAssetsForSelection,
+  sortNetworksForSelection,
   walletStateFromSession,
 } from "../src/react/model";
 import type { Asset, WalletSession } from "../src/types";
@@ -26,7 +31,31 @@ const unlockedSession: WalletSession = {
   use_crypto_symbols: false,
 };
 
+const ethereumAsset: Asset = {
+  network: "ethereum",
+  symbol: "ETH",
+  name: "Ether",
+  balance: "0",
+  decimals: 18,
+  price_usd: 0,
+  change_24h: 0,
+  token_address: null,
+};
+
 describe("React wallet session model", () => {
+  test("address placeholders follow chain families rather than token tickers", () => {
+    for (const id of ["ethereum", "base", "polygon", "avalanche_c"] as const) {
+      expect(sendAddressPlaceholder(id)).toBe("0x...");
+    }
+    expect(sendAddressPlaceholder("bitcoin")).toBe("bc1... / 1... / 3...");
+    expect(sendAddressPlaceholder("solana")).toBe("Solana address (base58)");
+    expect(sendAddressPlaceholder("tron")).toBe("T...");
+    expect(sendAddressPlaceholder("xrpl")).toBe("r...");
+    expect(sendAddressPlaceholder("filecoin")).toBe("f1... / f3...");
+    expect(sendAddressPlaceholder("injective")).toBe("inj1...");
+    expect(sendAddressPlaceholder("zcash")).toBe("t1... / t3...");
+  });
+
   test("asset keys separate networks and native assets while preserving non-EVM case", () => {
     expect(assetKey({ network: "ethereum", token_address: "0xABC" })).toBe(
       assetKey({ network: "ethereum", token_address: "0xabc" }),
@@ -53,6 +82,42 @@ describe("React wallet session model", () => {
     if (!xrpl) throw new Error("XRP Ledger network is missing");
 
     expect(receivePayload(wallet, xrpl)).toBe("rExample");
+  });
+
+  test("changing send network selects its native asset and clears incompatible fields", () => {
+    const native = { ...ethereumAsset, network: "base" as const };
+    const token = { ...native, symbol: "USDC", token_address: "0xabc" };
+    const draft = { ...emptySendDraft(), to: "old recipient", amount: "1", destinationTag: 5 };
+    expect(sendDraftForNetwork(draft, "base", [ethereumAsset, token, native])).toEqual({
+      ...draft,
+      network: "base",
+      symbol: "ETH",
+      token_address: null,
+      to: "",
+      amount: "",
+      destinationTag: null,
+    });
+  });
+
+  test("changing to a network without assets never retains another network token", () => {
+    const draft = { ...emptySendDraft(), symbol: "USDC", token_address: "0xabc", amount: "1" };
+    const next = sendDraftForNetwork(draft, "solana", [ethereumAsset]);
+    expect(next.network).toBe("solana");
+    expect(next.symbol).toBe("SOL");
+    expect(next.token_address).toBeNull();
+    expect(next.amount).toBe("");
+  });
+
+  test("falls back to an applicable token when no native asset is available", () => {
+    const token = {
+      ...ethereumAsset,
+      network: "base" as const,
+      symbol: "USDC",
+      token_address: "0xabc",
+    };
+    expect(
+      sendDraftForNetwork(emptySendDraft(), "base", [ethereumAsset, token]).token_address,
+    ).toBe("0xabc");
   });
 
   test("keeps a polled terminal status when a portfolio refresh returns cached pending activity", () => {
@@ -103,6 +168,36 @@ describe("React wallet session model", () => {
     const next = applyWalletSession(state, unlockedSession);
     expect(next.wallet.status).toBe("unlocked");
     expect(next.receive.networkId).toBe("ethereum");
+  });
+
+  test("preserves an applicable send asset and entered details during session refresh", () => {
+    const token = { ...ethereumAsset, symbol: "USDC", token_address: "0xabc" };
+    const state = createInitialAppState();
+    state.send.draft = {
+      ...emptySendDraft(),
+      symbol: "USDC",
+      token_address: "0xABC",
+      amount: "2",
+      to: "recipient",
+    };
+    const refreshed = applyWalletSession(state, {
+      ...unlockedSession,
+      assets: [ethereumAsset, token],
+    });
+    expect(refreshed.send.draft).toEqual(state.send.draft);
+  });
+
+  test("replaces a disabled send network when a session is ingested", () => {
+    const state = createInitialAppState();
+    state.send.draft = { ...emptySendDraft(), amount: "1", to: "old recipient" };
+    const next = applyWalletSession(state, {
+      ...unlockedSession,
+      enabled_networks: ["base"],
+      assets: [{ ...ethereumAsset, network: "base" }],
+    });
+    expect(next.send.draft.network).toBe("base");
+    expect(next.send.draft.amount).toBe("");
+    expect(next.send.draft.to).toBe("");
   });
 
   test("selects same-ticker assets by network and identifier instead of symbol", () => {
@@ -164,5 +259,63 @@ describe("React wallet session model", () => {
     ]);
 
     expect(assets.map((asset) => asset.symbol)).toEqual(["BTC", "ETH", "USDC"]);
+  });
+
+  test("sorts networks alphabetically when none have funds", () => {
+    expect(
+      sortNetworksForSelection(["bitcoin", "ethereum", "avalanche_c", "base"], []).map(
+        (network) => network.id,
+      ),
+    ).toEqual(["avalanche_c", "base", "bitcoin", "ethereum"]);
+  });
+
+  test("sorts networks by funds then displayed name including token-only balances", () => {
+    const ids = ["bitcoin", "ethereum", "avalanche_c", "base"] as const;
+    const assets: Asset[] = [
+      { ...ethereumAsset, network: "bitcoin", symbol: "BTC", balance: "1" },
+      { ...ethereumAsset, network: "avalanche_c", symbol: "AVAX", balance: "0" },
+      {
+        ...ethereumAsset,
+        network: "avalanche_c",
+        symbol: "USDC",
+        balance: "1",
+        token_address: "0xa",
+      },
+      { ...ethereumAsset, network: "base", balance: "0" },
+    ];
+    expect(sortNetworksForSelection(ids, assets).map((network) => network.id)).toEqual([
+      "avalanche_c",
+      "bitcoin",
+      "base",
+      "ethereum",
+    ]);
+    expect(ids).toEqual(["bitcoin", "ethereum", "avalanche_c", "base"]);
+  });
+
+  test("sorts selection assets alphabetically within funded and unfunded groups", () => {
+    const assets: Asset[] = [
+      { ...ethereumAsset, symbol: "ZED", balance: "1", price_usd: 0, token_address: "0xz" },
+      { ...ethereumAsset, symbol: "AAA", balance: "0", token_address: "0xa" },
+      { ...ethereumAsset, symbol: "bbb", balance: "900719925474099300000", token_address: "0xb" },
+      { ...ethereumAsset, symbol: "CCC", balance: "000", token_address: "0xc" },
+      { ...ethereumAsset, symbol: "DDD", balance: "0", token_address: "0xd" },
+    ];
+    const original = [...assets];
+    expect(sortAssetsForSelection(assets).map((asset) => asset.symbol)).toEqual([
+      "bbb",
+      "ZED",
+      "AAA",
+      "CCC",
+      "DDD",
+    ]);
+    expect(assets).toEqual(original);
+  });
+
+  test("sorts selection ties by name and identity regardless of input order", () => {
+    const first = { ...ethereumAsset, symbol: "USDC", name: "Alpha", token_address: "0xa" };
+    const second = { ...first, token_address: "0xb" };
+    const third = { ...first, name: "Beta", token_address: "0xc" };
+    expect(sortAssetsForSelection([third, second, first])).toEqual([first, second, third]);
+    expect(sortAssetsForSelection([second, first, third])).toEqual([first, second, third]);
   });
 });

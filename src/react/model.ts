@@ -102,6 +102,41 @@ export function emptySendDraft(): SendDraft {
   };
 }
 
+export function sendAddressPlaceholder(networkId: NetworkId): string {
+  const kind = networkById(networkId)?.kind;
+  if (!kind) return "Recipient address";
+  const placeholders: Record<Network["kind"], string> = {
+    bitcoin: "bc1... / 1... / 3...",
+    evm: "0x...",
+    filecoin: "f1... / f3...",
+    injective: "inj1...",
+    svm: "Solana address (base58)",
+    tron: "T...",
+    xrpl: "r...",
+    zcash: "t1... / t3...",
+  };
+  return placeholders[kind];
+}
+
+export function sendDraftForNetwork(
+  draft: SendDraft,
+  network: NetworkId,
+  assets: readonly Asset[],
+): SendDraft {
+  const networkAssets = assets.filter((asset) => asset.network === network);
+  if (draft.network === network && findAsset(networkAssets, draft)) return draft;
+  const asset = networkAssets.find((candidate) => !candidate.token_address) ?? networkAssets[0];
+  return {
+    ...draft,
+    network,
+    symbol: asset?.symbol ?? networkById(network)?.nativeAsset.symbol ?? "",
+    token_address: asset?.token_address ?? null,
+    to: draft.network === network ? draft.to : "",
+    amount: "",
+    destinationTag: null,
+  };
+}
+
 export function createSetupWizardState(): SetupWizardState {
   return {
     step: 1,
@@ -213,7 +248,19 @@ export function applyWalletSession(state: AppState, session: WalletSession): App
       ...state.receive,
       networkId: receiveNetworkId,
     },
-    send: resetWalletUi ? { draft: emptySendDraft(), signedTransaction: null } : state.send,
+    send:
+      wallet.status === "unlocked"
+        ? {
+            ...state.send,
+            draft: sendDraftForNetwork(
+              state.send.draft,
+              wallet.enabledNetworks.includes(state.send.draft.network)
+                ? state.send.draft.network
+                : (wallet.enabledNetworks[0] ?? DEFAULT_NETWORK_ID),
+              wallet.assets,
+            ),
+          }
+        : { draft: emptySendDraft(), signedTransaction: null },
   };
 }
 
@@ -270,6 +317,41 @@ export function sortAssetsByValue(assets: ReadonlyArray<Asset>): Asset[] {
 
     return (left.token_address ?? "").localeCompare(right.token_address ?? "");
   });
+}
+
+export function sortAssetsForSelection(assets: readonly Asset[]): Asset[] {
+  return [...assets].sort((left, right) => {
+    const fundedDifference = Number(BigInt(right.balance) > 0n) - Number(BigInt(left.balance) > 0n);
+    if (fundedDifference !== 0) return fundedDifference;
+    return (
+      left.symbol.localeCompare(right.symbol, "en", { sensitivity: "base" }) ||
+      left.name.localeCompare(right.name, "en", { sensitivity: "base" }) ||
+      assetKey(left).localeCompare(assetKey(right), "en")
+    );
+  });
+}
+
+export function sortNetworksForSelection(
+  networkIds: readonly NetworkId[],
+  assets: readonly Asset[],
+): Network[] {
+  const fundedNetworks = new Set(
+    assets.filter((asset) => BigInt(asset.balance) > 0n).map((asset) => asset.network),
+  );
+  return networkIds
+    .flatMap((id) => {
+      const network = networkById(id);
+      return network ? [network] : [];
+    })
+    .sort((left, right) => {
+      const fundedDifference =
+        Number(fundedNetworks.has(right.id)) - Number(fundedNetworks.has(left.id));
+      return (
+        fundedDifference ||
+        left.name.localeCompare(right.name, "en", { sensitivity: "base" }) ||
+        left.id.localeCompare(right.id, "en")
+      );
+    });
 }
 
 function displayAssetValueUsd(asset: Asset): number {
