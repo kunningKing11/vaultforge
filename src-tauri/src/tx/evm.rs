@@ -35,10 +35,12 @@ pub(crate) fn encode_erc20_transfer(recipient: &str, amount: u128) -> Result<Vec
     Ok(data)
 }
 
-fn u128_to_be_bytes(value: u128) -> Vec<u8> {
-    let be = value.to_be_bytes();
-    let start = be.iter().position(|&b| b != 0).unwrap_or(be.len() - 1);
-    be[start..].to_vec()
+fn trim_leading_zeroes(bytes: &[u8]) -> &[u8] {
+    let start = bytes
+        .iter()
+        .position(|&byte| byte != 0)
+        .unwrap_or(bytes.len());
+    &bytes[start..]
 }
 
 pub(crate) fn sign_eip1559_transfer(
@@ -47,19 +49,15 @@ pub(crate) fn sign_eip1559_transfer(
     let to_bytes = hex::decode(draft.to.trim_start_matches("0x"))
         .map_err(|_| "Invalid to address".to_string())?;
 
-    let max_priority_bytes = u128_to_be_bytes(draft.max_priority_fee_per_gas);
-    let max_fee_bytes = u128_to_be_bytes(draft.max_fee_per_gas);
-    let value_bytes = u128_to_be_bytes(draft.value);
-
     let mut stream = rlp::RlpStream::new();
     stream.begin_list(9);
     stream.append(&draft.chain_id);
     stream.append(&draft.nonce);
-    stream.append(&max_priority_bytes);
-    stream.append(&max_fee_bytes);
+    stream.append(&draft.max_priority_fee_per_gas);
+    stream.append(&draft.max_fee_per_gas);
     stream.append(&draft.gas_limit);
     stream.append(&to_bytes);
-    stream.append(&value_bytes);
+    stream.append(&draft.value);
     stream.append(&draft.data.to_vec());
     stream.begin_list(0);
 
@@ -77,8 +75,8 @@ pub(crate) fn sign_eip1559_transfer(
     let sig_bytes = signature.to_bytes();
     let r_bytes = &sig_bytes[..32];
     let s_bytes = &sig_bytes[32..];
-    let r_vec: Vec<u8> = r_bytes.to_vec();
-    let s_vec: Vec<u8> = s_bytes.to_vec();
+    let r_integer = trim_leading_zeroes(r_bytes);
+    let s_integer = trim_leading_zeroes(s_bytes);
 
     let mut y_parity: u64 = 0;
     let verifying_key = draft.signing_key.verifying_key();
@@ -97,16 +95,16 @@ pub(crate) fn sign_eip1559_transfer(
     tx_stream.begin_list(12);
     tx_stream.append(&draft.chain_id);
     tx_stream.append(&draft.nonce);
-    tx_stream.append(&max_priority_bytes);
-    tx_stream.append(&max_fee_bytes);
+    tx_stream.append(&draft.max_priority_fee_per_gas);
+    tx_stream.append(&draft.max_fee_per_gas);
     tx_stream.append(&draft.gas_limit);
     tx_stream.append(&to_bytes);
-    tx_stream.append(&value_bytes);
+    tx_stream.append(&draft.value);
     tx_stream.append(&draft.data.to_vec());
     tx_stream.begin_list(0);
     tx_stream.append(&y_parity);
-    tx_stream.append(&r_vec);
-    tx_stream.append(&s_vec);
+    tx_stream.append(&r_integer);
+    tx_stream.append(&s_integer);
 
     let mut signed_data = vec![0x02u8];
     signed_data.extend_from_slice(&tx_stream.out());
