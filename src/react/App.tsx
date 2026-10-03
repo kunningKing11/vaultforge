@@ -2725,7 +2725,7 @@ function SwapView({
             value={amount}
           />
           <Button loading={busy} type="submit">
-            Execute simulated swap
+            Swap (not implemented)
           </Button>
         </VStack>
       </form>
@@ -3320,7 +3320,7 @@ function successMessage(command: SessionCommand) {
     unlock_wallet: "Wallet unlocked.",
     update_wallet_settings: "Wallet settings updated.",
     send_transaction: "Signed transaction broadcast to RPC provider.",
-    swap_tokens: "Swap completed in local simulator.",
+    swap_tokens: "Swaps are not implemented. No funds were moved.",
     clear_wallet: "Local wallet cleared.",
     refresh_portfolio: "Portfolio refreshed.",
   };

@@ -2,12 +2,12 @@ use chrono::Utc;
 use std::sync::Mutex;
 use tauri::State;
 
-use crate::activity::{activity, random_hex, short_address};
+use crate::activity::{random_hex, short_address};
 use crate::address::evm::validate_address as validate_evm_address;
 use crate::assets::asset_matches;
 use crate::derivation::signing_key_from_mnemonic;
 use crate::derivation::xrpl_private_key_from_mnemonic;
-use crate::dto::{Activity, Asset, AssetIdentity, SignedTransaction, WalletSession};
+use crate::dto::{Activity, AssetIdentity, SignedTransaction, WalletSession};
 use crate::providers::bitcoin::{
     broadcast_bitcoin_transaction, fetch_bitcoin_tx_status, sign_bitcoin_transfer,
 };
@@ -719,7 +719,7 @@ pub(crate) async fn send_transaction(
     Ok(session_from_state(&state))
 }
 
-/// Simulates a swap in local state with a 0.5% fee; it does not broadcast.
+/// Returns the unchanged session until swaps are implemented.
 #[tauri::command(rename_all = "camelCase")]
 pub(crate) fn swap_tokens(
     state: State<'_, Mutex<AppState>>,
@@ -727,75 +727,9 @@ pub(crate) fn swap_tokens(
     to_asset: AssetIdentity,
     amount: String,
 ) -> Result<WalletSession, String> {
-    validate_unlocked(&state)?;
-
-    let amount_wei: u128 = amount.parse().map_err(|_| "Invalid amount".to_string())?;
-    if amount_wei == 0 {
-        return Err("Amount must be greater than zero".to_string());
-    }
-
-    let mut state = state.lock().map_err(|_| "State lock failed")?;
-    let wallet = state
-        .wallet
-        .as_mut()
-        .ok_or_else(|| "No wallet exists yet".to_string())?;
-
-    let (from_index, to_index) = swap_asset_indices(&wallet.assets, &from_asset, &to_asset)?;
-    let from_symbol = wallet.assets[from_index].symbol.clone();
-    let to_symbol = wallet.assets[to_index].symbol.clone();
-
-    let from_balance: u128 = wallet.assets[from_index].balance.parse().unwrap_or(0);
-    if from_balance < amount_wei {
-        return Err(format!("Insufficient {} balance", from_symbol));
-    }
-
-    let source_value = amount_wei as f64 / 1e18 * wallet.assets[from_index].price_usd;
-    let received_wei = if wallet.assets[to_index].price_usd > 0.0 {
-        let received_f64 = (source_value / wallet.assets[to_index].price_usd) * 0.995;
-        (received_f64 * 1e18) as u128
-    } else {
-        0
-    };
-
-    wallet.assets[from_index].balance = (from_balance - amount_wei).to_string();
-    let to_balance: u128 = wallet.assets[to_index].balance.parse().unwrap_or(0);
-    wallet.assets[to_index].balance = (to_balance + received_wei).to_string();
-    let mut entry = activity(
-        "swap",
-        "Swap executed",
-        &format!("{} to {} with 0.5% route fee", from_symbol, to_symbol),
-        &format!("{amount_wei} {from_symbol} -> {received_wei} {to_symbol}"),
-    );
-    entry.asset = Some(AssetIdentity::new(
-        &from_asset.network,
-        from_asset.token_address.as_deref(),
-    ));
-    entry.counter_asset = Some(AssetIdentity::new(
-        &to_asset.network,
-        to_asset.token_address.as_deref(),
-    ));
-    wallet.activity.insert(0, entry);
-    persist_state_wallet(&mut state)?;
+    let _ = (from_asset, to_asset, amount);
+    let state = state.lock().map_err(|_| "State lock failed")?;
     Ok(session_from_state(&state))
-}
-
-fn swap_asset_indices(
-    assets: &[Asset],
-    from: &AssetIdentity,
-    to: &AssetIdentity,
-) -> Result<(usize, usize), String> {
-    let from_index = assets
-        .iter()
-        .position(|asset| from.matches(asset))
-        .ok_or_else(|| "Source asset not found".to_string())?;
-    let to_index = assets
-        .iter()
-        .position(|asset| to.matches(asset))
-        .ok_or_else(|| "Destination asset not found".to_string())?;
-    if from_index == to_index {
-        return Err("Choose two different assets".to_string());
-    }
-    Ok((from_index, to_index))
 }
 
 #[tauri::command]

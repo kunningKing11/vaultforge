@@ -38,6 +38,7 @@ A local-first crypto wallet desktop app built with a React frontend, Coinbase De
 - Wallet-password confirmation and strength feedback for encrypted wallet setup
 - One-time risk acknowledgment before wallet setup or unlock, with the full MIT License available in-app
 - Send, receive, swap, assets, activity, and settings screens
+- Swaps are not implemented; submitting the swap form leaves balances, activity, and storage unchanged
 - Rust-backed Tauri commands for wallet state, validation, transaction signing, encrypted storage, provider-backed reads, broadcast, and status checks
 - Responsive React and Coinbase Design System UI with desktop sidebar
 
