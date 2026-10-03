@@ -1,6 +1,31 @@
-use super::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
+use super::{
+    Eip1559TxDraft, build_erc20_transfer_call, build_native_transfer_call, encode_erc20_transfer,
+    sign_eip1559_transfer,
+};
 use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
 use sha3::{Digest, Keccak256};
+
+#[test]
+fn builds_erc20_transfer_call_with_contract_destination_and_zero_native_value() {
+    let contract = "0x1111111111111111111111111111111111111111";
+    let recipient = "0x2222222222222222222222222222222222222222";
+    let call = build_erc20_transfer_call(contract, recipient, 1_000_000).unwrap();
+    assert_eq!(call.to, contract);
+    assert_eq!(call.value, 0);
+    assert_eq!(call.data.len(), 68);
+    assert_eq!(&call.data[..4], &[0xa9, 0x05, 0x9c, 0xbb]);
+    assert_eq!(&call.data[16..36], hex::decode(&recipient[2..]).unwrap());
+    assert_eq!(&call.data[52..], &1_000_000u128.to_be_bytes());
+}
+
+#[test]
+fn builds_native_transfer_call_with_recipient_value_and_empty_data() {
+    let recipient = "0x2222222222222222222222222222222222222222";
+    let call = build_native_transfer_call(recipient, 123).unwrap();
+    assert_eq!(call.to, recipient);
+    assert_eq!(call.value, 123);
+    assert!(call.data.is_empty());
+}
 
 #[test]
 fn constructs_valid_eip1559_signature() {
@@ -114,6 +139,14 @@ fn matches_canonical_zero_value_signing_payload() {
         "02e70180843b9aca00843b9aca008252089411111111111111111111111111111111111111118080c0",
     );
     assert_signed_transaction(&draft, &signed);
+}
+
+#[test]
+fn rejects_invalid_transfer_call_addresses() {
+    let valid = "0x2222222222222222222222222222222222222222";
+    assert!(build_native_transfer_call("invalid", 1).is_err());
+    assert!(build_erc20_transfer_call("invalid", valid, 1).is_err());
+    assert!(build_erc20_transfer_call(valid, "invalid", 1).is_err());
 }
 
 #[test]

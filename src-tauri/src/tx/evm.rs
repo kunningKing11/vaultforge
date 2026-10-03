@@ -1,6 +1,14 @@
 use k256::ecdsa::signature::hazmat::PrehashSigner;
 use sha3::{Digest, Keccak256};
 
+use crate::address::evm::validate_address;
+
+pub(crate) struct EvmCall {
+    pub(crate) to: String,
+    pub(crate) value: u128,
+    pub(crate) data: Vec<u8>,
+}
+
 pub(crate) struct Eip1559TxDraft<'a> {
     pub(crate) signing_key: &'a k256::ecdsa::SigningKey,
     pub(crate) chain_id: u64,
@@ -11,6 +19,31 @@ pub(crate) struct Eip1559TxDraft<'a> {
     pub(crate) to: &'a str,
     pub(crate) value: u128,
     pub(crate) data: &'a [u8],
+}
+
+pub(crate) fn build_native_transfer_call(recipient: &str, amount: u128) -> Result<EvmCall, String> {
+    validate_address(recipient)?;
+
+    Ok(EvmCall {
+        to: recipient.to_string(),
+        value: amount,
+        data: Vec::new(),
+    })
+}
+
+pub(crate) fn build_erc20_transfer_call(
+    contract: &str,
+    recipient: &str,
+    amount: u128,
+) -> Result<EvmCall, String> {
+    validate_address(contract)?;
+    validate_address(recipient)?;
+
+    Ok(EvmCall {
+        to: contract.to_string(),
+        value: 0,
+        data: encode_erc20_transfer(recipient, amount)?,
+    })
 }
 
 pub(crate) fn encode_erc20_transfer(recipient: &str, amount: u128) -> Result<Vec<u8>, String> {

@@ -3,7 +3,6 @@ use std::sync::Mutex;
 use tauri::State;
 
 use crate::activity::{random_hex, short_address};
-use crate::address::evm::validate_address as validate_evm_address;
 use crate::assets::asset_matches;
 use crate::derivation::signing_key_from_mnemonic;
 use crate::derivation::xrpl_private_key_from_mnemonic;
@@ -29,7 +28,9 @@ use crate::providers::xrpl::{
 };
 use crate::state::{AppState, session_from_state, validate_unlocked};
 use crate::storage::persist_state_wallet;
-use crate::tx::evm::{Eip1559TxDraft, encode_erc20_transfer, sign_eip1559_transfer};
+use crate::tx::evm::{
+    Eip1559TxDraft, build_erc20_transfer_call, build_native_transfer_call, sign_eip1559_transfer,
+};
 use crate::tx::solana::{
     select_solana_token_sources, sign_solana_token_transfer, sign_solana_transfer,
     solana_associated_token_address,
@@ -240,19 +241,14 @@ pub(crate) async fn sign_transaction(
                 .cloned()
                 .ok_or_else(|| "Wallet EVM address is not available".to_string())?;
 
-            let (tx_to, tx_data, display_to) = if is_native {
-                (to.clone(), Vec::new(), to.clone())
+            let call = if is_native {
+                build_native_transfer_call(&to, value)?
             } else {
                 let token_address = asset
                     .token_address
                     .as_deref()
                     .ok_or_else(|| format!("{symbol} token address is not available"))?;
-                validate_evm_address(token_address)?;
-                (
-                    token_address.to_string(),
-                    encode_erc20_transfer(&to, value)?,
-                    to.clone(),
-                )
+                build_erc20_transfer_call(token_address, &to, value)?
             };
 
             let native_balance = fetch_evm_native_balance(client, config, &address).await?;
@@ -274,11 +270,9 @@ pub(crate) async fn sign_transaction(
 
             let rpc_pending_nonce = fetch_evm_nonce(client, config, &address).await?;
             let fee_estimate = fetch_evm_fee_estimate(client, config).await?;
-            let gas_limit = if tx_data.is_empty() {
-                fetch_evm_estimated_gas(client, config, &address, &tx_to, value, &[]).await?
-            } else {
-                fetch_evm_estimated_gas(client, config, &address, &tx_to, 0, &tx_data).await?
-            };
+            let gas_limit =
+                fetch_evm_estimated_gas(client, config, &address, &call.to, call.value, &call.data)
+                    .await?;
 
             let max_priority_fee_per_gas = fee_estimate.max_priority_fee_per_gas;
             let max_fee_per_gas = fee_estimate.max_fee_per_gas;
@@ -310,9 +304,9 @@ pub(crate) async fn sign_transaction(
                 max_priority_fee_per_gas,
                 max_fee_per_gas,
                 gas_limit,
-                to: &tx_to,
-                value: if is_native { value } else { 0 },
-                data: &tx_data,
+                to: &call.to,
+                value: call.value,
+                data: &call.data,
             })?;
 
             let fee_str = total_fee_wei.to_string();
@@ -336,7 +330,7 @@ pub(crate) async fn sign_transaction(
             let signed = SignedTransaction {
                 token_address: asset.token_address.clone(),
                 from: address,
-                to: display_to,
+                to,
                 symbol: symbol.clone(),
                 amount: value.to_string(),
                 note: note.trim().to_string(),
