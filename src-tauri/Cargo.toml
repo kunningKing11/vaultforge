@@ -29,7 +29,7 @@ solana-instruction = "3"
 solana-keypair = "3"
 solana-message = { version = "4", features = ["wincode"] }
 solana-pubkey = "4"
-solana-signer = "3"
+solana-signer = "4"
 solana-system-interface = { version = "3.3", features = ["wincode"] }
 solana-transaction = { version = "4", features = ["wincode"] }
 spl-associated-token-account-interface = "2"
