@@ -27,6 +27,10 @@ export function findAsset(assets: readonly Asset[], identity: AssetIdentity): As
   return assets.find((asset) => assetKey(asset) === key);
 }
 
+export function isPendingTransactionActivity(item: Activity): boolean {
+  return item.kind !== "cctp" && item.status === "pending" && Boolean(item.hash && item.network);
+}
+
 export type WalletState =
   | { status: "missing" }
   | { status: "locked"; name: string }
@@ -220,14 +224,18 @@ export function applyWalletSession(state: AppState, session: WalletSession): App
   if (wallet.status === "unlocked" && state.wallet.status === "unlocked") {
     const settled = new Map(
       state.wallet.activity
-        .filter((item) => item.status === "confirmed" || item.status === "failed")
+        .filter(
+          (item) =>
+            item.kind !== "cctp" && (item.status === "confirmed" || item.status === "failed"),
+        )
         .map((item) => [item.id, item]),
     );
     wallet = {
       ...wallet,
       activity: wallet.activity.map((item) => {
         const previous = settled.get(item.id);
-        return item.status === "pending" &&
+        return item.kind !== "cctp" &&
+          item.status === "pending" &&
           previous?.hash === item.hash &&
           previous.network === item.network
           ? { ...item, status: previous.status }

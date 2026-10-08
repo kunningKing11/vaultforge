@@ -1,10 +1,14 @@
 use chrono::Utc;
 use std::collections::HashMap;
 
-use super::{decrypt_wallet, derive_storage_key, encrypt_wallet};
+use super::{
+    decrypt_wallet, derive_storage_key, encrypt_wallet, persist_state_wallet, read_stored_wallet,
+};
 use crate::activity::{activity, hash_secret};
 use crate::dto::{AssetIdentity, FiatCurrency, Wallet};
-use crate::tests::starter_assets;
+use crate::operations::{CctpData, OperationStep, TransactionStatus, TransactionStep};
+use crate::state::AppState;
+use crate::tests::{sample_attempt, sample_operation, starter_assets};
 
 #[test]
 fn derives_same_key_with_same_salt() {
@@ -29,19 +33,30 @@ fn encrypts_and_decrypts_wallet_payload() {
         usd_exchange_rate: 1.0,
         assets: starter_assets("ethereum"),
         activity: vec![activity("system", "Created", "Local", "1")],
+        operations: vec![sample_operation()],
         enabled_networks: vec!["evm".to_string(), "bitcoin".to_string()],
         auto_lock_timeout_secs: Some(300),
         use_crypto_symbols: true,
     };
     wallet.activity[0].asset = Some(AssetIdentity::new("ethereum", Some("0xABC")));
     wallet.activity[0].counter_asset = Some(AssetIdentity::new("base", Some("0xABC")));
+    wallet.operations[0].step = OperationStep::AwaitingAttestation;
+    wallet.operations[0].attempts.push(sample_attempt(
+        TransactionStep::Burn,
+        TransactionStatus::Confirmed,
+    ));
+    wallet.operations[0].cctp = Some(CctpData {
+        message: vec![1, 2],
+        attestation: Some(vec![3, 4]),
+    });
     let (key, salt) = derive_storage_key(wallet_password, None).unwrap();
     let mut stored = encrypt_wallet(&wallet, &key, &salt).unwrap();
-    assert_eq!(stored.version, 7);
+    assert_eq!(stored.version, 8);
     assert!(!serde_json::to_string(&stored).unwrap().contains("TREZOR"));
 
     let decrypted = decrypt_wallet(&stored, wallet_password).unwrap();
     assert_eq!(decrypted.wallet().name, wallet.name);
+    assert_eq!(decrypted.wallet().operations, wallet.operations);
     assert_eq!(decrypted.wallet().mnemonic, wallet.mnemonic);
     assert_eq!(decrypted.wallet().bip39_passphrase, wallet.bip39_passphrase);
     assert_eq!(decrypted.wallet().created_at, wallet.created_at);
@@ -75,7 +90,7 @@ fn encrypts_and_decrypts_wallet_payload() {
     let mut ordinary_wallet = wallet.clone();
     ordinary_wallet.bip39_passphrase.clear();
     let ordinary_stored = encrypt_wallet(&ordinary_wallet, &key, &salt).unwrap();
-    assert_eq!(ordinary_stored.version, 6);
+    assert_eq!(ordinary_stored.version, 8);
     assert!(
         decrypt_wallet(&ordinary_stored, wallet_password)
             .unwrap()
@@ -87,4 +102,33 @@ fn encrypts_and_decrypts_wallet_payload() {
     stored.version = 5;
     let migrated = decrypt_wallet(&stored, wallet_password).unwrap();
     assert!(!migrated.wallet().use_crypto_symbols);
+
+    for version in [1, 9] {
+        stored.version = version;
+        assert_eq!(
+            decrypt_wallet(&stored, wallet_password).err().unwrap(),
+            "Unsupported wallet version"
+        );
+    }
+
+    let directory = std::env::temp_dir().join(format!(
+        "vaultforge-operation-test-{}",
+        crate::activity::random_hex(16)
+    ));
+    std::fs::create_dir(&directory).unwrap();
+    let path = directory.join("wallet.json");
+    let mut state = AppState::from_storage(path.clone());
+    state.wallet = Some(wallet.clone());
+    state.encryption_key = Some(key);
+    state.storage_salt = Some(salt.clone());
+    persist_state_wallet(&mut state).unwrap();
+    drop(state);
+    let restarted = AppState::from_storage(path.clone());
+    assert!(restarted.locked);
+    let saved = read_stored_wallet(&path).unwrap().unwrap();
+    let restored = decrypt_wallet(&saved, wallet_password).unwrap();
+    assert_eq!(restored.wallet().operations, wallet.operations);
+    assert_eq!(restored.wallet().bip39_passphrase, wallet.bip39_passphrase);
+    std::fs::remove_file(&path).unwrap();
+    std::fs::remove_dir(&directory).unwrap();
 }

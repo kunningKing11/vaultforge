@@ -2,6 +2,37 @@ use crate::derivation::{BitcoinAccount, BitcoinDerivedAddress, BitcoinKeyOrigin}
 use crate::dto::Asset;
 use crate::providers::bitcoin::BitcoinUtxo;
 
+pub(crate) fn sample_operation() -> crate::operations::Operation {
+    crate::operations::create_operation(
+        crate::dto::AssetIdentity::new(
+            "ethereum",
+            Some("0x1111111111111111111111111111111111111111"),
+        ),
+        crate::dto::AssetIdentity::new("base", Some("0x2222222222222222222222222222222222222222")),
+        "0x3333333333333333333333333333333333333333".to_string(),
+        "0x4444444444444444444444444444444444444444".to_string(),
+        1_000_000,
+    )
+    .unwrap()
+}
+
+pub(crate) fn sample_attempt(
+    step: crate::operations::TransactionStep,
+    status: crate::operations::TransactionStatus,
+) -> crate::operations::TransactionAttempt {
+    crate::operations::TransactionAttempt {
+        step,
+        status,
+        tx_hash: format!("0x{}", "ab".repeat(32)),
+        raw_tx: Some("0xdeadbeef".to_string()),
+        signature: Some("test signature".to_string()),
+        fee: Some("100".to_string()),
+        nonce_or_sequence: Some("7".to_string()),
+        error: None,
+        updated_at: "2026-10-07T00:00:00Z".to_string(),
+    }
+}
+
 pub(crate) fn starter_assets(network: &str) -> Vec<Asset> {
     vec![
         Asset {

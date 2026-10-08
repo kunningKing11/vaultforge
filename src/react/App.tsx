@@ -89,6 +89,7 @@ import {
   createSetupWizardState,
   emptySendDraft,
   findAsset,
+  isPendingTransactionActivity,
   networkLabel,
   receivePayload,
   selectedActivity,
@@ -971,8 +972,7 @@ function usePendingTransactionPolling(
   }, [wallet]);
 
   const hasPending =
-    wallet.status === "unlocked" &&
-    wallet.activity.some((item) => item.status === "pending" && item.hash && item.network);
+    wallet.status === "unlocked" && wallet.activity.some(isPendingTransactionActivity);
 
   useEffect(() => {
     if (!hasPending) return;
@@ -983,9 +983,7 @@ function usePendingTransactionPolling(
       try {
         const currentWallet = walletRef.current;
         if (currentWallet.status !== "unlocked") return;
-        const pending = currentWallet.activity.filter(
-          (item) => item.status === "pending" && item.hash && item.network,
-        );
+        const pending = currentWallet.activity.filter(isPendingTransactionActivity);
         const changes = await Promise.all(
           pending.map(async (item) => {
             try {
@@ -1017,7 +1015,7 @@ function usePendingTransactionPolling(
               ...current.wallet,
               activity: current.wallet.activity.map((item) => ({
                 ...item,
-                status: statuses.get(item.id) ?? item.status,
+                status: item.kind === "cctp" ? item.status : (statuses.get(item.id) ?? item.status),
               })),
             },
           };

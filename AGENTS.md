@@ -86,6 +86,8 @@ type WalletSession = {
 
 `SignedTransaction.tokenAddress` retains the selected token identifier. New activity entries carry `asset`; legacy simulated swaps may also carry `counter_asset`, using `{ network, token_address }`. These optional encrypted activity fields remain compatible with storage versions 2–7, so no envelope version bump is required. Older entries without them have unknown asset identity; do not reconstruct it from a ticker. The swap command is currently a no-op: it returns the unchanged session without changing balances, creating activity, persisting storage, signing, or broadcasting.
 
+`Wallet` and `WalletPayload` retain encrypted `operations` for recovery. New saves use storage version 8; versions 2–7 remain readable, with missing operations defaulting to an empty collection. Unlock reconciles signed, submitted, and uncertain transaction hashes without signing or rebroadcasting, and persists changed records only for the same wallet generation and unchanged operation snapshot. Recovery failure relocks and clears secrets only for that generation; a newer wallet session must remain untouched. Unlocked session activity is derived from operation records rather than duplicated in the activity cache. Operation activity (`kind: "cctp"`) takes its status from Rust and is excluded from frontend single-transaction polling and terminal-status overrides. CCTP message/attestation verification and transfer execution are not implemented.
+
 Session states:
 
 - No wallet: `has_wallet = false`, `locked = false`, no addresses, and empty assets/activity.

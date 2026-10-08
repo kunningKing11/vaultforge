@@ -98,7 +98,7 @@ pub(crate) fn persist_state_wallet(state: &mut AppState) -> Result<(), String> {
     Ok(())
 }
 
-/// Encrypts a wallet with a fresh nonce; passphrase wallets require version 7.
+/// Encrypts a wallet with a fresh nonce; operation-aware wallets use version 8.
 pub(crate) fn encrypt_wallet(
     wallet: &Wallet,
     key: &[u8; 32],
@@ -118,6 +118,7 @@ pub(crate) fn encrypt_wallet(
         usd_exchange_rate: wallet.usd_exchange_rate,
         assets: wallet.assets.clone(),
         activity: wallet.activity.clone(),
+        operations: wallet.operations.clone(),
         enabled_networks: wallet.enabled_networks.clone(),
         auto_lock_timeout_secs: wallet.auto_lock_timeout_secs,
         use_crypto_symbols: wallet.use_crypto_symbols,
@@ -132,11 +133,7 @@ pub(crate) fn encrypt_wallet(
     let ciphertext = ciphertext.map_err(|_| "Failed to encrypt wallet")?;
 
     Ok(StoredWalletFile {
-        version: if wallet.bip39_passphrase.is_empty() {
-            6
-        } else {
-            7
-        },
+        version: 8,
         wallet_name: wallet.name.clone(),
         network: "ethereum".to_string(),
         salt: BASE64.encode(salt),
@@ -145,12 +142,12 @@ pub(crate) fn encrypt_wallet(
     })
 }
 
-/// Decrypts stored versions 2–7, filling preferences absent from older payloads.
+/// Decrypts stored versions 2–8, filling preferences absent from older payloads.
 pub(crate) fn decrypt_wallet(
     stored: &StoredWalletFile,
     wallet_password: &str,
 ) -> Result<DecryptedWallet, String> {
-    if !matches!(stored.version, 2..=7) {
+    if !matches!(stored.version, 2..=8) {
         return Err("Unsupported wallet version".to_string());
     }
     let salt = BASE64
@@ -201,6 +198,7 @@ pub(crate) fn decrypt_wallet(
             },
             assets: payload.assets,
             activity: payload.activity,
+            operations: payload.operations,
             enabled_networks: payload.enabled_networks,
             auto_lock_timeout_secs: payload.auto_lock_timeout_secs,
             use_crypto_symbols: if stored.version >= 6 {

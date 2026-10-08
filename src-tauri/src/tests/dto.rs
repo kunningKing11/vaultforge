@@ -40,6 +40,7 @@ fn decrypts_legacy_wallet_password_hash_payloads() {
     assert_eq!(payload.usd_exchange_rate, 1.0);
     assert!(!payload.use_crypto_symbols);
     assert!(payload.bip39_passphrase.is_empty());
+    assert!(payload.operations.is_empty());
 }
 
 #[test]

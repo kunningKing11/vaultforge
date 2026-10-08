@@ -4,6 +4,7 @@ use tauri::State;
 use zeroize::Zeroize;
 
 use crate::dto::{RefreshWarning, Wallet, WalletRefreshResult, WalletSession};
+use crate::operations::operation_activity;
 use crate::providers::bitcoin::BitcoinAccountSnapshot;
 use crate::storage::read_stored_wallet;
 use crate::tx::evm_nonces::EvmNonceManager;
@@ -138,7 +139,27 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
         fiat_currency: Some(wallet.fiat_currency),
         usd_exchange_rate: Some(wallet.usd_exchange_rate),
         assets: wallet.assets.clone(),
-        activity: wallet.activity.clone(),
+        activity: {
+            let mut activity: Vec<_> = wallet
+                .activity
+                .iter()
+                .filter(|entry| {
+                    !wallet
+                        .operations
+                        .iter()
+                        .any(|operation| operation.id == entry.id)
+                })
+                .cloned()
+                .collect();
+            activity.extend(
+                wallet
+                    .operations
+                    .iter()
+                    .filter_map(|operation| operation_activity(operation).ok()),
+            );
+            activity.sort_by(|left, right| right.timestamp.cmp(&left.timestamp));
+            activity
+        },
         enabled_networks: wallet.enabled_networks.clone(),
         auto_lock_timeout_secs: wallet.auto_lock_timeout_secs,
         use_crypto_symbols: wallet.use_crypto_symbols,

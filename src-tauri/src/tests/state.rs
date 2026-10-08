@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 use super::{AppState, StoredWalletMetadata, clear_secret_string, session_from_state};
 use crate::dto::{Asset, FiatCurrency, Wallet};
+use crate::operations::{OperationStep, TransactionStatus, TransactionStep, operation_activity};
+use crate::tests::{sample_attempt, sample_operation};
 
 #[test]
 fn clear_secret_string_zeroizes_utf8_bytes() {
@@ -25,6 +27,7 @@ fn locked_session_does_not_expose_secrets() {
         usd_exchange_rate: 1.0,
         assets: vec![],
         activity: vec![],
+        operations: vec![sample_operation()],
         enabled_networks: vec![],
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
@@ -75,11 +78,34 @@ fn unlocked_tron_state() -> AppState {
             token_address: None,
         }],
         activity: vec![],
+        operations: Vec::new(),
         enabled_networks: vec!["tron".to_string()],
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
     });
     state
+}
+
+#[test]
+fn session_projects_saved_operations_without_duplicate_cached_activity() {
+    let mut state = unlocked_tron_state();
+    let mut operation = sample_operation();
+    operation.step = OperationStep::Mint;
+    let cached = operation_activity(&operation).unwrap();
+    operation.step = OperationStep::Completed;
+    operation.attempts.push(sample_attempt(
+        TransactionStep::Mint,
+        TransactionStatus::Confirmed,
+    ));
+    let wallet = state.wallet.as_mut().unwrap();
+    wallet.activity.push(cached);
+    wallet.operations.push(operation.clone());
+    let session = session_from_state(&state);
+    assert_eq!(session.activity.len(), 1);
+    assert_eq!(session.activity[0].id, operation.id);
+    assert_eq!(session.activity[0].status, "confirmed");
+    assert_eq!(session.activity[0].network.as_deref(), Some("base"));
+    assert_eq!(state.wallet.as_ref().unwrap().activity[0].status, "pending");
 }
 
 #[test]

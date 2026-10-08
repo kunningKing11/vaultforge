@@ -10,6 +10,8 @@ use crate::derivation::{
     validate_recovery_phrase_word_count,
 };
 use crate::dto::{FiatCurrency, Wallet, WalletRefreshResult, WalletSession};
+use crate::operations::Operation;
+use crate::operations::reconcile_operation;
 use crate::providers::bitcoin::BitcoinAccountSnapshot;
 use crate::providers::http::ProviderClients;
 use crate::providers::prices::fetch_usd_exchange_rate;
@@ -181,6 +183,7 @@ pub(crate) async fn create_wallet(
             "Recovery phrase generated locally",
             "12 words",
         )],
+        operations: Vec::new(),
         enabled_networks,
         auto_lock_timeout_secs,
         use_crypto_symbols,
@@ -248,6 +251,7 @@ pub(crate) async fn import_wallet(
             "Recovery phrase verified locally",
             "Imported",
         )],
+        operations: Vec::new(),
         enabled_networks,
         auto_lock_timeout_secs,
         use_crypto_symbols,
@@ -268,6 +272,7 @@ pub(crate) async fn import_wallet(
 #[tauri::command]
 pub(crate) async fn unlock_wallet(
     state: State<'_, Mutex<AppState>>,
+    clients: State<'_, ProviderClients>,
     wallet_password: String,
 ) -> Result<WalletRefreshResult, String> {
     let wallet_password_hash = hash_secret(&wallet_password);
@@ -333,15 +338,73 @@ pub(crate) async fn unlock_wallet(
         }
     };
 
+    let (generation, original_operations) = {
+        let mut state = state.lock().map_err(|_| "State lock failed")?;
+        if state.locked {
+            return Err("Wallet was locked during unlock".to_string());
+        }
+        state.bitcoin_account = bitcoin_account;
+        state.advance_wallet_generation();
+        let operations = state
+            .wallet
+            .as_ref()
+            .ok_or_else(|| "Wallet was closed during unlock".to_string())?
+            .operations
+            .clone();
+        (state.wallet_generation, operations)
+    };
+    let mut operations = original_operations.clone();
+    for operation in &mut operations {
+        if let Err(error) = reconcile_operation(operation, &clients).await {
+            let mut state = state.lock().map_err(|_| "State lock failed")?;
+            if state.wallet_generation == generation {
+                lock_wallet_state(&mut state);
+            }
+            return Err(error);
+        }
+    }
     let mut state = state.lock().map_err(|_| "State lock failed")?;
-    state.bitcoin_account = bitcoin_account;
-    state.advance_wallet_generation();
-    Ok(refresh_result_from_state(&state, vec![]))
+    finish_operation_recovery(&mut state, generation, &original_operations, operations)
+}
+
+fn finish_operation_recovery(
+    state: &mut AppState,
+    generation: u64,
+    original_operations: &[Operation],
+    operations: Vec<Operation>,
+) -> Result<WalletRefreshResult, String> {
+    let result = (|| {
+        if !state.can_commit_refresh(generation) {
+            return Err("Wallet session changed during operation recovery".to_string());
+        }
+        let wallet = state
+            .wallet
+            .as_mut()
+            .ok_or_else(|| "Wallet was closed during recovery".to_string())?;
+        if wallet.operations != original_operations {
+            return Err("Operations changed during recovery".to_string());
+        }
+        if operations != original_operations {
+            wallet.operations = operations;
+            persist_state_wallet(state)?;
+        }
+        Ok(())
+    })();
+    if result.is_err() && state.wallet_generation == generation {
+        lock_wallet_state(state);
+    }
+    result?;
+    Ok(refresh_result_from_state(state, vec![]))
 }
 
 #[tauri::command]
 pub(crate) fn lock_wallet(state: State<'_, Mutex<AppState>>) -> Result<(), String> {
     let mut state = state.lock().map_err(|_| "State lock failed")?;
+    lock_wallet_state(&mut state);
+    Ok(())
+}
+
+fn lock_wallet_state(state: &mut AppState) {
     state.evm_nonces.cancel_all_unbroadcast();
     if let Some(ref mut wallet) = state.wallet {
         clear_secret_string(&mut wallet.mnemonic);
@@ -359,7 +422,6 @@ pub(crate) fn lock_wallet(state: State<'_, Mutex<AppState>>) -> Result<(), Strin
     state.bitcoin_account = None;
     state.locked = true;
     state.advance_wallet_generation();
-    Ok(())
 }
 
 #[tauri::command]

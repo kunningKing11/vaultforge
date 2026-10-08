@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use zeroize::Zeroize;
 
+use crate::operations::Operation;
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
 pub(crate) enum FiatCurrency {
@@ -46,6 +48,8 @@ pub(crate) struct Wallet {
     pub(crate) usd_exchange_rate: f64,
     pub(crate) assets: Vec<Asset>,
     pub(crate) activity: Vec<Activity>,
+    #[serde(default)]
+    pub(crate) operations: Vec<Operation>,
     #[serde(default = "default_enabled_networks")]
     pub(crate) enabled_networks: Vec<String>,
     #[serde(default)]
@@ -77,6 +81,8 @@ pub(crate) struct WalletPayload {
     pub(crate) usd_exchange_rate: f64,
     pub(crate) assets: Vec<Asset>,
     pub(crate) activity: Vec<Activity>,
+    #[serde(default)]
+    pub(crate) operations: Vec<Operation>,
     #[serde(default = "default_enabled_networks")]
     pub(crate) enabled_networks: Vec<String>,
     #[serde(default)]

@@ -7,6 +7,7 @@ import {
   createInitialAppState,
   emptySendDraft,
   findAsset,
+  isPendingTransactionActivity,
   receivePayload,
   sendAddressPlaceholder,
   sendDraftForNetwork,
@@ -73,6 +74,48 @@ describe("React wallet session model", () => {
       expect(assetKey({ network, token_address: "AbC" })).not.toBe(
         assetKey({ network, token_address: "abc" }),
       );
+    }
+  });
+  test("bridge activity is excluded from single-transaction polling", () => {
+    const activity = {
+      id: "bridge",
+      kind: "cctp",
+      title: "Waiting for attestation",
+      subtitle: "",
+      amount: "1000000",
+      status: "pending",
+      timestamp: "2026-10-08T00:00:00Z",
+      hash: "0xburn",
+      network: "ethereum" as const,
+    };
+    expect(isPendingTransactionActivity(activity)).toBe(false);
+    expect(isPendingTransactionActivity({ ...activity, kind: "send" })).toBe(true);
+    expect(isPendingTransactionActivity({ ...activity, kind: "send", status: "confirmed" })).toBe(
+      false,
+    );
+    expect(isPendingTransactionActivity({ ...activity, kind: "send", hash: "" })).toBe(false);
+  });
+
+  test("bridge activity retains backend progress instead of a polled leg result", () => {
+    for (const status of ["confirmed", "failed"]) {
+      const activity = {
+        id: "bridge",
+        kind: "cctp",
+        title: "Waiting for attestation",
+        subtitle: "",
+        amount: "1000000",
+        status: "pending",
+        timestamp: "2026-10-08T00:00:00Z",
+        hash: "0xburn",
+        network: "ethereum" as const,
+      };
+      const state = applyWalletSession(createInitialAppState(), {
+        ...unlockedSession,
+        activity: [{ ...activity, status }],
+      });
+      const refreshed = applyWalletSession(state, { ...unlockedSession, activity: [activity] });
+      if (refreshed.wallet.status !== "unlocked") throw new Error("Expected unlocked wallet");
+      expect(refreshed.wallet.activity[0]?.status).toBe("pending");
     }
   });
 

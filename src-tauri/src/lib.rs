@@ -7,6 +7,7 @@ mod assets;
 mod commands;
 mod derivation;
 mod dto;
+mod operations;
 mod providers;
 mod registry;
 mod state;
