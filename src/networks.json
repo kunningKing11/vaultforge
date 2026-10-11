@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "network_types": {
     "bitcoin": {
       "vm_type": null,
@@ -46,6 +46,7 @@
     {
       "kind": "bitcoin",
       "id": "bitcoin",
+      "transactionStatusProvider": "bitcoin",
       "name": "Bitcoin",
       "addressKey": "bitcoin",
       "apiUrl": "https://blockstream.info/api",
@@ -60,6 +61,7 @@
     {
       "kind": "evm",
       "id": "avalanche_c",
+      "transactionStatusProvider": "evm",
       "name": "Avalanche C-Chain",
       "nickname": "Avalanche",
       "chainId": 43114,
@@ -94,6 +96,7 @@
     {
       "kind": "evm",
       "id": "bnb",
+      "transactionStatusProvider": "evm",
       "name": "BNB Smart Chain",
       "nickname": "BSC",
       "chainId": 56,
@@ -109,6 +112,7 @@
     {
       "kind": "evm",
       "id": "ethereum",
+      "transactionStatusProvider": "evm",
       "name": "Ethereum",
       "chainId": 1,
       "addressKey": "evm",
@@ -143,6 +147,7 @@
     {
       "kind": "evm",
       "id": "monad",
+      "transactionStatusProvider": "evm",
       "name": "Monad",
       "chainId": 143,
       "addressKey": "evm",
@@ -167,6 +172,7 @@
     {
       "kind": "evm",
       "id": "arbitrum_one",
+      "transactionStatusProvider": "evm",
       "name": "Arbitrum One",
       "nickname": "Arbitrum",
       "chainId": 42161,
@@ -194,6 +200,7 @@
     {
       "kind": "evm",
       "id": "base",
+      "transactionStatusProvider": "evm",
       "name": "Base",
       "chainId": 8453,
       "isL2": true,
@@ -220,6 +227,7 @@
     {
       "kind": "evm",
       "id": "optimism",
+      "transactionStatusProvider": "evm",
       "name": "Optimism",
       "chainId": 10,
       "isL2": true,
@@ -246,6 +254,7 @@
     {
       "kind": "evm",
       "id": "polygon",
+      "transactionStatusProvider": "evm",
       "name": "Polygon",
       "chainId": 137,
       "isL2": true,
@@ -288,6 +297,7 @@
     {
       "kind": "filecoin",
       "id": "filecoin",
+      "transactionStatusProvider": null,
       "name": "Filecoin",
       "addressKey": "filecoin",
       "nativeAsset": {
@@ -301,6 +311,7 @@
     {
       "kind": "injective",
       "id": "injective",
+      "transactionStatusProvider": null,
       "name": "Injective",
       "addressKey": "injective",
       "rpcUrl": "https://injective-rpc.publicnode.com:443",
@@ -314,6 +325,7 @@
     {
       "kind": "svm",
       "id": "solana",
+      "transactionStatusProvider": "solana",
       "name": "Solana",
       "addressKey": "solana",
       "rpcUrl": "https://api.mainnet.solana.com",
@@ -328,6 +340,7 @@
     {
       "kind": "tron",
       "id": "tron",
+      "transactionStatusProvider": "tron",
       "name": "Tron",
       "addressKey": "tron",
       "rpcUrl": "https://tron-rpc.publicnode.com",
@@ -360,6 +373,7 @@
     {
       "kind": "xrpl",
       "id": "xrpl",
+      "transactionStatusProvider": "xrpl",
       "name": "XRP Ledger",
       "addressKey": "xrpl",
       "rpcUrl": "https://xrplcluster.com/",
@@ -373,6 +387,7 @@
     {
       "kind": "zcash",
       "id": "zcash",
+      "transactionStatusProvider": null,
       "name": "Zcash",
       "addressKey": "zcash",
       "nativeAsset": {

@@ -1,8 +1,7 @@
 use crate::assets::cached_asset;
 use crate::dto::Asset;
 use crate::providers::NetworkAssetRefresh;
-use crate::providers::http::optional_tx_hash;
-use crate::providers::http::{optional_tx_height, rpc_post};
+use crate::providers::http::{optional_tx_hash, optional_tx_height, rpc_post};
 use crate::registry::{NetworkConfig, network_by_id};
 use crate::tx::tx_status::{Execution, Finality, TxStatus, legacy_tx_status};
 
@@ -133,17 +132,18 @@ pub(crate) async fn fetch_tron_tx_status(
     txid: &str,
 ) -> Result<Option<String>, String> {
     Ok(legacy_tx_status(
-        fetch_tron_tx_observation(client, txid).await?,
+        crate::providers::fetch_tx_observation(client, "tron", txid).await?,
     ))
 }
 
 pub(crate) async fn fetch_tron_tx_observation(
     client: &reqwest::Client,
+    config: &NetworkConfig,
     txid: &str,
 ) -> Result<Option<TxStatus>, String> {
     let json = rpc_post(
         client,
-        &format!("{}/wallet/gettransactioninfobyid", tron_rpc_url()?),
+        &format!("{}/wallet/gettransactioninfobyid", config.rpc_url()?),
         &serde_json::json!({ "value": txid }),
     )
     .await?;
@@ -153,7 +153,10 @@ pub(crate) async fn fetch_tron_tx_observation(
     };
     let solid = rpc_post(
         client,
-        &format!("{}/walletsolidity/gettransactioninfobyid", tron_rpc_url()?),
+        &format!(
+            "{}/walletsolidity/gettransactioninfobyid",
+            config.rpc_url()?
+        ),
         &serde_json::json!({"value":txid}),
     )
     .await?;

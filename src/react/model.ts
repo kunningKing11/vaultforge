@@ -32,6 +32,7 @@ export function isPendingTransactionActivity(item: Activity): boolean {
   return (
     item.kind === "send" &&
     Boolean(item.hash && item.network) &&
+    networkById(item.network ?? "")?.transactionStatusProvider != null &&
     (item.tx_status
       ? item.tx_status.finality !== "finalized"
       : ["pending", "confirmed", "failed", "included"].includes(item.status))

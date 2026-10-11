@@ -18,10 +18,21 @@ pub(crate) struct NetworkConfig {
     pub(crate) address_key: String,
     pub(crate) rpc_url: Option<String>,
     pub(crate) api_url: Option<String>,
+    pub(crate) transaction_status_provider: Option<TransactionStatusProvider>,
     pub(crate) coin_gecko_network_id: Option<String>,
     pub(crate) native_asset: AssetConfig,
     #[serde(default)]
     pub(crate) tokens: Vec<AssetConfig>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum TransactionStatusProvider {
+    Bitcoin,
+    Evm,
+    Solana,
+    Tron,
+    Xrpl,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,7 +74,7 @@ pub(crate) fn registry() -> &'static NetworkRegistry {
             serde_json::from_str(include_str!(concat!(env!("OUT_DIR"), "/networks.json")))
                 .expect("generated network registry must be valid JSON");
         assert_eq!(
-            registry.schema_version, 1,
+            registry.schema_version, 2,
             "unsupported network registry schema"
         );
         registry

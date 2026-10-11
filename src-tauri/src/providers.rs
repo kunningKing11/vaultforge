@@ -20,30 +20,22 @@ use crate::providers::evm::fetch_evm_assets;
 use crate::providers::solana::fetch_solana_assets;
 use crate::providers::tron::fetch_tron_assets;
 use crate::providers::xrpl::fetch_xrpl_assets;
-use crate::registry::{evm_networks, network_by_id};
+use crate::registry::{NetworkConfig, TransactionStatusProvider, evm_networks, network_by_id};
 use crate::tx::tx_status::TxStatus;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
-pub(crate) enum TxObservationProvider {
-    Bitcoin,
-    Evm(&'static evm::EvmNetworkConfig),
-    Solana,
-    Tron,
-    Xrpl,
-}
-
-pub(crate) fn tx_observation_provider(network: &str) -> Result<TxObservationProvider, String> {
-    match network {
-        "bitcoin" => Ok(TxObservationProvider::Bitcoin),
-        "solana" => Ok(TxObservationProvider::Solana),
-        "tron" => Ok(TxObservationProvider::Tron),
-        "xrpl" => Ok(TxObservationProvider::Xrpl),
-        id => evm::evm_config_by_id(id)
-            .map(TxObservationProvider::Evm)
-            .ok_or_else(|| format!("Unsupported network {network}")),
-    }
+pub(crate) fn tx_observation_provider(
+    network_id: &str,
+) -> Result<(&'static NetworkConfig, TransactionStatusProvider), String> {
+    let network =
+        network_by_id(network_id).ok_or_else(|| format!("Unsupported network {network_id}"))?;
+    let provider = network
+        .transaction_status_provider
+        .ok_or_else(|| format!("Transaction status provider is unavailable for {network_id}"))?;
+    Ok((network, provider))
 }
 
 pub(crate) async fn fetch_tx_observation(
@@ -51,18 +43,23 @@ pub(crate) async fn fetch_tx_observation(
     network: &str,
     hash: &str,
 ) -> Result<Option<TxStatus>, String> {
-    match tx_observation_provider(network)? {
-        TxObservationProvider::Bitcoin => bitcoin::fetch_bitcoin_tx_observation(client, hash).await,
-        TxObservationProvider::Evm(config) => {
-            evm::fetch_evm_tx_observation(client, config, hash).await
+    let (config, provider) = tx_observation_provider(network)?;
+    match provider {
+        TransactionStatusProvider::Bitcoin => {
+            bitcoin::fetch_bitcoin_tx_observation(client, config, hash).await
         }
-        TxObservationProvider::Solana => solana::fetch_solana_tx_observation(client, hash).await,
-        TxObservationProvider::Tron => tron::fetch_tron_tx_observation(client, hash).await,
-        TxObservationProvider::Xrpl => xrpl::fetch_xrpl_tx_observation(client, hash).await,
+        TransactionStatusProvider::Evm => evm::fetch_evm_tx_observation(client, config, hash).await,
+        TransactionStatusProvider::Solana => {
+            solana::fetch_solana_tx_observation(client, config, hash).await
+        }
+        TransactionStatusProvider::Tron => {
+            tron::fetch_tron_tx_observation(client, config, hash).await
+        }
+        TransactionStatusProvider::Xrpl => {
+            xrpl::fetch_xrpl_tx_observation(client, config, hash).await
+        }
     }
 }
-use tokio::task::JoinSet;
-
 pub(crate) mod bitcoin;
 pub(crate) mod evm;
 pub(crate) mod http;

@@ -27,14 +27,19 @@ fn xrpl_config() -> Result<&'static NetworkConfig, String> {
         .ok_or_else(|| "XRP Ledger is missing from the network registry".to_string())
 }
 
-fn xrpl_rpc_url() -> Result<&'static str, String> {
-    xrpl_config()?.rpc_url()
+async fn xrpl_rpc(client: &reqwest::Client, method: &str, params: Value) -> Result<Value, String> {
+    xrpl_rpc_with_config(client, xrpl_config()?, method, params).await
 }
 
-async fn xrpl_rpc(client: &reqwest::Client, method: &str, params: Value) -> Result<Value, String> {
+async fn xrpl_rpc_with_config(
+    client: &reqwest::Client,
+    config: &NetworkConfig,
+    method: &str,
+    params: Value,
+) -> Result<Value, String> {
     let json = rpc_post(
         client,
-        xrpl_rpc_url()?,
+        config.rpc_url()?,
         &json!({
             "method": method,
             "params": [params],
@@ -233,16 +238,18 @@ pub(crate) async fn fetch_xrpl_tx_status(
     tx_hash: &str,
 ) -> Result<Option<String>, String> {
     Ok(legacy_tx_status(
-        fetch_xrpl_tx_observation(client, tx_hash).await?,
+        crate::providers::fetch_tx_observation(client, "xrpl", tx_hash).await?,
     ))
 }
 
 pub(crate) async fn fetch_xrpl_tx_observation(
     client: &reqwest::Client,
+    config: &NetworkConfig,
     tx_hash: &str,
 ) -> Result<Option<TxStatus>, String> {
-    let json = xrpl_rpc(
+    let json = xrpl_rpc_with_config(
         client,
+        config,
         "tx",
         json!({ "transaction": tx_hash, "binary": false }),
     )

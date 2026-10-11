@@ -25,7 +25,6 @@ export type Asset = AssetIdentity & {
 };
 
 export type Activity = {
-  tx_status?: TxStatus | null;
   asset?: AssetIdentity | null;
   counter_asset?: AssetIdentity | null;
   id: string;
@@ -42,6 +41,7 @@ export type Activity = {
   payload_hash?: string | null;
   signature?: string | null;
   fee?: string | null;
+  tx_status?: TxStatus | null;
 };
 
 export type WalletSession = {
@@ -140,6 +140,8 @@ export type Toast = {
 
 type NetworkKind = "bitcoin" | "evm" | "filecoin" | "injective" | "svm" | "tron" | "xrpl" | "zcash";
 
+export type TransactionStatusProvider = "bitcoin" | "evm" | "solana" | "tron" | "xrpl";
+
 type ChainVM = "EVM" | "FVM" | "Multi-VM" | "SVM" | "TrVM" | null;
 
 export type NetworkId =
@@ -164,6 +166,7 @@ export interface NetworkConfig {
   ticker: string;
   isL2: boolean;
   isTestNet: boolean;
+  transactionStatusProvider: TransactionStatusProvider | null;
   rpcUrl?: string;
   apiUrl?: string;
   addressKey: string;

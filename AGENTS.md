@@ -114,6 +114,8 @@ Never omit fields required by the frontend.
 
 Each chain family should expose address validation, native/token balance reads, fee estimation, unsigned draft construction, signed broadcast, and transaction status through a common provider boundary.
 
+Transaction-status support is declared per network by `transactionStatusProvider` in the shared `src/networks.json` registry (schema version 2); `null` means unavailable. The TypeScript normalizer validates the provider family and required endpoint before Cargo generates the Rust registry. Status lookup, operation recovery, frontend polling, and legacy status adapters use that declaration. Registry membership or network `kind` alone does not imply status support. Observation providers receive the selected `NetworkConfig` and use its endpoint; encrypted wallet storage versions are independent of this registry schema.
+
 Chain-specific requirements:
 
 - EVM: chain ID, RPC URL, native currency, token contracts, pending nonce, gas estimation, EIP-1559 where available, raw broadcast, and receipts. Current sends use `eth_feeHistory` with `eth_gasPrice` fallback but have no nonce reservation manager or user priority-fee policy.

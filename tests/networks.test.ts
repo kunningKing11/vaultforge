@@ -13,6 +13,15 @@ function networkSource(): NetworkDataSource {
 }
 
 describe("network registry normalization", () => {
+  test("allows a configured chain to opt out of transaction status", () => {
+    const source = networkSource();
+    source.networks.find((network) => network.id === "ethereum")!.transactionStatusProvider = null;
+    const registry = normalizeNetworkRegistry(source);
+    expect(
+      registry.networks.find((network) => network.id === "ethereum")!.transactionStatusProvider,
+    ).toBeNull();
+  });
+
   test("allows same-symbol tokens with distinct contracts", () => {
     const source = networkSource();
     const ethereum = source.networks.find((network) => network.id === "ethereum")!;
@@ -24,13 +33,18 @@ describe("network registry normalization", () => {
   });
 
   test("normalizes the configured registry", () => {
-    const registry = normalizeNetworkRegistry(networkSource());
+    const source = networkSource();
+    const registry = normalizeNetworkRegistry(source);
 
-    expect(registry.schemaVersion).toBe(1);
+    expect(registry.schemaVersion).toBe(2);
     expect(registry.networks.length).toBe(networkDataJson.networks.length);
     for (const network of registry.networks) {
       expect(network.ticker).toBe(network.nativeAsset.symbol);
       expect(network.tokens).toBeArray();
+      expect(network.transactionStatusProvider).toBe(
+        source.networks.find((definition) => definition.id === network.id)!
+          .transactionStatusProvider,
+      );
     }
     expect(
       registry.networks.find((network) => network.id === "bitcoin")!.nativeAsset.unicodeSymbol,
@@ -88,9 +102,39 @@ describe("network registry normalization", () => {
     );
   });
 
+  test("rejects invalid transaction status capabilities", () => {
+    for (const provider of ["solana", "unknown"]) {
+      const source = networkSource();
+      Object.assign(
+        source.networks.find((network) => network.id === "ethereum")!,
+        {
+          transactionStatusProvider: provider,
+        },
+      );
+      expect(() => normalizeNetworkRegistry(source)).toThrow(
+        "ethereum has a transaction status provider for the wrong network kind",
+      );
+    }
+    const missingDeclaration = networkSource();
+    Object.assign(missingDeclaration.networks[0]!, { transactionStatusProvider: undefined });
+    expect(() => normalizeNetworkRegistry(missingDeclaration)).toThrow(
+      "bitcoin must declare transactionStatusProvider",
+    );
+
+    for (const id of ["bitcoin", "solana"] as const) {
+      const source = networkSource();
+      const network = source.networks.find((item) => item.id === id)!;
+      network.apiUrl = undefined;
+      network.rpcUrl = undefined;
+      expect(() => normalizeNetworkRegistry(source)).toThrow(
+        `${id} is missing the URL required by its transaction status provider`,
+      );
+    }
+  });
+
   test("rejects unsupported schemas and duplicate network ids", () => {
     const wrongSchema = networkSource();
-    wrongSchema.schemaVersion = 2;
+    wrongSchema.schemaVersion = 1;
     expect(() => normalizeNetworkRegistry(wrongSchema)).toThrow(
       "Unsupported network registry schema version",
     );

@@ -302,7 +302,7 @@ pub(crate) async fn fetch_evm_tx_status(
     config: &EvmNetworkConfig,
     tx_hash: &str,
 ) -> Result<Option<String>, String> {
-    let observation = fetch_evm_tx_observation(client, config, tx_hash).await?;
+    let observation = crate::providers::fetch_tx_observation(client, &config.id, tx_hash).await?;
 
     Ok(legacy_tx_status(observation))
 }

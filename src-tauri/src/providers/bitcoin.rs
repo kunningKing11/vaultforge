@@ -4,7 +4,7 @@ use crate::derivation::{
 use crate::providers::http::{
     http_get_json, http_get_json_with_client, http_post_text, optional_tx_hash, optional_tx_height,
 };
-use crate::registry::network_by_id;
+use crate::registry::{NetworkConfig, network_by_id};
 use crate::tx::bitcoin::{BitcoinSignedTransfer, bitcoin_signed_transfer};
 use crate::tx::tx_status::{Execution, Finality, TxStatus, legacy_tx_status};
 use std::collections::{HashSet, VecDeque};
@@ -402,15 +402,17 @@ pub(crate) async fn fetch_bitcoin_tx_status(
     txid: &str,
 ) -> Result<Option<String>, String> {
     Ok(legacy_tx_status(
-        fetch_bitcoin_tx_observation(client, txid).await?,
+        crate::providers::fetch_tx_observation(client, "bitcoin", txid).await?,
     ))
 }
 
 pub(crate) async fn fetch_bitcoin_tx_observation(
     client: &reqwest::Client,
+    config: &NetworkConfig,
     txid: &str,
 ) -> Result<Option<TxStatus>, String> {
-    let url = format!("{}/tx/{txid}/status", bitcoin_api_url()?);
+    let api_url = config.api_url()?;
+    let url = format!("{api_url}/tx/{txid}/status");
     let json = http_get_json(client, &url).await?;
     let Some(observation) = parse_bitcoin_tx_observation(&json)? else {
         return Ok(None);
@@ -418,12 +420,8 @@ pub(crate) async fn fetch_bitcoin_tx_observation(
     let Some(hash) = observation.block_hash.as_deref() else {
         return Ok(Some(observation));
     };
-    let tip = http_get_json(client, &format!("{}/blocks/tip/height", bitcoin_api_url()?)).await?;
-    let block_status = http_get_json(
-        client,
-        &format!("{}/block/{hash}/status", bitcoin_api_url()?),
-    )
-    .await?;
+    let tip = http_get_json(client, &format!("{api_url}/blocks/tip/height")).await?;
+    let block_status = http_get_json(client, &format!("{api_url}/block/{hash}/status")).await?;
     finalize_bitcoin_observation(observation, &block_status, &tip)
 }
 

@@ -1,9 +1,22 @@
 import networkDataJson from "./networks.json";
-import type { Network, NetworkAssetConfig, NetworkId, NetworkTokenConfig } from "./types";
+import type {
+  Network,
+  NetworkAssetConfig,
+  NetworkId,
+  NetworkTokenConfig,
+  TransactionStatusProvider,
+} from "./types";
 
 type NetworkTemplate = Pick<Network, "vm_type" | "isL2" | "isTestNet">;
-type NetworkDefinition = Pick<Network, "kind" | "id" | "name" | "addressKey" | "nativeAsset"> &
-  Partial<Omit<Network, "kind" | "id" | "name" | "addressKey" | "nativeAsset" | "ticker">>;
+type RequiredNetworkFields =
+  | "kind"
+  | "id"
+  | "name"
+  | "addressKey"
+  | "nativeAsset"
+  | "transactionStatusProvider";
+type NetworkDefinition = Pick<Network, RequiredNetworkFields> &
+  Partial<Omit<Network, RequiredNetworkFields | "ticker">>;
 
 export type NetworkDataSource = {
   schemaVersion: number;
@@ -21,6 +34,14 @@ export type EvmNetwork = Network & {
   chainId: number;
   vm_type: "EVM";
 };
+
+const transactionStatusProviderKinds = {
+  bitcoin: "bitcoin",
+  evm: "evm",
+  solana: "svm",
+  tron: "tron",
+  xrpl: "xrpl",
+} satisfies Record<TransactionStatusProvider, Network["kind"]>;
 
 export const DEFAULT_NETWORK_ID: NetworkId = "ethereum";
 
@@ -92,7 +113,7 @@ function validateNetworkTokens(network: Network) {
 }
 
 export function normalizeNetworkRegistry(source: NetworkDataSource): NormalizedNetworkRegistry {
-  if (source.schemaVersion !== 1) throw new Error("Unsupported network registry schema version");
+  if (source.schemaVersion !== 2) throw new Error("Unsupported network registry schema version");
 
   const ids = new Set<string>();
   const networks = source.networks.map((definition) => {
@@ -107,6 +128,29 @@ export function normalizeNetworkRegistry(source: NetworkDataSource): NormalizedN
       ticker: definition.nativeAsset.symbol,
       tokens: definition.tokens ?? [],
     } as Network;
+
+    if (definition.transactionStatusProvider === undefined) {
+      throw new Error(`${network.id} must declare transactionStatusProvider`);
+    }
+    if (network.transactionStatusProvider !== null) {
+      const provider = network.transactionStatusProvider;
+      if (
+        typeof provider !== "string" ||
+        !Object.hasOwn(transactionStatusProviderKinds, provider) ||
+        network.kind !== transactionStatusProviderKinds[provider]
+      ) {
+        throw new Error(
+          `${network.id} has a transaction status provider for the wrong network kind`,
+        );
+      }
+      const providerUrl =
+        network.transactionStatusProvider === "bitcoin" ? network.apiUrl : network.rpcUrl;
+      if (!providerUrl) {
+        throw new Error(
+          `${network.id} is missing the URL required by its transaction status provider`,
+        );
+      }
+    }
 
     validateAsset(network.nativeAsset, `${network.id} native asset`);
     if (network.kind === "evm" && (!network.chainId || !network.rpcUrl)) {

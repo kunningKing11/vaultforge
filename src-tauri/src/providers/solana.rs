@@ -244,12 +244,13 @@ pub(crate) async fn fetch_solana_tx_status(
     signature: &str,
 ) -> Result<Option<String>, String> {
     Ok(legacy_tx_status(
-        fetch_solana_tx_observation(client, signature).await?,
+        crate::providers::fetch_tx_observation(client, "solana", signature).await?,
     ))
 }
 
 pub(crate) async fn fetch_solana_tx_observation(
     client: &reqwest::Client,
+    config: &NetworkConfig,
     signature: &str,
 ) -> Result<Option<TxStatus>, String> {
     let body = serde_json::json!({
@@ -258,7 +259,7 @@ pub(crate) async fn fetch_solana_tx_observation(
         "params": [[signature], {"searchTransactionHistory": true}],
         "id": 1,
     });
-    let json = rpc_post(client, solana_rpc_url()?, &body).await?;
+    let json = rpc_post(client, config.rpc_url()?, &body).await?;
     parse_solana_tx_observation(&json)
 }
 

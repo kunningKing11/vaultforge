@@ -227,6 +227,30 @@ describe("React wallet session model", () => {
     expect(next.amount).toBe("");
   });
 
+  test("excludes sends on networks without a status provider from polling", () => {
+    const observation: TxStatus = {
+      execution: "succeeded",
+      finality: "included",
+      block_height: null,
+      block_hash: null,
+      confirmations: null,
+    };
+    for (const network of ["filecoin", "injective", "zcash"] as const) {
+      const item: Activity = {
+        id: "legacy-send",
+        kind: "send",
+        title: "Sent",
+        subtitle: "",
+        status: "pending",
+        timestamp: "now",
+        hash: "hash",
+        network,
+      };
+      expect(isPendingTransactionActivity(item)).toBe(false);
+      expect(isPendingTransactionActivity({ ...item, tx_status: observation })).toBe(false);
+    }
+  });
+
   test("falls back to an applicable token when no native asset is available", () => {
     const token = {
       ...ethereumAsset,
