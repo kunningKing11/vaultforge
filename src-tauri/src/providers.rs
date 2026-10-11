@@ -21,9 +21,46 @@ use crate::providers::solana::fetch_solana_assets;
 use crate::providers::tron::fetch_tron_assets;
 use crate::providers::xrpl::fetch_xrpl_assets;
 use crate::registry::{evm_networks, network_by_id};
+use crate::tx::tx_status::TxStatus;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
+
+pub(crate) enum TxObservationProvider {
+    Bitcoin,
+    Evm(&'static evm::EvmNetworkConfig),
+    Solana,
+    Tron,
+    Xrpl,
+}
+
+pub(crate) fn tx_observation_provider(network: &str) -> Result<TxObservationProvider, String> {
+    match network {
+        "bitcoin" => Ok(TxObservationProvider::Bitcoin),
+        "solana" => Ok(TxObservationProvider::Solana),
+        "tron" => Ok(TxObservationProvider::Tron),
+        "xrpl" => Ok(TxObservationProvider::Xrpl),
+        id => evm::evm_config_by_id(id)
+            .map(TxObservationProvider::Evm)
+            .ok_or_else(|| format!("Unsupported network {network}")),
+    }
+}
+
+pub(crate) async fn fetch_tx_observation(
+    client: &Client,
+    network: &str,
+    hash: &str,
+) -> Result<Option<TxStatus>, String> {
+    match tx_observation_provider(network)? {
+        TxObservationProvider::Bitcoin => bitcoin::fetch_bitcoin_tx_observation(client, hash).await,
+        TxObservationProvider::Evm(config) => {
+            evm::fetch_evm_tx_observation(client, config, hash).await
+        }
+        TxObservationProvider::Solana => solana::fetch_solana_tx_observation(client, hash).await,
+        TxObservationProvider::Tron => tron::fetch_tron_tx_observation(client, hash).await,
+        TxObservationProvider::Xrpl => xrpl::fetch_xrpl_tx_observation(client, hash).await,
+    }
+}
 use tokio::task::JoinSet;
 
 pub(crate) mod bitcoin;

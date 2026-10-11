@@ -30,6 +30,7 @@ pub(crate) fn sample_attempt(
         nonce_or_sequence: Some("7".to_string()),
         error: None,
         updated_at: "2026-10-07T00:00:00Z".to_string(),
+        tx_status: None,
     }
 }
 

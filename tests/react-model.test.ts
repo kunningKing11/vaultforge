@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { networkById } from "../src/networks";
 import {
+  applyTransactionObservations,
   applyWalletSession,
   assetKey,
   createInitialAppState,
@@ -14,9 +15,10 @@ import {
   sortAssetsByValue,
   sortAssetsForSelection,
   sortNetworksForSelection,
+  transactionStatusLabel,
   walletStateFromSession,
 } from "../src/react/model";
-import type { Asset, WalletSession } from "../src/types";
+import type { Activity, Asset, TxStatus, WalletSession } from "../src/types";
 
 const unlockedSession: WalletSession = {
   has_wallet: true,
@@ -56,7 +58,51 @@ describe("React wallet session model", () => {
     expect(sendAddressPlaceholder("injective")).toBe("inj1...");
     expect(sendAddressPlaceholder("zcash")).toBe("t1... / t3...");
   });
-
+  test("applies observations and missing receipts without treating RPC errors as disappearance", () => {
+    const item: Activity = {
+      id: "send",
+      kind: "send",
+      title: "Sent",
+      subtitle: "",
+      status: "pending",
+      timestamp: "now",
+      hash: "0xabc",
+      network: "ethereum",
+    };
+    const included: TxStatus = {
+      execution: "succeeded",
+      finality: "included",
+      block_height: 42,
+      block_hash: "0xblock",
+      confirmations: null,
+    };
+    const updated = applyTransactionObservations(
+      [item],
+      [item],
+      new Map([[item.id, included]]),
+      new Set(),
+    );
+    expect(updated[0]?.tx_status).toEqual(included);
+    expect(updated[0]?.status).toBe("included");
+    const changed = { ...included, block_height: 43, block_hash: "0xreplacement" };
+    const reIncluded = applyTransactionObservations(
+      updated,
+      updated,
+      new Map([[item.id, changed]]),
+      new Set(),
+    );
+    expect(reIncluded[0]?.tx_status).toEqual(changed);
+    expect(reIncluded[0]?.status).toBe("included");
+    expect(applyTransactionObservations(updated, updated, new Map(), new Set())).toEqual(updated);
+    const disappeared = applyTransactionObservations(
+      updated,
+      updated,
+      new Map(),
+      new Set([item.id]),
+    );
+    expect(disappeared[0]?.status).toBe("pending");
+    expect(disappeared[0]?.tx_status).toBeNull();
+  });
   test("asset keys separate networks and native assets while preserving non-EVM case", () => {
     expect(assetKey({ network: "ethereum", token_address: "0xABC" })).toBe(
       assetKey({ network: "ethereum", token_address: "0xabc" }),
@@ -76,6 +122,37 @@ describe("React wallet session model", () => {
       );
     }
   });
+  test("backend evidence overrides stale labels and observations during session merge", () => {
+    const included: TxStatus = {
+      execution: "succeeded",
+      finality: "included",
+      block_height: 42,
+      block_hash: "0xnew",
+      confirmations: 1,
+    };
+    const item: Activity = {
+      id: "send",
+      kind: "send",
+      title: "Sent",
+      subtitle: "",
+      status: "confirmed",
+      timestamp: "now",
+      hash: "0xabc",
+      network: "ethereum",
+      tx_status: { ...included, finality: "finalized", block_hash: "0xold" },
+    };
+    const state = applyWalletSession(createInitialAppState(), {
+      ...unlockedSession,
+      activity: [item],
+    });
+    const refreshed = applyWalletSession(state, {
+      ...unlockedSession,
+      activity: [{ ...item, status: "confirmed", tx_status: included }],
+    });
+    if (refreshed.wallet.status !== "unlocked") throw new Error("Expected unlocked wallet");
+    expect(refreshed.wallet.activity[0]?.status).toBe("included");
+    expect(refreshed.wallet.activity[0]?.tx_status).toEqual(included);
+  });
   test("bridge activity is excluded from single-transaction polling", () => {
     const activity = {
       id: "bridge",
@@ -91,7 +168,7 @@ describe("React wallet session model", () => {
     expect(isPendingTransactionActivity(activity)).toBe(false);
     expect(isPendingTransactionActivity({ ...activity, kind: "send" })).toBe(true);
     expect(isPendingTransactionActivity({ ...activity, kind: "send", status: "confirmed" })).toBe(
-      false,
+      true,
     );
     expect(isPendingTransactionActivity({ ...activity, kind: "send", hash: "" })).toBe(false);
   });
@@ -118,7 +195,6 @@ describe("React wallet session model", () => {
       expect(refreshed.wallet.activity[0]?.status).toBe("pending");
     }
   });
-
   test("builds an XRP Ledger receive payload from derived classic address", () => {
     const wallet = walletStateFromSession(unlockedSession);
     const xrpl = networkById("xrpl");
@@ -163,36 +239,37 @@ describe("React wallet session model", () => {
     ).toBe("0xabc");
   });
 
-  test("keeps a polled terminal status when a portfolio refresh returns cached pending activity", () => {
-    const activity = {
-      id: "payment-1",
+  test("included successes and failures keep polling while finalized observations stop", () => {
+    const item: Activity = {
+      id: "send",
       kind: "send",
-      title: "Sent ETH",
-      subtitle: "Ethereum",
-      status: "pending",
-      timestamp: "2026-09-23T00:00:00Z",
+      title: "Sent",
+      subtitle: "",
+      status: "confirmed",
+      timestamp: "now",
       hash: "0xabc",
-      network: "ethereum" as const,
+      network: "ethereum",
     };
-    const state = applyWalletSession(createInitialAppState(), {
-      ...unlockedSession,
-      activity: [{ ...activity, status: "confirmed" }],
-    });
-    const refreshed = applyWalletSession(state, {
-      ...unlockedSession,
-      activity: [activity],
-    });
-    expect(refreshed.wallet.status).toBe("unlocked");
-    if (refreshed.wallet.status !== "unlocked") return;
-    expect(refreshed.wallet.activity[0]?.status).toBe("confirmed");
-
-    const differentTransaction = applyWalletSession(state, {
-      ...unlockedSession,
-      activity: [{ ...activity, hash: "0xdef" }],
-    });
-    expect(differentTransaction.wallet.status).toBe("unlocked");
-    if (differentTransaction.wallet.status !== "unlocked") return;
-    expect(differentTransaction.wallet.activity[0]?.status).toBe("pending");
+    for (const execution of ["succeeded", "failed"] as const) {
+      const status: TxStatus = {
+        execution,
+        finality: "included",
+        block_height: 42,
+        block_hash: null,
+        confirmations: null,
+      };
+      expect(isPendingTransactionActivity({ ...item, tx_status: status })).toBe(true);
+      expect(
+        isPendingTransactionActivity({ ...item, tx_status: { ...status, finality: "finalized" } }),
+      ).toBe(false);
+      expect(isPendingTransactionActivity({ ...item, kind: "cctp", tx_status: status })).toBe(
+        false,
+      );
+      expect(transactionStatusLabel(status)).toBe(
+        execution === "failed" ? "failed (included)" : "included",
+      );
+    }
+    expect(isPendingTransactionActivity(item)).toBe(true);
   });
 
   test("keeps locked sessions free of addresses and provider data", () => {
@@ -211,6 +288,37 @@ describe("React wallet session model", () => {
     const next = applyWalletSession(state, unlockedSession);
     expect(next.wallet.status).toBe("unlocked");
     expect(next.receive.networkId).toBe("ethereum");
+  });
+
+  test("poll results cannot overwrite changed identities newer observations or finalized records", () => {
+    const status: TxStatus = {
+      execution: "succeeded",
+      finality: "included",
+      block_height: 42,
+      block_hash: "0xnew",
+      confirmations: 1,
+    };
+    const item: Activity = {
+      id: "send",
+      kind: "send",
+      title: "Sent",
+      subtitle: "",
+      status: "pending",
+      timestamp: "now",
+      hash: "0xabc",
+      network: "ethereum",
+    };
+    for (const current of [
+      { ...item, hash: "0xother" },
+      { ...item, network: "base" as const },
+      { ...item, kind: "cctp" },
+      { ...item, tx_status: status },
+      { ...item, tx_status: { ...status, finality: "finalized" as const } },
+    ]) {
+      expect(
+        applyTransactionObservations([current], [item], new Map([[item.id, status]]), new Set()),
+      ).toEqual([current]);
+    }
   });
 
   test("preserves an applicable send asset and entered details during session refresh", () => {
@@ -360,5 +468,37 @@ describe("React wallet session model", () => {
     const third = { ...first, name: "Beta", token_address: "0xc" };
     expect(sortAssetsForSelection([third, second, first])).toEqual([first, second, third]);
     expect(sortAssetsForSelection([second, first, third])).toEqual([first, second, third]);
+  });
+
+  test("uses backend legacy status rather than preserving a frontend terminal override", () => {
+    const activity = {
+      id: "payment-1",
+      kind: "send",
+      title: "Sent ETH",
+      subtitle: "Ethereum",
+      status: "pending",
+      timestamp: "2026-09-23T00:00:00Z",
+      hash: "0xabc",
+      network: "ethereum" as const,
+    };
+    const state = applyWalletSession(createInitialAppState(), {
+      ...unlockedSession,
+      activity: [{ ...activity, status: "confirmed" }],
+    });
+    const refreshed = applyWalletSession(state, {
+      ...unlockedSession,
+      activity: [activity],
+    });
+    expect(refreshed.wallet.status).toBe("unlocked");
+    if (refreshed.wallet.status !== "unlocked") return;
+    expect(refreshed.wallet.activity[0]?.status).toBe("pending");
+
+    const differentTransaction = applyWalletSession(state, {
+      ...unlockedSession,
+      activity: [{ ...activity, hash: "0xdef" }],
+    });
+    expect(differentTransaction.wallet.status).toBe("unlocked");
+    if (differentTransaction.wallet.status !== "unlocked") return;
+    expect(differentTransaction.wallet.activity[0]?.status).toBe("pending");
   });
 });

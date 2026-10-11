@@ -34,6 +34,7 @@ A local-first crypto wallet desktop app built with a React frontend, Coinbase De
 - XRP Ledger native sends use live account balance, reserve, fee, and sequence data; they support classic addresses, destination tags, and short on-ledger memos
 - Encrypted local wallet persistence using the app data directory
 - Activity details with transaction hashes, signatures, payload hashes, and copy actions
+- Ordinary send status updates are saved in encrypted wallet storage and survive reloads
 - Security center with storage status, signing status, and local wallet clearing
 - Wallet-password confirmation and strength feedback for encrypted wallet setup
 - One-time risk acknowledgment before wallet setup or unlock, with the full MIT License available in-app

@@ -1,8 +1,9 @@
 use crate::assets::{cached_asset, cached_asset_by_token_address};
 use crate::dto::Asset;
 use crate::providers::NetworkAssetRefresh;
-use crate::providers::http::{json_rpc_result, rpc_post};
+use crate::providers::http::{json_rpc_result, optional_tx_height, rpc_post};
 use crate::registry::{NetworkConfig, network_by_id};
+use crate::tx::tx_status::{Execution, Finality, TxStatus, legacy_tx_status};
 use std::collections::BTreeMap;
 
 const SOLANA_TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -242,6 +243,15 @@ pub(crate) async fn fetch_solana_tx_status(
     client: &reqwest::Client,
     signature: &str,
 ) -> Result<Option<String>, String> {
+    Ok(legacy_tx_status(
+        fetch_solana_tx_observation(client, signature).await?,
+    ))
+}
+
+pub(crate) async fn fetch_solana_tx_observation(
+    client: &reqwest::Client,
+    signature: &str,
+) -> Result<Option<TxStatus>, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "getSignatureStatuses",
@@ -249,7 +259,7 @@ pub(crate) async fn fetch_solana_tx_status(
         "id": 1,
     });
     let json = rpc_post(client, solana_rpc_url()?, &body).await?;
-    parse_solana_tx_status(&json)
+    parse_solana_tx_observation(&json)
 }
 
 pub(crate) async fn fetch_solana_token_account_state(
@@ -428,19 +438,36 @@ pub(crate) fn parse_latest_solana_blockhash(json: &serde_json::Value) -> Result<
 }
 
 pub(crate) fn parse_solana_tx_status(json: &serde_json::Value) -> Result<Option<String>, String> {
-    let Some(status) = json_rpc_result(json, "Solana status")?["value"]
+    Ok(legacy_tx_status(parse_solana_tx_observation(json)?))
+}
+
+pub(crate) fn parse_solana_tx_observation(
+    json: &serde_json::Value,
+) -> Result<Option<TxStatus>, String> {
+    let status = json_rpc_result(json, "Solana status")?["value"]
         .as_array()
         .and_then(|items| items.first())
-    else {
-        return Ok(None);
-    };
+        .ok_or_else(|| "Invalid Solana signature status response".to_string())?;
     if status.is_null() {
         return Ok(None);
     }
-    if !status["err"].is_null() {
-        return Ok(Some("failed".to_string()));
-    }
-    Ok(Some("confirmed".to_string()))
+    let finality = match status["confirmationStatus"].as_str() {
+        Some("processed" | "confirmed") => Finality::Included,
+        Some("finalized") => Finality::Finalized,
+        _ => return Err("Invalid Solana confirmation status".to_string()),
+    };
+    let execution = match status.get("err") {
+        Some(serde_json::Value::Null) => Execution::Succeeded,
+        Some(error) if error.is_object() || error.is_string() => Execution::Failed,
+        _ => return Err("Invalid Solana transaction error field".to_string()),
+    };
+    let mut observation = TxStatus::new(execution, finality);
+    observation.slot = Some(
+        optional_tx_height(status, "slot")?
+            .ok_or_else(|| "Missing Solana transaction slot".to_string())?,
+    );
+    observation.confirmations = optional_tx_height(status, "confirmations")?;
+    Ok(Some(observation))
 }
 
 #[allow(dead_code)]

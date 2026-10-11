@@ -3,4 +3,5 @@ pub(crate) mod evm;
 pub(crate) mod evm_nonces;
 pub(crate) mod solana;
 pub(crate) mod tron;
+pub(crate) mod tx_status;
 pub(crate) mod xrpl;

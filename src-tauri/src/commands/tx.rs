@@ -7,24 +7,20 @@ use crate::assets::asset_matches;
 use crate::derivation::signing_key_from_mnemonic;
 use crate::derivation::xrpl_private_key_from_mnemonic;
 use crate::dto::{Activity, AssetIdentity, SignedTransaction, WalletSession};
-use crate::providers::bitcoin::{
-    broadcast_bitcoin_transaction, fetch_bitcoin_tx_status, sign_bitcoin_transfer,
-};
+use crate::providers::bitcoin::{broadcast_bitcoin_transaction, sign_bitcoin_transfer};
 use crate::providers::evm::{
     broadcast_evm_tx, evm_config_by_id, fetch_evm_estimated_gas, fetch_evm_fee_estimate,
     fetch_evm_native_balance, fetch_evm_nonce, fetch_evm_token_balance_for_contract,
-    fetch_evm_tx_status,
 };
 use crate::providers::http::ProviderClients;
 use crate::providers::solana::{
     broadcast_solana_transaction, fetch_solana_mint_decimals, fetch_solana_native_balance,
     fetch_solana_token_account_rent, fetch_solana_token_account_state, fetch_solana_token_accounts,
-    fetch_solana_tx_status, simulate_solana_transaction,
+    simulate_solana_transaction,
 };
-use crate::providers::tron::{broadcast_tron_transaction, fetch_tron_tx_status};
+use crate::providers::tron::broadcast_tron_transaction;
 use crate::providers::xrpl::{
     broadcast_xrpl_transaction, fetch_xrpl_account_info, fetch_xrpl_network_info,
-    fetch_xrpl_tx_status,
 };
 use crate::state::{AppState, session_from_state, validate_unlocked};
 use crate::storage::persist_state_wallet;
@@ -36,6 +32,7 @@ use crate::tx::solana::{
     solana_associated_token_address,
 };
 use crate::tx::tron::sign_tron_transfer;
+use crate::tx::tx_status::{Finality, TxStatus};
 use crate::tx::xrpl::sign_xrpl_payment;
 use crate::validation::validate_transfer;
 use zeroize::{Zeroize, Zeroizing};
@@ -706,6 +703,7 @@ pub(crate) async fn send_transaction(
                 payload_hash: signed.tx_hash.clone(),
                 signature: Some(signed.signature.clone()),
                 fee: Some(format!("{} {}", signed.fee_amount, signed.fee_symbol)),
+                tx_status: None,
             },
         );
     }
@@ -728,24 +726,124 @@ pub(crate) fn swap_tokens(
 
 #[tauri::command]
 pub(crate) async fn check_transaction_status(
-    _state: State<'_, Mutex<AppState>>,
+    state: State<'_, Mutex<AppState>>,
     clients: State<'_, ProviderClients>,
     tx_hash: String,
     network: String,
-) -> Result<Option<String>, String> {
-    let client = clients.http();
-    match network.as_str() {
-        "bitcoin" => fetch_bitcoin_tx_status(client, &tx_hash).await,
-        "solana" => fetch_solana_tx_status(client, &tx_hash).await,
-        "tron" => fetch_tron_tx_status(client, &tx_hash).await,
-        "xrpl" => fetch_xrpl_tx_status(client, &tx_hash).await,
-        network_id if evm_config_by_id(network_id).is_some() => {
-            let config = evm_config_by_id(network_id)
-                .ok_or_else(|| format!("Unknown network: {}", network))?;
-            fetch_evm_tx_status(client, config, &tx_hash).await
+) -> Result<Option<TxStatus>, String> {
+    reconcile_send_status_with(state.inner(), &tx_hash, &network, || {
+        crate::providers::fetch_tx_observation(clients.http(), &network, &tx_hash)
+    })
+    .await
+}
+
+async fn reconcile_send_status_with<F, Fut>(
+    state: &Mutex<AppState>,
+    tx_hash: &str,
+    network: &str,
+    lookup: F,
+) -> Result<Option<TxStatus>, String>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<Option<TxStatus>, String>>,
+{
+    let (generation, activity_id, expected_observation) = {
+        let app_state = state.lock().map_err(|_| "State lock failed")?;
+
+        if app_state.locked {
+            return Err("Wallet is locked".to_string());
         }
-        _ => Err(format!("Unsupported network: {}", network)),
+
+        let wallet = app_state
+            .wallet
+            .as_ref()
+            .ok_or_else(|| "No wallet exists yet".to_string())?;
+
+        let activity = wallet
+            .activity
+            .iter()
+            .find(|item| {
+                item.kind == "send"
+                    && item.hash == tx_hash
+                    && item.network.as_deref() == Some(network)
+            })
+            .ok_or_else(|| "Transaction is not recorded in this wallet".to_string())?;
+
+        (
+            app_state.wallet_generation,
+            activity.id.clone(),
+            activity.tx_status.clone(),
+        )
+    };
+    let observed_status = lookup().await?;
+
+    let mut app_state = state.lock().map_err(|_| "State lock failed")?;
+    commit_send_status(
+        &mut app_state,
+        generation,
+        &activity_id,
+        tx_hash,
+        network,
+        observed_status,
+        expected_observation,
+    )
+}
+
+fn commit_send_status(
+    app_state: &mut AppState,
+    generation: u64,
+    activity_id: &str,
+    tx_hash: &str,
+    network: &str,
+    observed_status: Option<TxStatus>,
+    expected_observation: Option<TxStatus>,
+) -> Result<Option<TxStatus>, String> {
+    if !app_state.can_commit_refresh(generation) {
+        return Err("Wallet session changed during status lookup".to_string());
     }
+    let wallet = app_state
+        .wallet
+        .as_mut()
+        .ok_or_else(|| "No wallet exists yet".to_string())?;
+    let index = wallet
+        .activity
+        .iter()
+        .position(|item| {
+            item.id == activity_id
+                && item.kind == "send"
+                && item.hash == tx_hash
+                && item.network.as_deref() == Some(network)
+        })
+        .ok_or_else(|| "Transaction changed during status lookup".to_string())?;
+    let previous_status = wallet.activity[index].status.clone();
+    let previous_observation = wallet.activity[index].tx_status.clone();
+    if previous_observation
+        .as_ref()
+        .is_some_and(|status| status.finality == Finality::Finalized)
+    {
+        return Ok(previous_observation);
+    }
+    if previous_observation != expected_observation {
+        return Ok(previous_observation);
+    }
+    let label = observed_status
+        .as_ref()
+        .map(|status| status.legacy_label().to_string())
+        .unwrap_or_else(|| "pending".to_string());
+    if previous_observation == observed_status && label == previous_status {
+        return Ok(observed_status);
+    }
+    wallet.activity[index].status = label.clone();
+    wallet.activity[index].tx_status = observed_status.clone();
+    if let Err(error) = persist_state_wallet(app_state) {
+        // Keep failed saves retryable instead of treating the in-memory result as durable.
+        if let Some(wallet) = app_state.wallet.as_mut() {
+            wallet.activity[index].status = previous_status;
+            wallet.activity[index].tx_status = previous_observation;
+        }
+        return Err(error);
+    }
+    Ok(observed_status)
 }
 
 #[cfg(test)]

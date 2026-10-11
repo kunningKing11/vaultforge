@@ -1,5 +1,14 @@
 export type FiatCurrency = "USD" | "EUR" | "GBP" | "JPY";
 
+export type TxStatus = {
+  execution: "succeeded" | "failed";
+  finality: "included" | "finalized";
+  block_height: number | null;
+  block_hash: string | null;
+  confirmations: number | null;
+  slot?: number | null;
+};
+
 export type AssetIdentity = {
   network: NetworkId;
   token_address: string | null;
@@ -16,6 +25,7 @@ export type Asset = AssetIdentity & {
 };
 
 export type Activity = {
+  tx_status?: TxStatus | null;
   asset?: AssetIdentity | null;
   counter_asset?: AssetIdentity | null;
   id: string;

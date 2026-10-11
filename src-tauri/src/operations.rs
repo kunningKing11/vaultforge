@@ -6,13 +6,10 @@ use serde::{Deserialize, Serialize};
 use crate::activity::{random_hex, short_address};
 use crate::assets::token_addresses_match;
 use crate::dto::{Activity, AssetIdentity};
-use crate::providers::bitcoin::fetch_bitcoin_tx_status;
-use crate::providers::evm::{evm_config_by_id, fetch_evm_tx_status};
 use crate::providers::http::ProviderClients;
-use crate::providers::solana::fetch_solana_tx_status;
-use crate::providers::tron::fetch_tron_tx_status;
-use crate::providers::xrpl::fetch_xrpl_tx_status;
+use crate::providers::tx_observation_provider;
 use crate::registry::network_by_id;
+use crate::tx::tx_status::{Execution, Finality, TxStatus};
 use crate::validation::validate_address_for_network;
 
 /// A transfer workflow retained in encrypted storage for restart recovery.
@@ -25,6 +22,8 @@ pub(crate) struct Operation {
     pub(crate) recipient: String,
     pub(crate) amount_base_units: String,
     pub(crate) step: OperationStep,
+    #[serde(default)]
+    pub(crate) required_source_finality: Finality,
     #[serde(default)]
     pub(crate) attempts: Vec<TransactionAttempt>,
     #[serde(default)]
@@ -52,6 +51,8 @@ pub(crate) struct TransactionAttempt {
     #[serde(default)]
     pub(crate) error: Option<String>,
     pub(crate) updated_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) tx_status: Option<TxStatus>,
 }
 
 /// CCTP recovery payload, separate from transaction attempts and workflow progress.
@@ -150,6 +151,7 @@ pub(crate) fn create_operation(
         recipient,
         amount_base_units: amount_base_units.to_string(),
         step: OperationStep::Approval,
+        required_source_finality: Finality::Finalized,
         attempts: Vec::new(),
         cctp: None,
         created_at: now.clone(),
@@ -203,17 +205,24 @@ pub(crate) fn advance_operation(
             }
         }
         (OperationStep::AwaitingAttestation, OperationStep::Mint) => {
-            let ready = matches!(&operation.cctp, Some(cctp)
-                if !cctp.message.is_empty()
-                    && matches!(&cctp.attestation, Some(attestation) if !attestation.is_empty()));
-            if !ready {
+            if !source_finality_reached(operation) {
+                return Err("Source burn has not reached the required finality".to_string());
+            }
+            if !attestation_available(operation) {
                 return Err("Attestation is missing".to_string());
             }
         }
         (OperationStep::Mint, OperationStep::Completed) => {
+            if !source_finality_reached(operation) {
+                return Err("Source burn has not reached the required finality".to_string());
+            }
             let minted = operation.attempts.iter().any(|attempt| {
                 attempt.step == TransactionStep::Mint
                     && matches!(attempt.status, TransactionStatus::Confirmed)
+                    && attempt.tx_status.as_ref().is_some_and(|status| {
+                        status.execution == Execution::Succeeded
+                            && status.finality == Finality::Finalized
+                    })
             });
             if !minted {
                 return Err("Mint transaction is not confirmed".to_string());
@@ -227,6 +236,29 @@ pub(crate) fn advance_operation(
     operation.updated_at = Utc::now().to_rfc3339();
     operation.last_error = None;
     Ok(())
+}
+
+fn source_finality_reached(operation: &Operation) -> bool {
+    operation.attempts.iter().any(|attempt| {
+        attempt.step == TransactionStep::Burn
+            && !attempt.tx_hash.trim().is_empty()
+            && attempt.tx_status.as_ref().is_some_and(|status| {
+                status.execution == Execution::Succeeded
+                    && status
+                        .finality
+                        .satisfies(&operation.required_source_finality)
+            })
+    })
+}
+
+fn attestation_available(operation: &Operation) -> bool {
+    operation.cctp.as_ref().is_some_and(|cctp| {
+        !cctp.message.is_empty()
+            && cctp
+                .attestation
+                .as_ref()
+                .is_some_and(|attestation| !attestation.is_empty())
+    })
 }
 
 pub(crate) fn record_transaction_attempt(
@@ -322,13 +354,10 @@ pub(crate) fn cancel_operation(operation: &mut Operation) -> Result<(), String> 
     // A signed burn may have been broadcast before its submission status was saved.
     if let Some(burn) = operation.attempts.iter().find(|attempt| {
         attempt.step == TransactionStep::Burn
-            && matches!(
-                attempt.status,
-                TransactionStatus::Signed
-                    | TransactionStatus::Submitted
-                    | TransactionStatus::SubmissionUnknown
-                    | TransactionStatus::Confirmed
-            )
+            && attempt.status != TransactionStatus::Built
+            && !attempt.tx_status.as_ref().is_some_and(|status| {
+                status.execution == Execution::Failed && status.finality == Finality::Finalized
+            })
     }) {
         return Err(format!(
             "Burn transaction {} may have been broadcast",
@@ -351,17 +380,7 @@ pub(crate) async fn reconcile_operation(
     clients: &ProviderClients,
 ) -> Result<(), String> {
     reconcile_operation_with(operation, |network, hash| async move {
-        if let Some(config) = evm_config_by_id(&network) {
-            fetch_evm_tx_status(clients.http(), config, &hash).await
-        } else {
-            match network.as_str() {
-                "bitcoin" => fetch_bitcoin_tx_status(clients.http(), &hash).await,
-                "solana" => fetch_solana_tx_status(clients.http(), &hash).await,
-                "tron" => fetch_tron_tx_status(clients.http(), &hash).await,
-                "xrpl" => fetch_xrpl_tx_status(clients.http(), &hash).await,
-                _ => Err(format!("Unsupported network {network}")),
-            }
-        }
+        crate::providers::fetch_tx_observation(clients.http(), &network, &hash).await
     })
     .await
 }
@@ -372,7 +391,7 @@ async fn reconcile_operation_with<F, Fut>(
 ) -> Result<(), String>
 where
     F: FnMut(String, String) -> Fut,
-    Fut: std::future::Future<Output = Result<Option<String>, String>>,
+    Fut: std::future::Future<Output = Result<Option<TxStatus>, String>>,
 {
     if matches!(
         operation.step,
@@ -383,11 +402,20 @@ where
 
     let mut changed = false;
     for index in 0..operation.attempts.len() {
+        if operation.attempts[index]
+            .tx_status
+            .as_ref()
+            .is_some_and(|status| status.finality == Finality::Finalized)
+        {
+            continue;
+        }
         if !matches!(
             operation.attempts[index].status,
             TransactionStatus::Signed
                 | TransactionStatus::Submitted
                 | TransactionStatus::SubmissionUnknown
+                | TransactionStatus::Confirmed
+                | TransactionStatus::Failed
         ) {
             continue;
         }
@@ -399,10 +427,7 @@ where
             }
             TransactionStep::Mint => operation.destination_asset.network.clone(),
         };
-        if evm_config_by_id(&network).is_none()
-            && !matches!(network.as_str(), "bitcoin" | "solana" | "tron" | "xrpl")
-        {
-            let message = format!("Unsupported network {network}");
+        if let Err(message) = tx_observation_provider(&network) {
             operation.attempts[index].error = Some(message.clone());
             operation.attempts[index].updated_at = Utc::now().to_rfc3339();
             operation.last_error = Some(message);
@@ -411,18 +436,36 @@ where
         }
         let result = lookup(network, hash).await;
         match result {
-            Ok(None) => {}
-            Ok(Some(status)) if status == "confirmed" => {
-                operation.attempts[index].status = TransactionStatus::Confirmed;
-                operation.attempts[index].updated_at = Utc::now().to_rfc3339();
-                changed = true;
+            Ok(None) => {
+                let attempt = &mut operation.attempts[index];
+                if attempt.tx_status.take().is_some() {
+                    attempt.status = TransactionStatus::SubmissionUnknown;
+                    attempt.updated_at = Utc::now().to_rfc3339();
+                    changed = true;
+                }
             }
-            Ok(Some(_)) => {
-                operation.attempts[index].status = TransactionStatus::Failed;
-                operation.attempts[index].error = Some("Transaction failed on chain".to_string());
-                operation.attempts[index].updated_at = Utc::now().to_rfc3339();
-                operation.last_error = Some("Transaction failed on chain".to_string());
-                changed = true;
+            Ok(Some(observation)) => {
+                let status = match (&observation.execution, &observation.finality) {
+                    (Execution::Failed, _) => TransactionStatus::Failed,
+                    (Execution::Succeeded, Finality::Finalized) => TransactionStatus::Confirmed,
+                    (Execution::Succeeded, Finality::Included) => TransactionStatus::Submitted,
+                };
+                let error = (observation.execution == Execution::Failed)
+                    .then(|| "Transaction failed on chain".to_string());
+                let attempt = &mut operation.attempts[index];
+                if attempt.tx_status.as_ref() != Some(&observation)
+                    || attempt.status != status
+                    || attempt.error != error
+                {
+                    attempt.tx_status = Some(observation);
+                    attempt.status = status;
+                    attempt.error = error.clone();
+                    attempt.updated_at = Utc::now().to_rfc3339();
+                    if let Some(error) = error {
+                        operation.last_error = Some(error);
+                    }
+                    changed = true;
+                }
             }
             Err(rpc_err) => {
                 operation.attempts[index].error = Some(format!("Status check failed: {rpc_err}"));
@@ -439,6 +482,12 @@ pub(crate) fn operation_activity(operation: &Operation) -> Result<Activity, Stri
     let title = match operation.step {
         OperationStep::Approval => "Bridging approval pending",
         OperationStep::Burn => "Bridging burn pending",
+        OperationStep::AwaitingAttestation if !source_finality_reached(operation) => {
+            "Waiting for source finality"
+        }
+        OperationStep::AwaitingAttestation if attestation_available(operation) => {
+            "Attestation available"
+        }
         OperationStep::AwaitingAttestation => "Waiting for attestation",
         OperationStep::Mint => "Bridging mint pending",
         OperationStep::Completed => "Bridged",
@@ -508,6 +557,7 @@ pub(crate) fn operation_activity(operation: &Operation) -> Result<Activity, Stri
         payload_hash: None,
         signature: None,
         fee: None,
+        tx_status: displayed_attempt.and_then(|attempt| attempt.tx_status.clone()),
     })
 }
 

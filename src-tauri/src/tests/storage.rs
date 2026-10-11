@@ -9,6 +9,7 @@ use crate::dto::{AssetIdentity, FiatCurrency, Wallet};
 use crate::operations::{CctpData, OperationStep, TransactionStatus, TransactionStep};
 use crate::state::AppState;
 use crate::tests::{sample_attempt, sample_operation, starter_assets};
+use crate::tx::tx_status::{Execution, Finality, TxStatus};
 
 #[test]
 fn derives_same_key_with_same_salt() {
@@ -49,6 +50,12 @@ fn encrypts_and_decrypts_wallet_payload() {
         message: vec![1, 2],
         attestation: Some(vec![3, 4]),
     });
+    let mut observation = TxStatus::new(Execution::Succeeded, Finality::Finalized);
+    observation.block_height = Some(42);
+    observation.block_hash = Some(format!("0x{}", "ab".repeat(32)));
+    observation.confirmations = Some(20);
+    wallet.activity[0].tx_status = Some(observation.clone());
+    wallet.operations[0].attempts[0].tx_status = Some(observation);
     let (key, salt) = derive_storage_key(wallet_password, None).unwrap();
     let mut stored = encrypt_wallet(&wallet, &key, &salt).unwrap();
     assert_eq!(stored.version, 8);
@@ -57,6 +64,10 @@ fn encrypts_and_decrypts_wallet_payload() {
     let decrypted = decrypt_wallet(&stored, wallet_password).unwrap();
     assert_eq!(decrypted.wallet().name, wallet.name);
     assert_eq!(decrypted.wallet().operations, wallet.operations);
+    assert_eq!(
+        decrypted.wallet().activity[0].tx_status,
+        wallet.activity[0].tx_status
+    );
     assert_eq!(decrypted.wallet().mnemonic, wallet.mnemonic);
     assert_eq!(decrypted.wallet().bip39_passphrase, wallet.bip39_passphrase);
     assert_eq!(decrypted.wallet().created_at, wallet.created_at);

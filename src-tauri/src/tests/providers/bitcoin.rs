@@ -1,9 +1,11 @@
 use super::{
     BitcoinAccountSnapshot, BitcoinAddressSnapshot, BitcoinAddressStats, BitcoinBranchScan,
-    parse_bitcoin_address_stats, parse_bitcoin_fee_rate, parse_bitcoin_utxos,
+    parse_bitcoin_address_stats, parse_bitcoin_fee_rate, parse_bitcoin_tx_observation,
+    parse_bitcoin_utxos,
 };
 use crate::derivation::{BitcoinAccount, BitcoinBranch, BitcoinDerivedAddress, BitcoinKeyOrigin};
 use crate::tests::bitcoin_test_owner;
+use crate::tx::tx_status::{Execution, Finality, legacy_tx_status};
 
 #[test]
 fn bitcoin_account_balance_includes_receive_and_change_branches() {
@@ -97,6 +99,57 @@ fn bitcoin_history_marks_a_spent_address_as_used() {
 }
 
 #[test]
+fn finalizes_bitcoin_at_six_confirmations_only_on_the_best_chain() {
+    let observation = parse_bitcoin_tx_observation(
+        &serde_json::json!({"confirmed":true,"block_height":42,"block_hash":"ab".repeat(32)}),
+    )
+    .unwrap()
+    .unwrap();
+    let canonical = serde_json::json!({"in_best_chain":true,"height":42});
+    for (tip, finality, count) in [
+        (42, Finality::Included, 1),
+        (46, Finality::Included, 5),
+        (47, Finality::Finalized, 6),
+    ] {
+        let observed = super::finalize_bitcoin_observation(
+            observation.clone(),
+            &canonical,
+            &serde_json::json!(tip),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(observed.finality, finality);
+        assert_eq!(observed.confirmations, Some(count));
+    }
+    assert!(
+        super::finalize_bitcoin_observation(
+            observation.clone(),
+            &serde_json::json!({"in_best_chain":false}),
+            &serde_json::json!(50)
+        )
+        .unwrap()
+        .is_none()
+    );
+    for tip in [
+        serde_json::json!(41),
+        serde_json::json!("50"),
+        serde_json::Value::Null,
+    ] {
+        assert!(
+            super::finalize_bitcoin_observation(observation.clone(), &canonical, &tip).is_err()
+        );
+    }
+    assert!(
+        super::finalize_bitcoin_observation(
+            observation,
+            &serde_json::json!({"in_best_chain":true,"height":43}),
+            &serde_json::json!(50)
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn parses_bitcoin_balance_with_mempool_values() {
     let json = serde_json::json!({
         "chain_stats": {
@@ -115,14 +168,35 @@ fn parses_bitcoin_balance_with_mempool_values() {
     assert!(stats.used);
 }
 
-const MNEMONIC: &str =
-    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-
-fn derived(index: u32) -> BitcoinDerivedAddress {
-    BitcoinDerivedAddress {
-        origin: BitcoinKeyOrigin::external(index),
-        address: format!("address-{index}"),
-    }
+#[test]
+fn parses_bitcoin_inclusion_without_inventing_finality_or_confirmations() {
+    let observation = parse_bitcoin_tx_observation(
+        &serde_json::json!({"confirmed":true,"block_height":42,"block_hash":"ab".repeat(32)}),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(observation.execution, Execution::Succeeded);
+    assert_eq!(observation.finality, Finality::Included);
+    assert_eq!(observation.block_height, Some(42));
+    assert_eq!(
+        observation.block_hash.as_deref(),
+        Some("ab".repeat(32).as_str())
+    );
+    assert_eq!(observation.confirmations, None);
+    assert_eq!(
+        legacy_tx_status(Some(observation)).as_deref(),
+        Some("confirmed")
+    );
+    let missing = parse_bitcoin_tx_observation(&serde_json::json!({"confirmed":true}))
+        .unwrap()
+        .unwrap();
+    assert_eq!(missing.block_height, None);
+    assert_eq!(missing.block_hash, None);
+    assert!(
+        parse_bitcoin_tx_observation(&serde_json::json!({"confirmed":false}))
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -152,6 +226,16 @@ fn parses_bitcoin_utxos_and_fee_rate() {
     assert_eq!(parse_bitcoin_fee_rate(&fees).unwrap(), 3);
 }
 
+const MNEMONIC: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+fn derived(index: u32) -> BitcoinDerivedAddress {
+    BitcoinDerivedAddress {
+        origin: BitcoinKeyOrigin::external(index),
+        address: format!("address-{index}"),
+    }
+}
+
 #[test]
 fn rejects_incomplete_bitcoin_address_stats() {
     let json = serde_json::json!({
@@ -166,4 +250,17 @@ fn rejects_incomplete_bitcoin_address_stats() {
         }
     });
     assert!(parse_bitcoin_address_stats(&json).is_err());
+}
+
+#[test]
+fn rejects_malformed_bitcoin_status_metadata() {
+    for value in [
+        serde_json::json!({}),
+        serde_json::json!({"confirmed":"true"}),
+        serde_json::json!({"confirmed":true,"block_height":-1}),
+        serde_json::json!({"confirmed":true,"block_height":"42"}),
+        serde_json::json!({"confirmed":true,"block_hash":"bad"}),
+    ] {
+        assert!(parse_bitcoin_tx_observation(&value).is_err());
+    }
 }

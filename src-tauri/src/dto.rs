@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use zeroize::Zeroize;
 
 use crate::operations::Operation;
+use crate::tx::tx_status::TxStatus;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
@@ -145,6 +146,8 @@ pub(crate) struct Activity {
     pub(crate) payload_hash: Option<String>,
     pub(crate) signature: Option<String>,
     pub(crate) fee: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) tx_status: Option<TxStatus>,
 }
 
 #[derive(Serialize)]

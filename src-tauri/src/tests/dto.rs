@@ -1,6 +1,7 @@
 use super::{Activity, AssetIdentity, FiatCurrency, WalletPayload, default_enabled_networks};
 use crate::activity::activity;
 use crate::derivation::derive_addresses_from_mnemonic_filtered;
+use crate::tx::tx_status::{Execution, Finality, TxStatus};
 
 #[test]
 fn activity_identity_is_optional_for_old_wallets_and_round_trips_for_new_entries() {
@@ -59,5 +60,62 @@ fn deserializes_frontend_fiat_currency_codes() {
     assert_eq!(
         serde_json::from_str::<FiatCurrency>(r#""EUR""#).unwrap(),
         FiatCurrency::Eur
+    );
+}
+
+#[test]
+fn observations_use_snake_case_json_and_legacy_activity_defaults() {
+    for (execution, execution_json) in [
+        (Execution::Succeeded, "succeeded"),
+        (Execution::Failed, "failed"),
+    ] {
+        for (finality, finality_json) in [
+            (Finality::Included, "included"),
+            (Finality::Finalized, "finalized"),
+        ] {
+            let mut observation = TxStatus::new(execution.clone(), finality);
+            observation.slot = Some(42);
+            let json = serde_json::to_value(&observation).unwrap();
+            assert_eq!(
+                json,
+                serde_json::json!({"execution":execution_json,"finality":finality_json,"block_height":null,"block_hash":null,"confirmations":null,"slot":42})
+            );
+            assert_eq!(
+                serde_json::from_value::<TxStatus>(json).unwrap(),
+                observation
+            );
+        }
+    }
+    let mut observation = TxStatus::new(Execution::Succeeded, Finality::Included);
+    observation.block_height = Some(42);
+    let json = serde_json::to_value(&observation).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({"execution":"succeeded","finality":"included","block_height":42,"block_hash":null,"confirmations":null})
+    );
+    assert_eq!(json["execution"], "succeeded");
+    assert_eq!(json["finality"], "included");
+    assert_eq!(json["block_height"], 42);
+    assert!(json.get("blockHeight").is_none());
+    assert!(json.get("slot").is_none());
+    assert_eq!(
+        serde_json::from_value::<TxStatus>(json.clone()).unwrap(),
+        observation
+    );
+    let mut legacy = json;
+    legacy["execution"] = serde_json::json!("Succeeded");
+    legacy["finality"] = serde_json::json!("Included");
+    assert_eq!(
+        serde_json::from_value::<TxStatus>(legacy).unwrap(),
+        observation
+    );
+    let entry = activity("send", "Sent", "", "1 ETH");
+    let json = serde_json::to_value(&entry).unwrap();
+    assert!(json.get("tx_status").is_none());
+    assert!(
+        serde_json::from_value::<Activity>(json)
+            .unwrap()
+            .tx_status
+            .is_none()
     );
 }

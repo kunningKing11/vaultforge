@@ -1,8 +1,9 @@
 use crate::assets::cached_asset;
 use crate::dto::Asset;
 use crate::providers::NetworkAssetRefresh;
-use crate::providers::http::{json_rpc_result, rpc_post};
+use crate::providers::http::{json_rpc_result, optional_tx_hash, rpc_post};
 use crate::registry::{AssetConfig, NetworkConfig, network_by_id};
+use crate::tx::tx_status::{Execution, Finality, TxStatus, legacy_tx_status};
 
 pub(crate) type EvmNetworkConfig = NetworkConfig;
 pub(crate) type EvmTokenConfig = AssetConfig;
@@ -301,6 +302,16 @@ pub(crate) async fn fetch_evm_tx_status(
     config: &EvmNetworkConfig,
     tx_hash: &str,
 ) -> Result<Option<String>, String> {
+    let observation = fetch_evm_tx_observation(client, config, tx_hash).await?;
+
+    Ok(legacy_tx_status(observation))
+}
+
+pub(crate) async fn fetch_evm_tx_observation(
+    client: &reqwest::Client,
+    config: &EvmNetworkConfig,
+    tx_hash: &str,
+) -> Result<Option<TxStatus>, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "eth_getTransactionReceipt",
@@ -310,16 +321,93 @@ pub(crate) async fn fetch_evm_tx_status(
     let json = rpc_post(client, config.rpc_url()?, &body).await?;
 
     let result = json_rpc_result(&json, "EVM transaction status")?;
+
+    let Some(observation) = parse_evm_tx_receipt(result)? else {
+        return Ok(None);
+    };
+    let height = observation
+        .block_height
+        .ok_or_else(|| "Missing EVM receipt height".to_string())?;
+    let finalized = match rpc_post(client, config.rpc_url()?, &serde_json::json!({"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["finalized",false],"id":3})).await {
+        Ok(json) => json.get("result").cloned().unwrap_or(serde_json::Value::Null),
+        Err(_) => serde_json::Value::Null,
+    };
+    // Check canonical inclusion after reading finality so an intervening reorg cannot finalize an old fork.
+    let canonical = rpc_post(client, config.rpc_url()?, &serde_json::json!({"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":[format!("0x{height:x}"),false],"id":2})).await?;
+    let canonical = json_rpc_result(&canonical, "EVM canonical block")?;
+    finalize_evm_observation(observation, canonical, &finalized)
+}
+
+pub(crate) fn finalize_evm_observation(
+    mut observation: TxStatus,
+    canonical: &serde_json::Value,
+    finalized: &serde_json::Value,
+) -> Result<Option<TxStatus>, String> {
+    if canonical.is_null() {
+        return Ok(None);
+    }
+    let height = observation
+        .block_height
+        .ok_or_else(|| "Missing EVM receipt height".to_string())?;
+    let canonical_height = parse_evm_block_height(canonical, "number")?;
+    let canonical_hash = optional_tx_hash(canonical, "hash", "0x")?
+        .ok_or_else(|| "Missing EVM canonical block hash".to_string())?;
+    if canonical_height != height
+        || !observation
+            .block_hash
+            .as_deref()
+            .is_some_and(|hash| hash.eq_ignore_ascii_case(&canonical_hash))
+    {
+        return Ok(None);
+    }
+    if !finalized.is_null() {
+        let finalized_height = parse_evm_block_height(finalized, "number")?;
+        let finalized_hash = optional_tx_hash(finalized, "hash", "0x")?
+            .ok_or_else(|| "Missing EVM finalized block hash".to_string())?;
+        if finalized_height >= height {
+            if finalized_height == height && !finalized_hash.eq_ignore_ascii_case(&canonical_hash) {
+                return Err("EVM finalized head conflicts with canonical receipt block".to_string());
+            }
+            observation.finality = Finality::Finalized;
+        }
+    }
+    Ok(Some(observation))
+}
+
+fn parse_evm_block_height(result: &serde_json::Value, field: &str) -> Result<u64, String> {
+    let quantity = result[field]
+        .as_str()
+        .and_then(|number| number.strip_prefix("0x"))
+        .ok_or_else(|| format!("Missing or invalid EVM {field}"))?;
+    if quantity.is_empty()
+        || !quantity.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || (quantity.len() > 1 && quantity.starts_with('0'))
+    {
+        return Err(format!("Invalid EVM {field}"));
+    }
+    u64::from_str_radix(quantity, 16).map_err(|_| format!("Invalid EVM {field}"))
+}
+
+pub(crate) fn parse_evm_tx_receipt(result: &serde_json::Value) -> Result<Option<TxStatus>, String> {
     if result.is_null() {
         return Ok(None);
     }
 
-    let status_hex = result["status"].as_str().unwrap_or("0x0");
-    if status_hex == "0x1" {
-        Ok(Some("confirmed".to_string()))
-    } else {
-        Ok(Some("failed".to_string()))
-    }
+    let execution = match result["status"].as_str() {
+        Some("0x1") => Execution::Succeeded,
+        Some("0x0") => Execution::Failed,
+        _ => return Err("Invalid EVM receipt status".to_string()),
+    };
+
+    let block_height = parse_evm_block_height(result, "blockNumber")?;
+
+    let block_hash = optional_tx_hash(result, "blockHash", "0x")?
+        .ok_or_else(|| "Missing EVM receipt block hash".to_string())?;
+
+    let mut observation = TxStatus::new(execution, Finality::Included);
+    observation.block_height = Some(block_height);
+    observation.block_hash = Some(block_hash);
+    Ok(Some(observation))
 }
 
 #[cfg(test)]

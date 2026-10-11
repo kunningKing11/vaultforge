@@ -3,6 +3,7 @@ use chrono::Utc;
 use rand::RngExt;
 use sha2::{Digest, Sha256};
 
+// TODO: actual hash
 /// Creates a local activity entry marked confirmed with a placeholder hash.
 pub(crate) fn activity(kind: &str, title: &str, subtitle: &str, amount: &str) -> Activity {
     Activity {
@@ -22,6 +23,7 @@ pub(crate) fn activity(kind: &str, title: &str, subtitle: &str, amount: &str) ->
         payload_hash: None,
         signature: None,
         fee: None,
+        tx_status: None,
     }
 }
 

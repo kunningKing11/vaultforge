@@ -5,6 +5,7 @@ import type {
   FiatCurrency,
   NetworkId,
   SignedTransaction,
+  TxStatus,
   WalletRefreshResult,
   WalletSession,
 } from "./types";
@@ -60,5 +61,5 @@ export const walletApi = {
   swapTokens: (args: { fromAsset: AssetIdentity; toAsset: AssetIdentity; amount: string }) =>
     invoke<WalletSession>("swap_tokens", args),
   checkTransactionStatus: (args: { txHash: string; network: NetworkId }) =>
-    invoke<string | null>("check_transaction_status", args),
+    invoke<TxStatus | null>("check_transaction_status", args),
 };

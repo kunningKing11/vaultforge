@@ -3,8 +3,9 @@ use serde_json::{Value, json};
 use crate::assets::cached_asset;
 use crate::dto::Asset;
 use crate::providers::NetworkAssetRefresh;
-use crate::providers::http::{json_rpc_result, rpc_post};
+use crate::providers::http::{json_rpc_result, optional_tx_hash, optional_tx_height, rpc_post};
 use crate::registry::{NetworkConfig, network_by_id};
+use crate::tx::tx_status::{Execution, Finality, TxStatus, legacy_tx_status};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct XrplAccountInfo {
@@ -231,27 +232,48 @@ pub(crate) async fn fetch_xrpl_tx_status(
     client: &reqwest::Client,
     tx_hash: &str,
 ) -> Result<Option<String>, String> {
+    Ok(legacy_tx_status(
+        fetch_xrpl_tx_observation(client, tx_hash).await?,
+    ))
+}
+
+pub(crate) async fn fetch_xrpl_tx_observation(
+    client: &reqwest::Client,
+    tx_hash: &str,
+) -> Result<Option<TxStatus>, String> {
     let json = xrpl_rpc(
         client,
         "tx",
         json!({ "transaction": tx_hash, "binary": false }),
     )
     .await?;
-    let result = json_rpc_result(&json, "XRP Ledger transaction lookup")?;
+    parse_xrpl_tx_observation(&json)
+}
+
+pub(crate) fn parse_xrpl_tx_observation(
+    json: &serde_json::Value,
+) -> Result<Option<TxStatus>, String> {
+    let result = json_rpc_result(json, "XRP Ledger transaction lookup")?;
     if matches!(rpc_error(result), Some("txnNotFound")) {
         return Ok(None);
     }
     if let Some(error) = rpc_error(result) {
         return Err(format!("XRP Ledger transaction lookup error: {error}"));
     }
-    if result["validated"].as_bool() != Some(true) {
-        return Ok(None);
+    match result.get("validated") {
+        None | Some(serde_json::Value::Bool(false)) => return Ok(None),
+        Some(serde_json::Value::Bool(true)) => {}
+        _ => return Err("Invalid XRP Ledger validation flag".to_string()),
     }
-    match result["meta"]["TransactionResult"].as_str() {
-        Some("tesSUCCESS") => Ok(Some("confirmed".to_string())),
-        Some(_) => Ok(Some("failed".to_string())),
-        None => Err("XRP Ledger validated transaction is missing its result".to_string()),
-    }
+    let execution = match result["meta"]["TransactionResult"].as_str() {
+        Some("tesSUCCESS") => Execution::Succeeded,
+        Some(code) if code.starts_with("tec") && code.len() > 3 => Execution::Failed,
+        _ => return Err("XRP Ledger validated transaction is missing a valid result".to_string()),
+    };
+    let mut observation = TxStatus::new(execution, Finality::Finalized);
+    observation.block_height = optional_tx_height(result, "ledger_index")?;
+    observation.block_hash = optional_tx_hash(result, "ledger_hash", "")?;
+    Ok(Some(observation))
 }
 
 #[cfg(test)]

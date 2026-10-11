@@ -1,5 +1,40 @@
 use std::time::Duration;
 
+pub(crate) fn optional_tx_height(
+    value: &serde_json::Value,
+    field: &str,
+) -> Result<Option<u64>, String> {
+    match value.get(field) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(number) => number
+            .as_u64()
+            .map(Some)
+            .ok_or_else(|| format!("Invalid transaction {field}")),
+    }
+}
+
+pub(crate) fn optional_tx_hash(
+    value: &serde_json::Value,
+    field: &str,
+    prefix: &str,
+) -> Result<Option<String>, String> {
+    match value.get(field) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(value) => {
+            let hash = value
+                .as_str()
+                .ok_or_else(|| format!("Invalid transaction {field}"))?;
+            let hex = hash
+                .strip_prefix(prefix)
+                .ok_or_else(|| format!("Invalid transaction {field}"))?;
+            if hex.len() != 64 || !hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                return Err(format!("Invalid transaction {field}"));
+            }
+            Ok(Some(hash.to_string()))
+        }
+    }
+}
+
 pub(crate) struct ProviderClients {
     http: reqwest::Client,
 }

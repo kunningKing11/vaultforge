@@ -6,6 +6,7 @@ use super::{
 };
 use crate::providers::http::ProviderClients;
 use crate::tests::{sample_attempt, sample_operation};
+use crate::tx::tx_status::{Execution, Finality, TxStatus};
 
 #[test]
 fn advances_only_with_required_evidence() {
@@ -36,6 +37,9 @@ fn advances_only_with_required_evidence() {
         message: vec![1, 2],
         attestation: Some(vec![3, 4]),
     });
+    assert!(advance_operation(&mut operation, OperationStep::Mint).is_err());
+    operation.attempts.last_mut().unwrap().tx_status =
+        Some(TxStatus::new(Execution::Succeeded, Finality::Finalized));
     advance_operation(&mut operation, OperationStep::Mint).unwrap();
     assert!(advance_operation(&mut operation, OperationStep::Completed).is_err());
     record_transaction_attempt(
@@ -44,6 +48,8 @@ fn advances_only_with_required_evidence() {
         sample_attempt(TransactionStep::Mint, TransactionStatus::Confirmed),
     )
     .unwrap();
+    operation.attempts.last_mut().unwrap().tx_status =
+        Some(TxStatus::new(Execution::Succeeded, Finality::Finalized));
     advance_operation(&mut operation, OperationStep::Completed).unwrap();
     let original = operation.clone();
     assert!(advance_operation(&mut operation, OperationStep::Burn).is_err());
@@ -165,6 +171,160 @@ fn errors_preserve_recovery_position_and_transaction_history() {
 }
 
 #[test]
+fn included_observations_remain_trackable_and_do_not_complete_mint() {
+    let mut operation = sample_operation();
+    operation.step = OperationStep::Mint;
+    operation.attempts.push(sample_attempt(
+        TransactionStep::Mint,
+        TransactionStatus::Signed,
+    ));
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
+    let included = TxStatus::new(Execution::Succeeded, Finality::Included);
+    runtime
+        .block_on(reconcile_operation_with(&mut operation, |_, _| {
+            std::future::ready(Ok(Some(included.clone())))
+        }))
+        .unwrap();
+    assert_eq!(operation.attempts[0].status, TransactionStatus::Submitted);
+    assert_eq!(operation.attempts[0].tx_status, Some(included.clone()));
+    assert!(advance_operation(&mut operation, OperationStep::Completed).is_err());
+    let unchanged = operation.clone();
+    runtime
+        .block_on(reconcile_operation_with(&mut operation, |_, _| {
+            std::future::ready(Ok(Some(included.clone())))
+        }))
+        .unwrap();
+    assert_eq!(operation, unchanged);
+    runtime
+        .block_on(reconcile_operation_with(&mut operation, |_, _| {
+            std::future::ready(Ok(Some(TxStatus::new(
+                Execution::Succeeded,
+                Finality::Finalized,
+            ))))
+        }))
+        .unwrap();
+    let mut burn = sample_attempt(TransactionStep::Burn, TransactionStatus::Confirmed);
+    burn.tx_status = Some(TxStatus::new(Execution::Succeeded, Finality::Finalized));
+    operation.attempts.push(burn);
+    advance_operation(&mut operation, OperationStep::Completed).unwrap();
+}
+
+#[test]
+fn legacy_confirmed_mints_do_not_imply_finality() {
+    let mut operation = sample_operation();
+    operation.step = OperationStep::Mint;
+    operation.attempts.push(sample_attempt(
+        TransactionStep::Mint,
+        TransactionStatus::Confirmed,
+    ));
+    assert!(advance_operation(&mut operation, OperationStep::Completed).is_err());
+}
+
+#[test]
+fn mint_requires_successful_source_evidence_meeting_the_recorded_policy() {
+    let mut operation = sample_operation();
+    operation.step = OperationStep::AwaitingAttestation;
+    operation.cctp = Some(CctpData {
+        message: vec![1],
+        attestation: Some(vec![2]),
+    });
+    let mut burn = sample_attempt(TransactionStep::Burn, TransactionStatus::Submitted);
+    burn.tx_status = Some(TxStatus::new(Execution::Succeeded, Finality::Included));
+    operation.attempts.push(burn);
+    let before = operation.clone();
+    assert!(advance_operation(&mut operation, OperationStep::Mint).is_err());
+    assert_eq!(operation, before);
+    operation.required_source_finality = Finality::Included;
+    assert_eq!(
+        operation_activity(&operation).unwrap().title,
+        "Attestation available"
+    );
+    advance_operation(&mut operation, OperationStep::Mint).unwrap();
+    operation.step = OperationStep::AwaitingAttestation;
+    operation.required_source_finality = Finality::Finalized;
+    assert_eq!(
+        operation_activity(&operation).unwrap().title,
+        "Waiting for source finality"
+    );
+    operation.attempts[0].tx_status = Some(TxStatus::new(Execution::Failed, Finality::Finalized));
+    assert!(advance_operation(&mut operation, OperationStep::Mint).is_err());
+    operation.attempts[0].tx_status =
+        Some(TxStatus::new(Execution::Succeeded, Finality::Finalized));
+    advance_operation(&mut operation, OperationStep::Mint).unwrap();
+    let mut legacy = serde_json::to_value(sample_operation()).unwrap();
+    legacy
+        .as_object_mut()
+        .unwrap()
+        .remove("required_source_finality");
+    let restored: Operation = serde_json::from_value(legacy).unwrap();
+    assert_eq!(restored.required_source_finality, Finality::Finalized);
+    let mut legacy_mint = sample_operation();
+    legacy_mint.step = OperationStep::Mint;
+    let mut minted = sample_attempt(TransactionStep::Mint, TransactionStatus::Confirmed);
+    minted.tx_status = Some(TxStatus::new(Execution::Succeeded, Finality::Finalized));
+    legacy_mint.attempts.push(minted);
+    assert!(advance_operation(&mut legacy_mint, OperationStep::Completed).is_err());
+}
+
+#[test]
+fn missing_operation_receipts_clear_inclusion_without_losing_recovery_data() {
+    let mut operation = sample_operation();
+    let mut attempt = sample_attempt(TransactionStep::Burn, TransactionStatus::Submitted);
+    attempt.tx_status = Some(TxStatus::new(Execution::Succeeded, Finality::Included));
+    operation.attempts.push(attempt.clone());
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
+    runtime
+        .block_on(reconcile_operation_with(&mut operation, |_, _| {
+            std::future::ready(Err("RPC unavailable".to_string()))
+        }))
+        .unwrap();
+    assert_eq!(operation.attempts[0].tx_status, attempt.tx_status);
+    runtime
+        .block_on(reconcile_operation_with(&mut operation, |_, _| {
+            std::future::ready(Ok(None))
+        }))
+        .unwrap();
+    assert!(operation.attempts[0].tx_status.is_none());
+    assert_eq!(
+        operation.attempts[0].status,
+        TransactionStatus::SubmissionUnknown
+    );
+    assert_eq!(operation.attempts[0].tx_hash, attempt.tx_hash);
+    assert_eq!(operation.attempts[0].raw_tx, attempt.raw_tx);
+    assert_eq!(operation.step, OperationStep::Approval);
+    assert!(cancel_operation(&mut operation).is_err());
+}
+
+#[test]
+fn nonfinal_failed_burns_cannot_be_cancelled_and_are_rechecked() {
+    let mut operation = sample_operation();
+    let mut attempt = sample_attempt(TransactionStep::Burn, TransactionStatus::Failed);
+    attempt.tx_status = Some(TxStatus::new(Execution::Failed, Finality::Included));
+    operation.attempts.push(attempt);
+    assert!(cancel_operation(&mut operation).is_err());
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
+    runtime
+        .block_on(reconcile_operation_with(&mut operation, |_, _| {
+            std::future::ready(Ok(Some(TxStatus::new(
+                Execution::Failed,
+                Finality::Finalized,
+            ))))
+        }))
+        .unwrap();
+    assert_eq!(
+        operation.attempts[0].tx_status.as_ref().unwrap().finality,
+        Finality::Finalized
+    );
+    cancel_operation(&mut operation).unwrap();
+}
+
+#[test]
 fn operation_activity_uses_current_attempt_and_matching_network() {
     let mut operation = sample_operation();
     operation.step = OperationStep::Mint;
@@ -218,7 +378,10 @@ fn reconciliation_checks_signed_hashes_after_a_broadcast_crash() {
                         "ethereum"
                     }
                 );
-                std::future::ready(Ok(Some("confirmed".to_string())))
+                std::future::ready(Ok(Some(TxStatus::new(
+                    Execution::Succeeded,
+                    Finality::Finalized,
+                ))))
             }))
             .unwrap();
         assert_eq!(calls, 1);

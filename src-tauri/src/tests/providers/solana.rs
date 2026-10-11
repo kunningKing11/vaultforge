@@ -3,6 +3,7 @@ use super::{
     parse_solana_mint_decimals, parse_solana_rent_exemption, parse_solana_simulation,
     parse_solana_token_account_state, parse_solana_token_accounts, parse_solana_tx_status,
 };
+use crate::tx::tx_status::{Execution, Finality, legacy_tx_status};
 
 #[test]
 fn parses_classic_solana_mint_and_simulation_preflight() {
@@ -93,6 +94,48 @@ fn parses_solana_balance_lamports() {
 }
 
 #[test]
+fn parses_solana_commitment_without_using_slots_as_heights() {
+    for commitment in ["processed", "confirmed", "finalized"] {
+        let json = serde_json::json!({"result":{"value":[{"slot":42,"err":null,"confirmationStatus":commitment,"confirmations":if commitment=="finalized" {serde_json::Value::Null} else {serde_json::json!(0)}}]}});
+        let observation = super::parse_solana_tx_observation(&json).unwrap().unwrap();
+        assert_eq!(observation.execution, Execution::Succeeded);
+        assert_eq!(
+            observation.finality,
+            if commitment == "finalized" {
+                Finality::Finalized
+            } else {
+                Finality::Included
+            }
+        );
+        assert_eq!(observation.slot, Some(42));
+        assert_eq!(observation.block_height, None);
+        assert_eq!(observation.block_hash, None);
+        assert_eq!(
+            observation.confirmations,
+            if commitment == "finalized" {
+                None
+            } else {
+                Some(0)
+            }
+        );
+        assert_eq!(
+            legacy_tx_status(Some(observation)).as_deref(),
+            Some("confirmed")
+        );
+    }
+    let failure = serde_json::json!({"result":{"value":[{"slot":42,"err":{"InstructionError":[0,"Custom"]},"confirmationStatus":"finalized"}]}});
+    let observation = super::parse_solana_tx_observation(&failure)
+        .unwrap()
+        .unwrap();
+    assert_eq!(observation.execution, Execution::Failed);
+    assert_eq!(observation.finality, Finality::Finalized);
+    assert_eq!(
+        legacy_tx_status(Some(observation)).as_deref(),
+        Some("failed")
+    );
+}
+
+#[test]
 fn parses_solana_rent_exemption() {
     let json = serde_json::json!({
         "jsonrpc": "2.0",
@@ -113,7 +156,7 @@ fn parses_solana_status_and_fee() {
 
     let confirmed = serde_json::json!({
         "jsonrpc": "2.0",
-        "result": { "value": [{ "err": null, "confirmationStatus": "finalized" }] },
+        "result": { "value": [{ "slot": 42, "err": null, "confirmationStatus": "finalized" }] },
         "id": 1
     });
     assert_eq!(
@@ -123,7 +166,7 @@ fn parses_solana_status_and_fee() {
 
     let failed = serde_json::json!({
         "jsonrpc": "2.0",
-        "result": { "value": [{ "err": { "InstructionError": [0, "Custom"] } }] },
+        "result": { "value": [{ "slot": 42, "confirmationStatus": "confirmed", "err": { "InstructionError": [0, "Custom"] } }] },
         "id": 1
     });
     assert_eq!(
@@ -192,7 +235,6 @@ fn parses_solana_token_account_state() {
         .is_err()
     );
 }
-
 #[test]
 fn parses_solana_token_accounts() {
     let owner = "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ";
@@ -234,4 +276,26 @@ fn parses_solana_token_accounts() {
     );
     assert_eq!(accounts[0].amount, 1_234_500);
     assert_eq!(accounts[0].decimals, 6);
+}
+
+#[test]
+fn rejects_malformed_solana_observation_fields_and_rpc_errors() {
+    let valid = serde_json::json!({"result":{"value":[{"slot":42,"err":null,"confirmationStatus":"confirmed","confirmations":1}]}});
+    for (field, value) in [
+        ("slot", serde_json::json!(-1)),
+        ("slot", serde_json::Value::Null),
+        ("err", serde_json::json!(false)),
+        ("confirmationStatus", serde_json::json!("unknown")),
+        ("confirmations", serde_json::json!("3")),
+    ] {
+        let mut json = valid.clone();
+        json["result"]["value"][0][field] = value;
+        assert!(super::parse_solana_tx_observation(&json).is_err());
+    }
+    for json in [
+        serde_json::json!({"error":{"code":-32000,"message":"RPC unavailable"}}),
+        serde_json::json!({"result":{"value":[]}}),
+    ] {
+        assert!(super::parse_solana_tx_observation(&json).is_err());
+    }
 }

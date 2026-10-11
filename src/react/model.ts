@@ -9,6 +9,7 @@ import type {
   QrResilience,
   SendDraft,
   SignedTransaction,
+  TxStatus,
   View,
   WalletSession,
 } from "../types";
@@ -28,7 +29,72 @@ export function findAsset(assets: readonly Asset[], identity: AssetIdentity): As
 }
 
 export function isPendingTransactionActivity(item: Activity): boolean {
-  return item.kind !== "cctp" && item.status === "pending" && Boolean(item.hash && item.network);
+  return (
+    item.kind === "send" &&
+    Boolean(item.hash && item.network) &&
+    (item.tx_status
+      ? item.tx_status.finality !== "finalized"
+      : ["pending", "confirmed", "failed", "included"].includes(item.status))
+  );
+}
+
+export function transactionStatusLabel(status: TxStatus): string {
+  if (status.execution === "failed")
+    return status.finality === "included" ? "failed (included)" : "failed";
+  return status.finality === "finalized" ? "finalized" : "included";
+}
+
+function sameObservation(
+  left: TxStatus | null | undefined,
+  right: TxStatus | null | undefined,
+): boolean {
+  if (!left || !right) return !left && !right;
+  return (
+    left.execution === right.execution &&
+    left.finality === right.finality &&
+    left.block_height === right.block_height &&
+    left.block_hash === right.block_hash &&
+    left.confirmations === right.confirmations &&
+    (left.slot ?? null) === (right.slot ?? null)
+  );
+}
+
+export function applyTransactionObservations(
+  activities: readonly Activity[],
+  requests: readonly Activity[],
+  observations: ReadonlyMap<string, TxStatus>,
+  missingReceipts: ReadonlySet<string>,
+): Activity[] {
+  const requested = new Map(requests.map((item) => [item.id, item]));
+  return activities.map((item) => {
+    const request = requested.get(item.id);
+    if (
+      !request ||
+      !isPendingTransactionActivity(item) ||
+      request.hash !== item.hash ||
+      request.network !== item.network ||
+      !sameObservation(request.tx_status, item.tx_status)
+    )
+      return item;
+    const observation = observations.get(item.id);
+    if (observation)
+      return { ...item, tx_status: observation, status: transactionStatusLabel(observation) };
+    if (missingReceipts.has(item.id)) return { ...item, tx_status: null, status: "pending" };
+    return item;
+  });
+}
+
+export function transactionInclusionChanged(
+  previous: TxStatus | null | undefined,
+  next: TxStatus,
+): boolean {
+  return (
+    !previous ||
+    previous.execution !== next.execution ||
+    previous.block_hash !== next.block_hash ||
+    previous.block_height !== next.block_height ||
+    (previous.slot ?? null) !== (next.slot ?? null)
+  );
 }
 
 export type WalletState =
@@ -209,7 +275,11 @@ export function walletStateFromSession(session: WalletSession): WalletState {
     fiatCurrency: session.fiat_currency ?? "USD",
     usdExchangeRate: session.usd_exchange_rate ?? 1,
     assets: session.assets,
-    activity: session.activity,
+    activity: session.activity.map((item) =>
+      item.kind === "send" && item.tx_status
+        ? { ...item, status: transactionStatusLabel(item.tx_status) }
+        : item,
+    ),
     enabledNetworks: session.enabled_networks.flatMap((id) => {
       const network = networkById(id);
       return network ? [network.id] : [];
@@ -220,29 +290,7 @@ export function walletStateFromSession(session: WalletSession): WalletState {
 }
 
 export function applyWalletSession(state: AppState, session: WalletSession): AppState {
-  let wallet = walletStateFromSession(session);
-  if (wallet.status === "unlocked" && state.wallet.status === "unlocked") {
-    const settled = new Map(
-      state.wallet.activity
-        .filter(
-          (item) =>
-            item.kind !== "cctp" && (item.status === "confirmed" || item.status === "failed"),
-        )
-        .map((item) => [item.id, item]),
-    );
-    wallet = {
-      ...wallet,
-      activity: wallet.activity.map((item) => {
-        const previous = settled.get(item.id);
-        return item.kind !== "cctp" &&
-          item.status === "pending" &&
-          previous?.hash === item.hash &&
-          previous.network === item.network
-          ? { ...item, status: previous.status }
-          : item;
-      }),
-    };
-  }
+  const wallet = walletStateFromSession(session);
   const resetWalletUi = wallet.status !== "unlocked";
   const receiveNetworkId = receiveNetworkIdForWallet(state.receive.networkId, wallet);
 

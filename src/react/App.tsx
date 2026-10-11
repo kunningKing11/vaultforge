@@ -71,6 +71,7 @@ import type {
   SendDraft,
   SessionCommand,
   SignedTransaction,
+  TxStatus,
   View,
   WalletRefreshResult,
   WalletSession,
@@ -81,6 +82,7 @@ import { walletPasswordStrength } from "../walletPassword";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./disclaimer";
 import {
   addressForNetwork,
+  applyTransactionObservations,
   applyWalletSession,
   type AppState,
   assetKey,
@@ -98,6 +100,7 @@ import {
   sortAssetsByValue,
   sortAssetsForSelection,
   sortNetworksForSelection,
+  transactionInclusionChanged,
   type WalletState,
 } from "./model";
 import { PasswordInput } from "./PasswordInput";
@@ -995,17 +998,25 @@ function usePendingTransactionPolling(
                 }),
               ] as const;
             } catch {
-              return [item.id, null] as const;
+              return null;
             }
           }),
         );
-        const statuses = new Map(
-          changes.filter((entry): entry is [string, string] => entry[1] !== null),
+        const successful = changes.filter(
+          (entry): entry is readonly [string, TxStatus | null] => entry !== null,
         );
-        if (statuses.size === 0) return;
+        const observations = new Map<string, TxStatus>(
+          successful.filter((entry): entry is readonly [string, TxStatus] => entry[1] !== null),
+        );
+        const missingReceipts = new Set(
+          successful.filter((entry) => entry[1] === null).map((entry) => entry[0]),
+        );
+        if (successful.length === 0) return;
         const settled = pending.some((item) => {
-          const status = statuses.get(item.id);
-          return status && status !== "pending";
+          const observation = observations.get(item.id);
+          return observation
+            ? transactionInclusionChanged(item.tx_status, observation)
+            : missingReceipts.has(item.id) && !!item.tx_status;
         });
         setState((current) => {
           if (current.wallet.status !== "unlocked") return current;
@@ -1013,10 +1024,12 @@ function usePendingTransactionPolling(
             ...current,
             wallet: {
               ...current.wallet,
-              activity: current.wallet.activity.map((item) => ({
-                ...item,
-                status: item.kind === "cctp" ? item.status : (statuses.get(item.id) ?? item.status),
-              })),
+              activity: applyTransactionObservations(
+                current.wallet.activity,
+                pending,
+                observations,
+                missingReceipts,
+              ),
             },
           };
         });

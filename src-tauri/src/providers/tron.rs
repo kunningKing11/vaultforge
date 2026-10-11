@@ -1,8 +1,10 @@
 use crate::assets::cached_asset;
 use crate::dto::Asset;
 use crate::providers::NetworkAssetRefresh;
-use crate::providers::http::rpc_post;
+use crate::providers::http::optional_tx_hash;
+use crate::providers::http::{optional_tx_height, rpc_post};
 use crate::registry::{NetworkConfig, network_by_id};
+use crate::tx::tx_status::{Execution, Finality, TxStatus, legacy_tx_status};
 
 pub(crate) const TRON_NATIVE_FEE_SUN: u64 = 1_000_000;
 
@@ -130,6 +132,15 @@ pub(crate) async fn fetch_tron_tx_status(
     client: &reqwest::Client,
     txid: &str,
 ) -> Result<Option<String>, String> {
+    Ok(legacy_tx_status(
+        fetch_tron_tx_observation(client, txid).await?,
+    ))
+}
+
+pub(crate) async fn fetch_tron_tx_observation(
+    client: &reqwest::Client,
+    txid: &str,
+) -> Result<Option<TxStatus>, String> {
     let json = rpc_post(
         client,
         &format!("{}/wallet/gettransactioninfobyid", tron_rpc_url()?),
@@ -137,13 +148,109 @@ pub(crate) async fn fetch_tron_tx_status(
     )
     .await?;
 
-    if json.as_object().is_some_and(|obj| obj.is_empty()) {
+    let Some(observation) = parse_tron_tx_observation(&json)? else {
+        return Ok(None);
+    };
+    let solid = rpc_post(
+        client,
+        &format!("{}/walletsolidity/gettransactioninfobyid", tron_rpc_url()?),
+        &serde_json::json!({"value":txid}),
+    )
+    .await?;
+    finalize_tron_observation(observation, &solid, txid)
+}
+
+pub(crate) fn finalize_tron_observation(
+    observation: TxStatus,
+    solid: &serde_json::Value,
+    txid: &str,
+) -> Result<Option<TxStatus>, String> {
+    let Some(mut final_observation) = parse_tron_tx_observation(solid)? else {
+        return Ok(Some(observation));
+    };
+    let id = solid["id"]
+        .as_str()
+        .ok_or_else(|| "Missing Tron solidified transaction ID".to_string())?;
+    if !id.eq_ignore_ascii_case(txid) {
+        return Err("Tron solidified receipt is for another transaction".to_string());
+    }
+    if final_observation.block_height.is_none() {
+        return Err("Missing Tron solidified block height".to_string());
+    }
+    // The solidified receipt supersedes full-node evidence that may be from an older fork.
+    final_observation.finality = Finality::Finalized;
+    Ok(Some(final_observation))
+}
+
+pub(crate) fn parse_tron_tx_observation(
+    json: &serde_json::Value,
+) -> Result<Option<TxStatus>, String> {
+    let object = json
+        .as_object()
+        .ok_or_else(|| "Invalid Tron transaction info".to_string())?;
+    if object.is_empty() {
         return Ok(None);
     }
-
-    match json["receipt"]["result"].as_str() {
-        Some("SUCCESS") => Ok(Some("confirmed".to_string())),
-        Some(_) => Ok(Some("failed".to_string())),
-        None => Ok(None),
+    if let Some(error) = object.get("Error") {
+        return Err(format!("Tron transaction lookup error: {error}"));
     }
+    let transaction_result = match json.get("result") {
+        Some(serde_json::Value::String(result)) if result == "SUCESS" => Some(Execution::Succeeded),
+        Some(serde_json::Value::String(result)) if result == "FAILED" => Some(Execution::Failed),
+        None => None,
+        _ => return Err("Invalid Tron transaction result".to_string()),
+    };
+    let receipt_result = match json["receipt"].get("result") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(value) => Some(
+            value
+                .as_str()
+                .ok_or_else(|| "Invalid Tron receipt result".to_string())?,
+        ),
+    };
+    let execution = if transaction_result == Some(Execution::Failed) {
+        Execution::Failed
+    } else {
+        match receipt_result {
+            Some("SUCCESS") => Execution::Succeeded,
+            Some(
+                "REVERT"
+                | "BAD_JUMP_DESTINATION"
+                | "OUT_OF_MEMORY"
+                | "PRECOMPILED_CONTRACT"
+                | "STACK_TOO_SMALL"
+                | "STACK_TOO_LARGE"
+                | "ILLEGAL_OPERATION"
+                | "STACK_OVERFLOW"
+                | "OUT_OF_ENERGY"
+                | "OUT_OF_TIME"
+                | "JVM_STACK_OVER_FLOW"
+                | "UNKNOWN"
+                | "TRANSFER_FAILED"
+                | "INVALID_CODE",
+            ) => Execution::Failed,
+            Some("DEFAULT") | None => match transaction_result {
+                Some(result) => result,
+                None => {
+                    // TransactionInfo's success code is protobuf's omitted zero default.
+                    // Only accept that default for a complete, identified included receipt.
+                    if optional_tx_hash(json, "id", "")?.is_some()
+                        && optional_tx_height(json, "blockNumber")?.is_some()
+                        && optional_tx_height(json, "blockTimeStamp")?.is_some()
+                    {
+                        Execution::Succeeded
+                    } else {
+                        return Ok(None);
+                    }
+                }
+            },
+            _ => return Err("Invalid Tron receipt result".to_string()),
+        }
+    };
+    let mut observation = TxStatus::new(execution, Finality::Included);
+    observation.block_height = optional_tx_height(json, "blockNumber")?;
+    Ok(Some(observation))
 }
+#[cfg(test)]
+#[path = "../tests/providers/tron.rs"]
+mod tests;

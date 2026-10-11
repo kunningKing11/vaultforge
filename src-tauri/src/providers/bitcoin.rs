@@ -1,15 +1,20 @@
 use crate::derivation::{
     BITCOIN_BIP84_GAP_LIMIT, BitcoinAccount, BitcoinBranch, BitcoinDerivedAddress, BitcoinKeyOrigin,
 };
-use crate::providers::http::{http_get_json, http_get_json_with_client, http_post_text};
+use crate::providers::http::{
+    http_get_json, http_get_json_with_client, http_post_text, optional_tx_hash, optional_tx_height,
+};
 use crate::registry::network_by_id;
 use crate::tx::bitcoin::{BitcoinSignedTransfer, bitcoin_signed_transfer};
+use crate::tx::tx_status::{Execution, Finality, TxStatus, legacy_tx_status};
 use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio::task::JoinSet;
 
 const BITCOIN_SCAN_BATCH_SIZE: u32 = 2;
+// Application settlement policy; Bitcoin does not provide irreversible finality.
+const BITCOIN_SETTLEMENT_CONFIRMATIONS: u64 = 6;
 const BITCOIN_SCAN_MAX_INDEX: u32 = 1_000;
 const BITCOIN_UTXO_CONCURRENCY: usize = 4;
 
@@ -396,13 +401,74 @@ pub(crate) async fn fetch_bitcoin_tx_status(
     client: &reqwest::Client,
     txid: &str,
 ) -> Result<Option<String>, String> {
+    Ok(legacy_tx_status(
+        fetch_bitcoin_tx_observation(client, txid).await?,
+    ))
+}
+
+pub(crate) async fn fetch_bitcoin_tx_observation(
+    client: &reqwest::Client,
+    txid: &str,
+) -> Result<Option<TxStatus>, String> {
     let url = format!("{}/tx/{txid}/status", bitcoin_api_url()?);
     let json = http_get_json(client, &url).await?;
-    if json["confirmed"].as_bool().unwrap_or(false) {
-        Ok(Some("confirmed".to_string()))
-    } else {
-        Ok(None)
+    let Some(observation) = parse_bitcoin_tx_observation(&json)? else {
+        return Ok(None);
+    };
+    let Some(hash) = observation.block_hash.as_deref() else {
+        return Ok(Some(observation));
+    };
+    let tip = http_get_json(client, &format!("{}/blocks/tip/height", bitcoin_api_url()?)).await?;
+    let block_status = http_get_json(
+        client,
+        &format!("{}/block/{hash}/status", bitcoin_api_url()?),
+    )
+    .await?;
+    finalize_bitcoin_observation(observation, &block_status, &tip)
+}
+
+pub(crate) fn finalize_bitcoin_observation(
+    mut observation: TxStatus,
+    block_status: &serde_json::Value,
+    tip: &serde_json::Value,
+) -> Result<Option<TxStatus>, String> {
+    match block_status["in_best_chain"].as_bool() {
+        Some(false) => return Ok(None),
+        Some(true) => {}
+        None => return Err("Invalid Bitcoin canonical block status".to_string()),
     }
+    let height = observation
+        .block_height
+        .ok_or_else(|| "Missing Bitcoin receipt height".to_string())?;
+    if block_status["height"].as_u64() != Some(height) {
+        return Err("Bitcoin canonical block height does not match receipt".to_string());
+    }
+    let tip = tip
+        .as_u64()
+        .ok_or_else(|| "Invalid Bitcoin tip height".to_string())?;
+    let confirmations = tip
+        .checked_sub(height)
+        .and_then(|depth| depth.checked_add(1))
+        .ok_or_else(|| "Bitcoin tip precedes receipt height".to_string())?;
+    observation.confirmations = Some(confirmations);
+    if confirmations >= BITCOIN_SETTLEMENT_CONFIRMATIONS {
+        observation.finality = Finality::Finalized;
+    }
+    Ok(Some(observation))
+}
+
+pub(crate) fn parse_bitcoin_tx_observation(
+    json: &serde_json::Value,
+) -> Result<Option<TxStatus>, String> {
+    match json["confirmed"].as_bool() {
+        Some(false) => return Ok(None),
+        Some(true) => {}
+        None => return Err("Bitcoin transaction status is missing confirmed flag".to_string()),
+    }
+    let mut observation = TxStatus::new(Execution::Succeeded, Finality::Included);
+    observation.block_height = optional_tx_height(json, "block_height")?;
+    observation.block_hash = optional_tx_hash(json, "block_hash", "")?;
+    Ok(Some(observation))
 }
 
 /// Refreshes UTXOs, selects coins, and signs a Bitcoin transfer.
