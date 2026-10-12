@@ -4,7 +4,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::activity::{random_hex, short_address};
-use crate::cctp::CctpTransfer;
+use crate::cctp::{CctpDeploymentIdentity, CctpTransfer};
 use crate::dto::{Activity, AssetIdentity};
 use crate::providers::http::ProviderClients;
 use crate::providers::tx_observation_provider;
@@ -26,6 +26,8 @@ pub(crate) struct Operation {
     pub(crate) attempts: Vec<TransactionAttempt>,
     #[serde(default)]
     pub(crate) cctp: Option<CctpData>,
+    #[serde(default)]
+    pub(crate) deployment: Option<CctpDeploymentIdentity>,
     pub(crate) created_at: String,
     pub(crate) updated_at: String,
     #[serde(default)]
@@ -51,6 +53,24 @@ pub(crate) struct TransactionAttempt {
     pub(crate) updated_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) tx_status: Option<TxStatus>,
+    #[serde(default)]
+    pub(crate) evm_context: Option<EvmAttemptContext>,
+}
+
+/// Exact unsigned EVM context corresponding to the encrypted signed bytes.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct EvmAttemptContext {
+    pub(crate) chain_id: u64,
+    pub(crate) from: String,
+    pub(crate) to: String,
+    pub(crate) value: String,
+    pub(crate) data: String,
+    pub(crate) nonce: u64,
+    pub(crate) gas_limit: u64,
+    pub(crate) max_fee_per_gas: String,
+    pub(crate) max_priority_fee_per_gas: String,
+    pub(crate) provisional_burn_fee: Option<String>,
+    pub(crate) provisional_destination_fee: String,
 }
 
 /// CCTP recovery payload, separate from transaction attempts and workflow progress.
@@ -128,11 +148,33 @@ pub(crate) fn create_operation(
         required_source_finality: transfer.route.required_source_finality(),
         attempts: Vec::new(),
         cctp: None,
+        deployment: Some(transfer.route.identity()?),
         created_at: now.clone(),
         updated_at: now,
         last_error: None,
     };
     Ok(operation)
+}
+
+impl Operation {
+    /// Legacy records remain readable/reconcilable, but cannot authorize execution.
+    pub(crate) fn cctp_transfer(&self) -> Result<CctpTransfer, String> {
+        let transfer = CctpTransfer::new(
+            &self.source_asset,
+            &self.destination_asset,
+            &self.sender,
+            &self.recipient,
+            self.amount_base_units
+                .parse()
+                .map_err(|_| "Invalid CCTP operation amount")?,
+        )?;
+        if self.deployment.as_ref() != Some(&transfer.route.identity()?)
+            || self.required_source_finality != Finality::Finalized
+        {
+            return Err("CCTP operation deployment is missing or changed".into());
+        }
+        Ok(transfer)
+    }
 }
 
 /// Checks forward-transition evidence before updating progress; errors leave the record unchanged.
@@ -353,13 +395,32 @@ pub(crate) async fn reconcile_operation(
     operation: &mut Operation,
     clients: &ProviderClients,
 ) -> Result<(), String> {
-    reconcile_operation_with(operation, |network, hash| async move {
-        crate::providers::fetch_tx_observation(clients.http(), &network, &hash).await
+    let route = operation
+        .deployment
+        .as_ref()
+        .map(|_| operation.cctp_transfer())
+        .transpose()?;
+    reconcile_operation_with(operation, |network, hash| {
+        let config = route.as_ref().map(|transfer| {
+            if network == transfer.route.source.network.id {
+                transfer.route.source.network.clone()
+            } else {
+                transfer.route.destination.network.clone()
+            }
+        });
+        async move {
+            if let Some(config) = config {
+                crate::providers::evm::fetch_evm_tx_observation(clients.http(), &config, &hash)
+                    .await
+            } else {
+                crate::providers::fetch_tx_observation(clients.http(), &network, &hash).await
+            }
+        }
     })
     .await
 }
 
-async fn reconcile_operation_with<F, Fut>(
+pub(crate) async fn reconcile_operation_with<F, Fut>(
     operation: &mut Operation,
     mut lookup: F,
 ) -> Result<(), String>
@@ -401,7 +462,12 @@ where
             }
             TransactionStep::Mint => operation.destination_asset.network.clone(),
         };
-        if let Err(message) = tx_observation_provider(&network) {
+        let provider = if operation.deployment.is_some() {
+            operation.cctp_transfer().map(|_| ())
+        } else {
+            tx_observation_provider(&network).map(|_| ())
+        };
+        if let Err(message) = provider {
             operation.attempts[index].error = Some(message.clone());
             operation.attempts[index].updated_at = Utc::now().to_rfc3339();
             operation.last_error = Some(message);

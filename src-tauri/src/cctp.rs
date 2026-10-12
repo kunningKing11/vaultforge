@@ -1,5 +1,7 @@
 //! Fixed CCTP V2 Standard Transfer deployment. No signing or execution commands.
 
+use serde::{Deserialize, Serialize};
+
 use crate::address::evm::validate_address;
 use crate::dto::AssetIdentity;
 use crate::registry::{NetworkConfig, TransactionStatusProvider, configured_asset, network_by_id};
@@ -13,7 +15,8 @@ pub(crate) const MAX_BURN_AMOUNT: u128 = 10_000_000 * 1_000_000;
 pub(crate) const BURN_GAS_BUDGET: u64 = 200_000;
 pub(crate) const MINT_GAS_BUDGET: u64 = 300_000;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum CctpEnvironment {
     Mainnet,
     Sepolia,
@@ -35,6 +38,24 @@ pub(crate) struct CctpRoute {
     pub(crate) source: CctpDeployment,
     pub(crate) destination: CctpDeployment,
     pub(crate) attestation_host: &'static str,
+}
+
+/// Encrypted deployment binding retained across restarts and configuration changes.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct CctpDeploymentIdentity {
+    pub(crate) environment: CctpEnvironment,
+    pub(crate) protocol_version: u32,
+    pub(crate) source_chain_id: u64,
+    pub(crate) destination_chain_id: u64,
+    pub(crate) source_domain: u32,
+    pub(crate) destination_domain: u32,
+    pub(crate) source_usdc: String,
+    pub(crate) destination_usdc: String,
+    pub(crate) token_messenger: String,
+    pub(crate) destination_token_messenger: String,
+    pub(crate) source_message_transmitter: String,
+    pub(crate) destination_message_transmitter: String,
+    pub(crate) attestation_host: String,
 }
 
 struct RouteSpec {
@@ -195,6 +216,28 @@ impl CctpRoute {
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn identity(&self) -> Result<CctpDeploymentIdentity, String> {
+        self.validate()?;
+        Ok(CctpDeploymentIdentity {
+            environment: self.environment,
+            protocol_version: self.protocol_version,
+            source_chain_id: self.source.network.chain_id()?,
+            destination_chain_id: self.destination.network.chain_id()?,
+            source_domain: self.source.domain,
+            destination_domain: self.destination.domain,
+            source_usdc: self.source.usdc.to_ascii_lowercase(),
+            destination_usdc: self.destination.usdc.to_ascii_lowercase(),
+            token_messenger: self.source.token_messenger.to_ascii_lowercase(),
+            destination_token_messenger: self.destination.token_messenger.to_ascii_lowercase(),
+            source_message_transmitter: self.source.message_transmitter.to_ascii_lowercase(),
+            destination_message_transmitter: self
+                .destination
+                .message_transmitter
+                .to_ascii_lowercase(),
+            attestation_host: self.attestation_host.into(),
+        })
     }
 
     pub(crate) fn required_source_finality(&self) -> Finality {

@@ -28,6 +28,7 @@ pub(crate) fn sample_attempt(
         status,
         tx_hash: format!("0x{}", "ab".repeat(32)),
         raw_tx: Some("0xdeadbeef".to_string()),
+        evm_context: None,
         signature: Some("test signature".to_string()),
         fee: Some("100".to_string()),
         nonce_or_sequence: Some("7".to_string()),

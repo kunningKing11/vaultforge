@@ -285,6 +285,13 @@ pub(crate) async fn sign_transaction(
             let signing_key = signing_key_from_mnemonic(&mnemonic, &bip39_passphrase)?;
             let nonce = {
                 let mut app_state = state.lock().map_err(|_| "State lock failed")?;
+                let operations = &app_state
+                    .wallet
+                    .as_ref()
+                    .ok_or("Wallet closed during signing")?
+                    .operations
+                    .clone();
+                app_state.evm_nonces.restore_operations(operations)?;
                 app_state
                     .evm_nonces
                     .reserve(chain_id, &address, rpc_pending_nonce)?

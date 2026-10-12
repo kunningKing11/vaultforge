@@ -3,7 +3,11 @@ use argon2::Argon2;
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 use zeroize::Zeroize;
 
 use crate::dto::{FiatCurrency, Wallet, WalletPayload};
@@ -91,14 +95,52 @@ pub(crate) fn persist_state_wallet(state: &mut AppState) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|_| "Failed to create wallet storage directory")?;
     }
     let contents = serde_json::to_string_pretty(&stored).map_err(|_| "Failed to encode wallet")?;
-    fs::write(&state.storage_path, contents).map_err(|_| "Failed to save wallet")?;
+    write_wallet_atomically(&state.storage_path, contents.as_bytes())?;
     state.stored_wallet = Some(StoredWalletMetadata {
         wallet_name: stored.wallet_name,
     });
     Ok(())
 }
 
-/// Encrypts a wallet with a fresh nonce; operation-aware wallets use version 8.
+/// A signed attempt must be durably saved before its first network submission.
+fn write_wallet_atomically(path: &Path, contents: &[u8]) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let temporary = parent.join(format!(
+        ".vaultforge-{}.tmp",
+        crate::activity::random_hex(16)
+    ));
+    let result = (|| {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options
+            .open(&temporary)
+            .map_err(|_| "Failed to save wallet")?;
+        file.write_all(contents)
+            .map_err(|_| "Failed to save wallet")?;
+        file.sync_all().map_err(|_| "Failed to save wallet")?;
+        drop(file);
+        fs::rename(&temporary, path).map_err(|_| "Failed to save wallet")?;
+        #[cfg(unix)]
+        fs::File::open(parent)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|_| "Failed to save wallet")?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(temporary);
+    }
+    result
+}
+
+/// Encrypts a wallet with a fresh nonce; operation-aware wallets use version 9.
 pub(crate) fn encrypt_wallet(
     wallet: &Wallet,
     key: &[u8; 32],
@@ -133,7 +175,7 @@ pub(crate) fn encrypt_wallet(
     let ciphertext = ciphertext.map_err(|_| "Failed to encrypt wallet")?;
 
     Ok(StoredWalletFile {
-        version: 8,
+        version: 9,
         wallet_name: wallet.name.clone(),
         network: "ethereum".to_string(),
         salt: BASE64.encode(salt),
@@ -142,12 +184,12 @@ pub(crate) fn encrypt_wallet(
     })
 }
 
-/// Decrypts stored versions 2–8, filling preferences absent from older payloads.
+/// Decrypts stored versions 2–9, filling preferences absent from older payloads.
 pub(crate) fn decrypt_wallet(
     stored: &StoredWalletFile,
     wallet_password: &str,
 ) -> Result<DecryptedWallet, String> {
-    if !matches!(stored.version, 2..=8) {
+    if !matches!(stored.version, 2..=9) {
         return Err("Unsupported wallet version".to_string());
     }
     let salt = BASE64

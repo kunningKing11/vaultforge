@@ -5,6 +5,7 @@ mod activity;
 mod address;
 mod assets;
 mod cctp;
+mod cctp_execution;
 mod commands;
 mod derivation;
 mod dto;

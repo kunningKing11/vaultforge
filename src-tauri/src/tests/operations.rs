@@ -432,6 +432,7 @@ fn reconciliation_keeps_signed_attempts_when_receipt_is_absent_or_lookup_fails()
 #[test]
 fn reconciliation_preserves_uncertainty_when_network_is_unavailable() {
     let mut operation = sample_operation();
+    operation.deployment = None; // legacy unsupported records retain read-only diagnostics
     operation.source_asset.network = "unsupported".to_string();
     operation.attempts.push(sample_attempt(
         TransactionStep::Burn,

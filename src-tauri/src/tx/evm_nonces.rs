@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Default)]
 pub(crate) struct EvmNonceManager {
     accounts: HashMap<(u64, String), AccountNonces>,
+    durable: HashSet<(u64, String, u64)>,
 }
 
 #[derive(Default)]
@@ -19,6 +20,67 @@ enum ReservationStatus {
 }
 
 impl EvmNonceManager {
+    /// Rebuild only durable operation protection, preserving ordinary-send queues.
+    pub(crate) fn restore_operations(
+        &mut self,
+        operations: &[crate::operations::Operation],
+    ) -> Result<(), String> {
+        let mut durable = HashSet::new();
+        for operation in operations {
+            for attempt in &operation.attempts {
+                if attempt.raw_tx.is_none()
+                    || attempt.status == crate::operations::TransactionStatus::Built
+                {
+                    continue;
+                }
+                let unresolved = !attempt.tx_status.as_ref().is_some_and(|status| {
+                    status.finality == crate::tx::tx_status::Finality::Finalized
+                });
+                if !unresolved {
+                    continue;
+                }
+                if let Some(context) = &attempt.evm_context {
+                    let transfer = operation.cctp_transfer()?;
+                    let expected_chain = if attempt.step == crate::operations::TransactionStep::Mint
+                    {
+                        transfer.route.destination.network.chain_id()?
+                    } else {
+                        transfer.route.source.network.chain_id()?
+                    };
+                    if context.chain_id != expected_chain
+                        || !context.from.eq_ignore_ascii_case(&operation.sender)
+                    {
+                        return Err("Persisted EVM nonce context does not match operation".into());
+                    }
+                    durable.insert((
+                        context.chain_id,
+                        context.from.to_ascii_lowercase(),
+                        context.nonce,
+                    ));
+                } else if let Some(nonce) = &attempt.nonce_or_sequence {
+                    // Legacy signed attempts still protect their known EVM account.
+                    let network = if attempt.step == crate::operations::TransactionStep::Mint {
+                        &operation.destination_asset.network
+                    } else {
+                        &operation.source_asset.network
+                    };
+                    if let Some(config) = crate::registry::network_by_id(network)
+                        .filter(|network| network.kind == "evm")
+                    {
+                        let nonce = nonce.parse().map_err(|_| "Invalid persisted EVM nonce")?;
+                        durable.insert((
+                            config.chain_id()?,
+                            operation.sender.to_ascii_lowercase(),
+                            nonce,
+                        ));
+                    }
+                }
+            }
+        }
+        self.durable = durable;
+        Ok(())
+    }
+
     pub(crate) fn cancel_all_unbroadcast(&mut self) {
         let mut reservations: Vec<_> = self
             .accounts
@@ -51,6 +113,13 @@ impl EvmNonceManager {
         rpc_pending_nonce: u64,
     ) -> Result<u64, String> {
         let normalized_address = address.to_ascii_lowercase();
+        if self
+            .durable
+            .iter()
+            .any(|(chain, owner, _)| *chain == chain_id && owner == &normalized_address)
+        {
+            return Err("An unresolved operation protects this EVM account nonce".into());
+        }
         let account = self
             .accounts
             .entry((chain_id, normalized_address))

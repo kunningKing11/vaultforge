@@ -351,6 +351,7 @@ pub(crate) async fn unlock_wallet(
             .ok_or_else(|| "Wallet was closed during unlock".to_string())?
             .operations
             .clone();
+        state.evm_nonces.restore_operations(&operations)?;
         (state.wallet_generation, operations)
     };
     let mut operations = original_operations.clone();
@@ -388,6 +389,12 @@ fn finish_operation_recovery(
             wallet.operations = operations;
             persist_state_wallet(state)?;
         }
+        let operations = &state
+            .wallet
+            .as_ref()
+            .ok_or("Wallet closed during recovery")?
+            .operations;
+        state.evm_nonces.restore_operations(operations)?;
         Ok(())
     })();
     if result.is_err() && state.wallet_generation == generation {
@@ -405,7 +412,7 @@ pub(crate) fn lock_wallet(state: State<'_, Mutex<AppState>>) -> Result<(), Strin
 }
 
 fn lock_wallet_state(state: &mut AppState) {
-    state.evm_nonces.cancel_all_unbroadcast();
+    state.evm_nonces = Default::default();
     if let Some(ref mut wallet) = state.wallet {
         clear_secret_string(&mut wallet.mnemonic);
         clear_secret_string(&mut wallet.bip39_passphrase);
@@ -430,7 +437,7 @@ pub(crate) fn clear_wallet(state: State<'_, Mutex<AppState>>) -> Result<WalletSe
     if state.storage_path.exists() {
         fs::remove_file(&state.storage_path).map_err(|_| "Failed to remove stored wallet")?;
     }
-    state.evm_nonces.cancel_all_unbroadcast();
+    state.evm_nonces = Default::default();
     if let Some(ref mut wallet) = state.wallet {
         clear_secret_string(&mut wallet.mnemonic);
         clear_secret_string(&mut wallet.bip39_passphrase);
