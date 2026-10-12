@@ -4,13 +4,11 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::activity::{random_hex, short_address};
-use crate::assets::token_addresses_match;
+use crate::cctp::CctpTransfer;
 use crate::dto::{Activity, AssetIdentity};
 use crate::providers::http::ProviderClients;
 use crate::providers::tx_observation_provider;
-use crate::registry::network_by_id;
 use crate::tx::tx_status::{Execution, Finality, TxStatus};
-use crate::validation::validate_address_for_network;
 
 /// A transfer workflow retained in encrypted storage for restart recovery.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -92,7 +90,7 @@ pub(crate) enum TransactionStatus {
     Failed,
 }
 
-/// Creates an approval-stage record after validating assets, accounts, and amount.
+/// Creates an approval-stage record for the supported CCTP route and native USDC.
 /// This does not check allowances or execute a transfer.
 pub(crate) fn create_operation(
     source_asset: AssetIdentity,
@@ -110,37 +108,13 @@ pub(crate) fn create_operation(
         destination_asset.token_address.as_deref(),
     );
 
-    network_by_id(source.network.as_str())
-        .ok_or_else(|| format!("Unsupported network {}", source.network))?;
-    network_by_id(destination.network.as_str())
-        .ok_or_else(|| format!("Unsupported network {}", destination.network))?;
-
-    let same_asset = source.network == destination.network
-        && match (
-            source.token_address.as_deref(),
-            destination.token_address.as_deref(),
-        ) {
-            (None, None) => true,
-            (Some(left), Some(right)) => token_addresses_match(&source.network, left, right),
-            _ => false,
-        };
-    if same_asset {
-        return Err("Source and destination assets must differ".to_string());
-    }
-
-    validate_address_for_network(sender.as_str(), source.network.as_str())?;
-    validate_address_for_network(recipient.as_str(), destination.network.as_str())?;
-
-    if amount_base_units == 0 {
-        return Err("Amount must be greater than zero".to_string());
-    }
-    for network in [&source.network, &destination.network] {
-        if matches!(network.as_str(), "bitcoin" | "solana" | "tron" | "xrpl")
-            && amount_base_units > u64::MAX as u128
-        {
-            return Err(format!("Amount is too large for {network}"));
-        }
-    }
+    let transfer = CctpTransfer::new(
+        &source,
+        &destination,
+        &sender,
+        &recipient,
+        amount_base_units,
+    )?;
 
     let now = Utc::now().to_rfc3339();
     let operation = Operation {
@@ -151,7 +125,7 @@ pub(crate) fn create_operation(
         recipient,
         amount_base_units: amount_base_units.to_string(),
         step: OperationStep::Approval,
-        required_source_finality: Finality::Finalized,
+        required_source_finality: transfer.route.required_source_finality(),
         attempts: Vec::new(),
         cctp: None,
         created_at: now.clone(),

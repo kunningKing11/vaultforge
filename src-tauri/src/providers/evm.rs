@@ -3,11 +3,13 @@ use crate::dto::Asset;
 use crate::providers::NetworkAssetRefresh;
 use crate::providers::http::{json_rpc_result, optional_tx_hash, rpc_post};
 use crate::registry::{AssetConfig, NetworkConfig, network_by_id};
+use crate::tx::evm::{EvmCall, evm_address_word, evm_uint_word};
 use crate::tx::tx_status::{Execution, Finality, TxStatus, legacy_tx_status};
 
 pub(crate) type EvmNetworkConfig = NetworkConfig;
 pub(crate) type EvmTokenConfig = AssetConfig;
 
+#[derive(Debug)]
 pub(crate) struct EvmFeeEstimate {
     pub(crate) max_priority_fee_per_gas: u128,
     pub(crate) max_fee_per_gas: u128,
@@ -59,13 +61,9 @@ pub(crate) async fn fetch_evm_token_balance_for_contract(
     token_address: &str,
     address: &str,
 ) -> Result<u128, String> {
-    let addr_hex = address.trim_start_matches("0x");
-    let addr_bytes = hex::decode(addr_hex).map_err(|_| "Invalid address".to_string())?;
-    let mut padded = vec![0u8; 32];
-    padded[32 - addr_bytes.len()..].copy_from_slice(&addr_bytes);
-
-    let mut data = vec![0x70, 0xa0, 0x82, 0x31]; // keccak256("balanceOf(address)")[..4]
-    data.extend_from_slice(&padded);
+    crate::address::evm::validate_address(token_address)?;
+    let mut data = vec![0x70, 0xa0, 0x82, 0x31];
+    data.extend_from_slice(&evm_address_word(address)?);
 
     let body = serde_json::json!({
         "jsonrpc": "2.0",
@@ -79,6 +77,115 @@ pub(crate) async fn fetch_evm_token_balance_for_contract(
 
     let json = rpc_post(client, config.rpc_url()?, &body).await?;
     parse_evm_balance(&json, "EVM token balance")
+}
+
+/// Keep the full uint256: common unlimited approvals exceed u128.
+#[derive(Debug)]
+pub(crate) struct EvmAllowance([u8; 32]);
+
+impl EvmAllowance {
+    pub(crate) fn covers(&self, amount: u128) -> bool {
+        self.0 >= evm_uint_word(amount)
+    }
+}
+
+pub(crate) async fn fetch_evm_allowance(
+    client: &reqwest::Client,
+    config: &EvmNetworkConfig,
+    token: &str,
+    owner: &str,
+    spender: &str,
+) -> Result<EvmAllowance, String> {
+    crate::address::evm::validate_address(token)?;
+    let mut data = vec![0xdd, 0x62, 0xed, 0x3e];
+    data.extend_from_slice(&evm_address_word(owner)?);
+    data.extend_from_slice(&evm_address_word(spender)?);
+    let json = rpc_post(
+        client,
+        config.rpc_url()?,
+        &serde_json::json!({
+            "jsonrpc": "2.0", "method": "eth_call", "id": 1,
+            "params": [{"to": token, "data": format!("0x{}", hex::encode(data))}, "latest"],
+        }),
+    )
+    .await?;
+    let result = json_rpc_result(&json, "EVM allowance")?
+        .as_str()
+        .ok_or("Invalid EVM allowance result")?;
+    let bytes = hex::decode(
+        result
+            .strip_prefix("0x")
+            .ok_or("Invalid EVM allowance prefix")?,
+    )
+    .map_err(|_| "Invalid EVM allowance hex")?;
+    Ok(EvmAllowance(
+        bytes
+            .try_into()
+            .map_err(|_| "EVM allowance must be a uint256 ABI word")?,
+    ))
+}
+
+/// Checks endpoint identity before preparing a chain-specific contract call.
+pub(crate) async fn verify_evm_chain(
+    client: &reqwest::Client,
+    config: &EvmNetworkConfig,
+) -> Result<(), String> {
+    let json = rpc_post(
+        client,
+        config.rpc_url()?,
+        &serde_json::json!({"jsonrpc":"2.0", "method":"eth_chainId", "params":[], "id":1}),
+    )
+    .await?;
+    let chain = json_rpc_result(&json, "EVM chain ID")?
+        .as_str()
+        .ok_or("Invalid EVM chain ID")?;
+    let chain = u64::from_str_radix(
+        chain
+            .strip_prefix("0x")
+            .ok_or("Invalid EVM chain ID prefix")?,
+        16,
+    )
+    .map_err(|_| "Invalid EVM chain ID")?;
+    if chain != config.chain_id()? {
+        return Err("EVM RPC chain ID does not match configured deployment".into());
+    }
+    Ok(())
+}
+
+#[derive(Debug)]
+pub(crate) struct EvmCallEstimate {
+    pub(crate) gas_limit: u64,
+    pub(crate) fees: EvmFeeEstimate,
+    pub(crate) max_native_fee: u128,
+}
+
+pub(crate) fn evm_max_native_fee(gas_limit: u64, max_fee_per_gas: u128) -> Result<u128, String> {
+    if gas_limit == 0 || max_fee_per_gas == 0 {
+        return Err("EVM gas and fee estimates must be positive".into());
+    }
+    (gas_limit as u128)
+        .checked_mul(max_fee_per_gas)
+        .ok_or_else(|| "EVM maximum fee overflows base units".into())
+}
+
+/// Shared preparation seam for native/token sends and supported contract calls.
+pub(crate) async fn estimate_evm_call(
+    client: &reqwest::Client,
+    config: &EvmNetworkConfig,
+    from: &str,
+    call: &EvmCall,
+) -> Result<EvmCallEstimate, String> {
+    crate::address::evm::validate_address(from)?;
+    crate::address::evm::validate_address(&call.to)?;
+    let fees = fetch_evm_fee_estimate(client, config).await?;
+    let gas_limit =
+        fetch_evm_estimated_gas(client, config, from, &call.to, call.value, &call.data).await?;
+    let max_native_fee = evm_max_native_fee(gas_limit, fees.max_fee_per_gas)?;
+    Ok(EvmCallEstimate {
+        gas_limit,
+        fees,
+        max_native_fee,
+    })
 }
 
 fn parse_evm_balance(json: &serde_json::Value, context: &str) -> Result<u128, String> {

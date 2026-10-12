@@ -9,8 +9,8 @@ use crate::derivation::xrpl_private_key_from_mnemonic;
 use crate::dto::{Activity, AssetIdentity, SignedTransaction, WalletSession};
 use crate::providers::bitcoin::{broadcast_bitcoin_transaction, sign_bitcoin_transfer};
 use crate::providers::evm::{
-    broadcast_evm_tx, evm_config_by_id, fetch_evm_estimated_gas, fetch_evm_fee_estimate,
-    fetch_evm_native_balance, fetch_evm_nonce, fetch_evm_token_balance_for_contract,
+    broadcast_evm_tx, estimate_evm_call, evm_config_by_id, fetch_evm_native_balance,
+    fetch_evm_nonce, fetch_evm_token_balance_for_contract,
 };
 use crate::providers::http::ProviderClients;
 use crate::providers::solana::{
@@ -266,14 +266,11 @@ pub(crate) async fn sign_transaction(
             }
 
             let rpc_pending_nonce = fetch_evm_nonce(client, config, &address).await?;
-            let fee_estimate = fetch_evm_fee_estimate(client, config).await?;
-            let gas_limit =
-                fetch_evm_estimated_gas(client, config, &address, &call.to, call.value, &call.data)
-                    .await?;
-
-            let max_priority_fee_per_gas = fee_estimate.max_priority_fee_per_gas;
-            let max_fee_per_gas = fee_estimate.max_fee_per_gas;
-            let total_fee_wei: u128 = gas_limit as u128 * max_fee_per_gas as u128;
+            let estimate = estimate_evm_call(client, config, &address, &call).await?;
+            let gas_limit = estimate.gas_limit;
+            let max_priority_fee_per_gas = estimate.fees.max_priority_fee_per_gas;
+            let max_fee_per_gas = estimate.fees.max_fee_per_gas;
+            let total_fee_wei = estimate.max_native_fee;
 
             let required_native =
                 required_native_debit(is_native, value, total_fee_wei, native_symbol)?;

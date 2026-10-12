@@ -61,6 +61,7 @@ pub(crate) async fn fetch_tx_observation(
     }
 }
 pub(crate) mod bitcoin;
+pub(crate) mod cctp;
 pub(crate) mod evm;
 pub(crate) mod http;
 pub(crate) mod prices;

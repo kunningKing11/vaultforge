@@ -3,6 +3,7 @@ use sha3::{Digest, Keccak256};
 
 use crate::address::evm::validate_address;
 
+#[derive(Debug)]
 pub(crate) struct EvmCall {
     pub(crate) to: String,
     pub(crate) value: u128,
@@ -46,25 +47,25 @@ pub(crate) fn build_erc20_transfer_call(
     })
 }
 
+/// ABI address encoding shared by transfer, allowance, and CCTP builders.
+pub(crate) fn evm_address_word(address: &str) -> Result<[u8; 32], String> {
+    validate_address(address)?;
+    let bytes = hex::decode(&address[2..]).map_err(|_| "Invalid EVM address")?;
+    let mut word = [0; 32];
+    word[12..].copy_from_slice(&bytes);
+    Ok(word)
+}
+
+pub(crate) fn evm_uint_word(value: u128) -> [u8; 32] {
+    let mut word = [0; 32];
+    word[16..].copy_from_slice(&value.to_be_bytes());
+    word
+}
+
 pub(crate) fn encode_erc20_transfer(recipient: &str, amount: u128) -> Result<Vec<u8>, String> {
-    let recip_hex = recipient.trim_start_matches("0x");
-    let recip_bytes =
-        hex::decode(recip_hex).map_err(|_| "Invalid recipient address".to_string())?;
-    let mut padded_recip = vec![0u8; 32];
-    padded_recip[32 - recip_bytes.len()..].copy_from_slice(&recip_bytes);
-
-    let amount_bytes = amount.to_be_bytes();
-    let start = amount_bytes
-        .iter()
-        .position(|&b| b != 0)
-        .unwrap_or(amount_bytes.len() - 1);
-    let amount_trimmed = &amount_bytes[start..];
-
-    let mut data = vec![0xa9, 0x05, 0x9c, 0xbb]; // keccak256("transfer(address,uint256)")[..4]
-    data.extend_from_slice(&padded_recip);
-    let mut padded_amount = vec![0u8; 32];
-    padded_amount[32 - amount_trimmed.len()..].copy_from_slice(amount_trimmed);
-    data.extend_from_slice(&padded_amount);
+    let mut data = vec![0xa9, 0x05, 0x9c, 0xbb];
+    data.extend_from_slice(&evm_address_word(recipient)?);
+    data.extend_from_slice(&evm_uint_word(amount));
     Ok(data)
 }
 

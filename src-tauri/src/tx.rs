@@ -1,4 +1,5 @@
 pub(crate) mod bitcoin;
+pub(crate) mod cctp;
 pub(crate) mod evm;
 pub(crate) mod evm_nonces;
 pub(crate) mod solana;

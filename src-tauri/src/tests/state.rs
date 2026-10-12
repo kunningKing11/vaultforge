@@ -104,7 +104,7 @@ fn session_projects_saved_operations_without_duplicate_cached_activity() {
     assert_eq!(session.activity.len(), 1);
     assert_eq!(session.activity[0].id, operation.id);
     assert_eq!(session.activity[0].status, "confirmed");
-    assert_eq!(session.activity[0].network.as_deref(), Some("base"));
+    assert_eq!(session.activity[0].network.as_deref(), Some("arbitrum_one"));
     assert_eq!(state.wallet.as_ref().unwrap().activity[0].status, "pending");
 }
 

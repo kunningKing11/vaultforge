@@ -153,6 +153,7 @@ You can run the same checks manually with `bun run hooks:check -- commit` or `bu
 - `src-tauri/src/registry.rs` exposes the normalized network, provider, native-asset, token, and pricing configuration embedded by `build.rs`.
 - `src-tauri/src/tests/` mirrors the Rust module structure for unit tests while keeping test code out of implementation files.
 - `src-tauri/src/tx/` contains chain-specific transaction construction, encoding, and signing code.
+- `src-tauri/src/cctp.rs` validates the fixed CCTP V2 Standard Transfer USDC route from Ethereum to Arbitrum One and a private Sepolia counterpart. `src-tauri/src/tx/cctp.rs` builds contract calls; `src-tauri/src/providers/cctp.rs` performs read-only balance, allowance, fee, and gas preparation. These modules do not expose a working CCTP transfer or enable testnet wallet networks.
 - `src-tauri/src/operations.rs` tracks encrypted cross-chain operation records, checks transitions, reconciles transaction statuses on unlock, and derives activity. It does not execute CCTP transfers or verify attestations yet.
 - `src-tauri/src/assets.rs` contains shared asset-cache helpers used by provider refresh paths.
 - `src-tauri/src/activity.rs`, `assets.rs`, `derivation.rs`, `dto.rs`, `state.rs`, `storage.rs`, and `validation.rs` contain the backend domain support code used by commands:

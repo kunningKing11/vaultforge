@@ -4,6 +4,7 @@ use tauri::Manager;
 mod activity;
 mod address;
 mod assets;
+mod cctp;
 mod commands;
 mod derivation;
 mod dto;

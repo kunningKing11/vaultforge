@@ -8,7 +8,7 @@ pub(crate) struct NetworkRegistry {
     pub(crate) networks: Vec<NetworkConfig>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct NetworkConfig {
     pub(crate) kind: String,
@@ -35,7 +35,7 @@ pub(crate) enum TransactionStatusProvider {
     Xrpl,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AssetConfig {
     pub(crate) symbol: String,

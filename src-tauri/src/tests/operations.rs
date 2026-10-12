@@ -111,6 +111,20 @@ fn creates_normalized_identity_and_rejects_invalid_requests() {
     assert_eq!(operation.step, OperationStep::Approval);
     assert!(operation.attempts.is_empty());
     assert!(operation.cctp.is_none());
+    assert_eq!(operation.required_source_finality, Finality::Finalized);
+    assert!(
+        create_operation(
+            operation.source_asset.clone(),
+            crate::dto::AssetIdentity::new(
+                "base",
+                Some("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+            ),
+            operation.sender.clone(),
+            operation.recipient.clone(),
+            1,
+        )
+        .is_err()
+    );
     for amount in [0, 1] {
         assert!(
             create_operation(
@@ -342,7 +356,7 @@ fn operation_activity_uses_current_attempt_and_matching_network() {
     ));
     let activity = operation_activity(&operation).unwrap();
     assert_eq!(activity.status, "pending");
-    assert_eq!(activity.network.as_deref(), Some("base"));
+    assert_eq!(activity.network.as_deref(), Some("arbitrum_one"));
     assert_eq!(activity.hash, operation.attempts[2].tx_hash);
     assert_eq!(activity.id, operation.id);
     let original = operation.clone();
@@ -373,7 +387,7 @@ fn reconciliation_checks_signed_hashes_after_a_broadcast_crash() {
                 assert_eq!(
                     network,
                     if step == TransactionStep::Mint {
-                        "base"
+                        "arbitrum_one"
                     } else {
                         "ethereum"
                     }
