@@ -58,6 +58,13 @@ export type WalletSession = {
   use_crypto_symbols: boolean;
 };
 
+export type CctpAttestationProgress = {
+  session: WalletSession;
+  state: "pending" | "available" | "waiting_source_finality" | "error";
+  retry_after_secs: number;
+  error: string | null;
+};
+
 export type RefreshWarning = {
   kind: "balance" | "value";
   subject: string;

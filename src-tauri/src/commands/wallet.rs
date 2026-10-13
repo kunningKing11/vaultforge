@@ -351,7 +351,13 @@ pub(crate) async fn unlock_wallet(
             .ok_or_else(|| "Wallet was closed during unlock".to_string())?
             .operations
             .clone();
-        state.evm_nonces.restore_operations(&operations)?;
+        if let Err(error) = state.evm_nonces.restore_operations(&operations) {
+            // Fail closed: a recovery failure must not leave an unlocked wallet
+            // with secrets in memory while the command reports an error.
+            lock_wallet_state(&mut state);
+            return Err(error);
+        }
+        state.evm_nonces.restore_send_operations(&operations);
         (state.wallet_generation, operations)
     };
     let mut operations = original_operations.clone();
@@ -395,6 +401,7 @@ fn finish_operation_recovery(
             .ok_or("Wallet closed during recovery")?
             .operations;
         state.evm_nonces.restore_operations(operations)?;
+        state.evm_nonces.restore_send_operations(operations);
         Ok(())
     })();
     if result.is_err() && state.wallet_generation == generation {

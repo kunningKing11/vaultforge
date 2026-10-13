@@ -87,6 +87,12 @@ pub(crate) async fn prepare_cctp_source(
     transfer: &CctpTransfer,
 ) -> Result<CctpPreflight, String> {
     transfer.route.validate()?;
+    if transfer.route.source.network.kind != "evm"
+        || transfer.route.destination.network.kind != "evm"
+    {
+        return Err("Solana CCTP source execution preparation is unavailable; native attestation reads are supported".into());
+    }
+
     let route = &transfer.route;
     let fee_url = format!(
         "{}/v2/burn/USDC/fees/{}/{}",
@@ -196,4 +202,4 @@ pub(crate) async fn prepare_cctp_mint(
 
 #[cfg(test)]
 #[path = "../tests/providers/cctp.rs"]
-mod tests;
+pub(crate) mod tests;

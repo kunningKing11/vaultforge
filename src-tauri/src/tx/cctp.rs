@@ -11,6 +11,9 @@ fn selector(signature: &str) -> Vec<u8> {
 
 pub(crate) fn build_approval_call(transfer: &CctpTransfer) -> Result<EvmCall, String> {
     transfer.route.validate()?;
+    if transfer.route.source.network.kind != "evm" {
+        return Err("Solana burns use native program instructions, not ERC-20 approvals".into());
+    }
     let mut data = selector("approve(address,uint256)");
     data.extend_from_slice(&evm_address_word(transfer.route.source.token_messenger)?);
     // Approve the requested burn amount, not unlimited spending.
@@ -24,14 +27,17 @@ pub(crate) fn build_approval_call(transfer: &CctpTransfer) -> Result<EvmCall, St
 
 pub(crate) fn build_burn_call(transfer: &CctpTransfer) -> Result<EvmCall, String> {
     transfer.route.validate()?;
+    if transfer.route.source.network.kind != "evm" {
+        return Err("Solana burns require a native program builder".into());
+    }
     let mut data =
         selector("depositForBurn(uint256,uint32,bytes32,address,bytes32,uint256,uint32)");
     for word in [
         evm_uint_word(transfer.amount()),
         evm_uint_word(transfer.route.destination.domain as u128),
-        evm_address_word(transfer.recipient())?,
+        transfer.mint_recipient_word()?,
         evm_address_word(transfer.route.source.usdc)?,
-        evm_address_word(transfer.destination_caller())?, // source wallet submits the mint
+        transfer.caller_word()?, // source wallet submits the mint
         evm_uint_word(0), // zero-fee-only policy, rechecked against Circle before preparation
         evm_uint_word(STANDARD_FINALITY_THRESHOLD as u128),
     ] {
@@ -52,6 +58,9 @@ pub(crate) fn build_mint_call(
     attestation: &[u8],
 ) -> Result<EvmCall, String> {
     transfer.route.validate()?;
+    if transfer.route.destination.network.kind != "evm" {
+        return Err("Solana mint preflight uses the native attester verifier".into());
+    }
     if message.is_empty()
         || attestation.is_empty()
         || message.len() > 16_384

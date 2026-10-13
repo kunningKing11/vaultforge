@@ -20,13 +20,17 @@ enum ReservationStatus {
 }
 
 impl EvmNonceManager {
-    /// Rebuild only durable operation protection, preserving ordinary-send queues.
+    /// Rebuild only durable CCTP operation protection, preserving ordinary-send
+    /// queues. Ordinary EVM sends are restored per nonce by `restore_send_operations`.
     pub(crate) fn restore_operations(
         &mut self,
         operations: &[crate::operations::Operation],
     ) -> Result<(), String> {
         let mut durable = HashSet::new();
         for operation in operations {
+            if operation.kind != crate::operations::OperationKind::Cctp {
+                continue;
+            }
             for attempt in &operation.attempts {
                 if attempt.raw_tx.is_none()
                     || attempt.status == crate::operations::TransactionStatus::Built
@@ -81,28 +85,53 @@ impl EvmNonceManager {
         Ok(())
     }
 
-    pub(crate) fn cancel_all_unbroadcast(&mut self) {
-        let mut reservations: Vec<_> = self
-            .accounts
-            .iter()
-            .flat_map(|((chain_id, address), account)| {
-                account
-                    .reservations
-                    .iter()
-                    .filter(|(_, status)| **status == ReservationStatus::AwaitingBroadcast)
-                    .map(|(nonce, _)| (*chain_id, address.clone(), *nonce))
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        reservations.sort_unstable_by(|left, right| {
-            left.0
-                .cmp(&right.0)
-                .then_with(|| left.1.cmp(&right.1))
-                .then_with(|| right.2.cmp(&left.2))
-        });
-
-        for (chain_id, address, nonce) in reservations {
-            self.cancel_unbroadcast(chain_id, &address, nonce);
+    /// Restores per-nonce protection for unresolved ordinary EVM sends without
+    /// blocking the whole account the way unresolved CCTP operations do.
+    pub(crate) fn restore_send_operations(&mut self, operations: &[crate::operations::Operation]) {
+        for operation in operations {
+            if operation.kind != crate::operations::OperationKind::Send {
+                continue;
+            }
+            let Some(config) = crate::registry::network_by_id(&operation.source_asset.network)
+                .filter(|network| network.kind == "evm")
+            else {
+                continue;
+            };
+            let Ok(chain_id) = config.chain_id() else {
+                continue;
+            };
+            for attempt in &operation.attempts {
+                if attempt.step != crate::operations::TransactionStep::Send {
+                    continue;
+                }
+                let resolved = attempt.tx_status.as_ref().is_some_and(|status| {
+                    status.finality == crate::tx::tx_status::Finality::Finalized
+                }) || attempt.status == crate::operations::TransactionStatus::Failed;
+                if resolved {
+                    continue;
+                }
+                let Some(nonce) = attempt
+                    .nonce_or_sequence
+                    .as_ref()
+                    .and_then(|nonce| nonce.parse::<u64>().ok())
+                else {
+                    continue;
+                };
+                let account = self
+                    .accounts
+                    .entry((chain_id, operation.sender.to_ascii_lowercase()))
+                    .or_default();
+                let status = if attempt.status == crate::operations::TransactionStatus::Signed {
+                    ReservationStatus::AwaitingBroadcast
+                } else {
+                    ReservationStatus::BroadcastAttempted
+                };
+                account.reservations.entry(nonce).or_insert(status);
+                let next = nonce.saturating_add(1);
+                if account.next_nonce.is_none_or(|current| current < next) {
+                    account.next_nonce = Some(next);
+                }
+            }
         }
     }
 

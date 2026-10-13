@@ -4,6 +4,7 @@ use super::{
     reconcile_operation_with, record_attestation, record_operation_error,
     record_transaction_attempt,
 };
+use crate::cctp_attestation::tests::{attested, bound_data, evidence, observation};
 use crate::providers::http::ProviderClients;
 use crate::tests::{sample_attempt, sample_operation};
 use crate::tx::tx_status::{Execution, Finality, TxStatus};
@@ -33,13 +34,9 @@ fn advances_only_with_required_evidence() {
     .unwrap();
     advance_operation(&mut operation, OperationStep::AwaitingAttestation).unwrap();
     assert!(advance_operation(&mut operation, OperationStep::Mint).is_err());
-    operation.cctp = Some(CctpData {
-        message: vec![1, 2],
-        attestation: Some(vec![3, 4]),
-    });
+    operation.cctp = Some(bound_data(&operation));
     assert!(advance_operation(&mut operation, OperationStep::Mint).is_err());
-    operation.attempts.last_mut().unwrap().tx_status =
-        Some(TxStatus::new(Execution::Succeeded, Finality::Finalized));
+    operation.attempts.last_mut().unwrap().tx_status = Some(observation(Finality::Finalized));
     advance_operation(&mut operation, OperationStep::Mint).unwrap();
     assert!(advance_operation(&mut operation, OperationStep::Completed).is_err());
     record_transaction_attempt(
@@ -73,9 +70,20 @@ fn attestation_storage_checks_stage_and_bounds_without_advancing() {
         assert!(record_attestation(&mut operation, message, attestation).is_err());
         assert_eq!(operation, original);
     }
-    record_attestation(&mut operation, vec![1], vec![2]).unwrap();
+    assert!(record_attestation(&mut operation, vec![1], vec![2]).is_err());
+    operation.attempts.push(sample_attempt(
+        TransactionStep::Burn,
+        TransactionStatus::Submitted,
+    ));
+    operation.cctp = Some(CctpData {
+        evidence: Some(evidence(&operation)),
+        ..CctpData::default()
+    });
+    let message = attested(&operation);
+    record_attestation(&mut operation, message, vec![2; 65]).unwrap();
     assert_eq!(operation.step, OperationStep::AwaitingAttestation);
-    assert_eq!(operation.cctp.unwrap().attestation, Some(vec![2]));
+    assert!(!operation.cctp.as_ref().unwrap().simulated);
+    assert_eq!(operation.cctp.unwrap().attestation, Some(vec![2; 65]));
 }
 
 #[test]
@@ -116,7 +124,7 @@ fn creates_normalized_identity_and_rejects_invalid_requests() {
         create_operation(
             operation.source_asset.clone(),
             crate::dto::AssetIdentity::new(
-                "base",
+                "bnb",
                 Some("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
             ),
             operation.sender.clone(),
@@ -170,6 +178,7 @@ fn errors_preserve_recovery_position_and_transaction_history() {
     operation.cctp = Some(CctpData {
         message: vec![1],
         attestation: None,
+        ..CctpData::default()
     });
     let original = operation.clone();
     record_operation_error(&mut operation, " ".to_string());
@@ -240,22 +249,15 @@ fn legacy_confirmed_mints_do_not_imply_finality() {
 fn mint_requires_successful_source_evidence_meeting_the_recorded_policy() {
     let mut operation = sample_operation();
     operation.step = OperationStep::AwaitingAttestation;
-    operation.cctp = Some(CctpData {
-        message: vec![1],
-        attestation: Some(vec![2]),
-    });
+    operation.cctp = Some(bound_data(&operation));
     let mut burn = sample_attempt(TransactionStep::Burn, TransactionStatus::Submitted);
-    burn.tx_status = Some(TxStatus::new(Execution::Succeeded, Finality::Included));
+    burn.tx_status = Some(observation(Finality::Included));
     operation.attempts.push(burn);
     let before = operation.clone();
     assert!(advance_operation(&mut operation, OperationStep::Mint).is_err());
     assert_eq!(operation, before);
     operation.required_source_finality = Finality::Included;
-    assert_eq!(
-        operation_activity(&operation).unwrap().title,
-        "Attestation available"
-    );
-    advance_operation(&mut operation, OperationStep::Mint).unwrap();
+    assert!(advance_operation(&mut operation, OperationStep::Mint).is_err()); // pinned Standard route cannot weaken its policy
     operation.step = OperationStep::AwaitingAttestation;
     operation.required_source_finality = Finality::Finalized;
     assert_eq!(
@@ -264,8 +266,7 @@ fn mint_requires_successful_source_evidence_meeting_the_recorded_policy() {
     );
     operation.attempts[0].tx_status = Some(TxStatus::new(Execution::Failed, Finality::Finalized));
     assert!(advance_operation(&mut operation, OperationStep::Mint).is_err());
-    operation.attempts[0].tx_status =
-        Some(TxStatus::new(Execution::Succeeded, Finality::Finalized));
+    operation.attempts[0].tx_status = Some(observation(Finality::Finalized));
     advance_operation(&mut operation, OperationStep::Mint).unwrap();
     let mut legacy = serde_json::to_value(sample_operation()).unwrap();
     legacy
@@ -277,7 +278,7 @@ fn mint_requires_successful_source_evidence_meeting_the_recorded_policy() {
     let mut legacy_mint = sample_operation();
     legacy_mint.step = OperationStep::Mint;
     let mut minted = sample_attempt(TransactionStep::Mint, TransactionStatus::Confirmed);
-    minted.tx_status = Some(TxStatus::new(Execution::Succeeded, Finality::Finalized));
+    minted.tx_status = Some(observation(Finality::Finalized));
     legacy_mint.attempts.push(minted);
     assert!(advance_operation(&mut legacy_mint, OperationStep::Completed).is_err());
 }
@@ -524,6 +525,7 @@ fn round_trips_operations_with_and_without_cctp_payloads() {
         Some(CctpData {
             message: vec![1, 2],
             attestation: Some(vec![3, 4]),
+            ..CctpData::default()
         }),
     ] {
         operation.cctp = cctp;

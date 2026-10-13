@@ -1,4 +1,4 @@
-//! Fixed CCTP V2 Standard Transfer deployment. No signing or execution commands.
+//! Validated CCTP V2 Standard deployments for wallet EVM chains and Solana.
 
 use serde::{Deserialize, Serialize};
 
@@ -45,8 +45,8 @@ pub(crate) struct CctpRoute {
 pub(crate) struct CctpDeploymentIdentity {
     pub(crate) environment: CctpEnvironment,
     pub(crate) protocol_version: u32,
-    pub(crate) source_chain_id: u64,
-    pub(crate) destination_chain_id: u64,
+    pub(crate) source_chain_id: Option<u64>,
+    pub(crate) destination_chain_id: Option<u64>,
     pub(crate) source_domain: u32,
     pub(crate) destination_domain: u32,
     pub(crate) source_usdc: String,
@@ -58,139 +58,227 @@ pub(crate) struct CctpDeploymentIdentity {
     pub(crate) attestation_host: String,
 }
 
-struct RouteSpec {
-    source_id: &'static str,
-    source_chain: u64,
-    destination_id: &'static str,
-    destination_chain: u64,
-    source_usdc: &'static str,
-    destination_usdc: &'static str,
-    messenger: &'static str,
-    transmitter: &'static str,
-    host: &'static str,
+struct DeploymentSpec {
+    id: &'static str,
+    evm_chain_id: Option<u64>,
+    domain: u32,
+    symbol: &'static str,
+    usdc: &'static str,
+    environment: CctpEnvironment,
 }
 
-fn route_spec(environment: CctpEnvironment) -> RouteSpec {
+// Circle native USDC and V2 domains, restricted to implemented wallet EVM chains.
+const MAINNET_DEPLOYMENTS: &[DeploymentSpec] = &[
+    DeploymentSpec {
+        id: "ethereum",
+        evm_chain_id: Some(1),
+        domain: 0,
+        symbol: "ETH",
+        usdc: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        environment: CctpEnvironment::Mainnet,
+    },
+    DeploymentSpec {
+        id: "avalanche_c",
+        evm_chain_id: Some(43114),
+        domain: 1,
+        symbol: "AVAX",
+        usdc: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+        environment: CctpEnvironment::Mainnet,
+    },
+    DeploymentSpec {
+        id: "optimism",
+        evm_chain_id: Some(10),
+        domain: 2,
+        symbol: "ETH",
+        usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+        environment: CctpEnvironment::Mainnet,
+    },
+    DeploymentSpec {
+        id: "arbitrum_one",
+        evm_chain_id: Some(42161),
+        domain: 3,
+        symbol: "ETH",
+        usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        environment: CctpEnvironment::Mainnet,
+    },
+    DeploymentSpec {
+        id: "base",
+        evm_chain_id: Some(8453),
+        domain: 6,
+        symbol: "ETH",
+        usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        environment: CctpEnvironment::Mainnet,
+    },
+    DeploymentSpec {
+        id: "polygon",
+        evm_chain_id: Some(137),
+        domain: 7,
+        symbol: "POL",
+        usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+        environment: CctpEnvironment::Mainnet,
+    },
+    DeploymentSpec {
+        id: "monad",
+        evm_chain_id: Some(143),
+        domain: 15,
+        symbol: "MON",
+        usdc: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+        environment: CctpEnvironment::Mainnet,
+    },
+];
+const SOLANA_DEPLOYMENT: DeploymentSpec = DeploymentSpec {
+    id: "solana",
+    evm_chain_id: None,
+    domain: 5,
+    symbol: "SOL",
+    usdc: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    environment: CctpEnvironment::Mainnet,
+};
+pub(crate) const SOLANA_MESSENGER: &str = "CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe";
+pub(crate) const SOLANA_TRANSMITTER: &str = "CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC";
+
+const SEPOLIA_DEPLOYMENTS: &[DeploymentSpec] = &[
+    DeploymentSpec {
+        id: "ethereum_sepolia",
+        evm_chain_id: Some(11155111),
+        domain: 0,
+        symbol: "ETH",
+        usdc: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+        environment: CctpEnvironment::Sepolia,
+    },
+    DeploymentSpec {
+        id: "arbitrum_sepolia",
+        evm_chain_id: Some(421614),
+        domain: 3,
+        symbol: "ETH",
+        usdc: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+        environment: CctpEnvironment::Sepolia,
+    },
+];
+
+fn deployment_spec(id: &str) -> Result<&'static DeploymentSpec, String> {
+    if id == "solana" {
+        return Ok(&SOLANA_DEPLOYMENT);
+    }
+    MAINNET_DEPLOYMENTS
+        .iter()
+        .chain(SEPOLIA_DEPLOYMENTS)
+        .find(|deployment| deployment.id == id)
+        .ok_or_else(|| format!("Unsupported CCTP wallet deployment {id}"))
+}
+
+fn contracts(environment: CctpEnvironment) -> (&'static str, &'static str, &'static str) {
     match environment {
-        CctpEnvironment::Mainnet => RouteSpec {
-            source_id: "ethereum",
-            source_chain: 1,
-            destination_id: "arbitrum_one",
-            destination_chain: 42161,
-            source_usdc: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-            destination_usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-            messenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
-            transmitter: "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
-            host: "https://iris-api.circle.com",
-        },
-        CctpEnvironment::Sepolia => RouteSpec {
-            source_id: "ethereum_sepolia",
-            source_chain: 11155111,
-            destination_id: "arbitrum_sepolia",
-            destination_chain: 421614,
-            source_usdc: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
-            destination_usdc: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
-            messenger: "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
-            transmitter: "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275",
-            host: "https://iris-api-sandbox.circle.com",
-        },
+        CctpEnvironment::Mainnet => (
+            "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+            "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
+            "https://iris-api.circle.com",
+        ),
+        CctpEnvironment::Sepolia => (
+            "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
+            "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275",
+            "https://iris-api-sandbox.circle.com",
+        ),
     }
 }
 
+fn deployment(spec: &DeploymentSpec) -> Result<CctpDeployment, String> {
+    let network = match spec.environment {
+        CctpEnvironment::Mainnet => network_by_id(spec.id)
+            .ok_or("CCTP wallet network is missing")?
+            .clone(),
+        CctpEnvironment::Sepolia => match spec.id {
+            "ethereum_sepolia" => testnet_network(
+                spec.id,
+                "Ethereum Sepolia",
+                spec.evm_chain_id.ok_or("Missing CCTP testnet chain ID")?,
+                "https://ethereum-sepolia-rpc.publicnode.com",
+                spec.usdc,
+            )?,
+            "arbitrum_sepolia" => testnet_network(
+                spec.id,
+                "Arbitrum Sepolia",
+                spec.evm_chain_id.ok_or("Missing CCTP testnet chain ID")?,
+                "https://sepolia-rollup.arbitrum.io/rpc",
+                spec.usdc,
+            )?,
+            _ => return Err("Unsupported CCTP testnet".into()),
+        },
+    };
+    let (messenger, transmitter, _) = contracts(spec.environment);
+    let (messenger, transmitter) = if spec.id == "solana" {
+        (SOLANA_MESSENGER, SOLANA_TRANSMITTER)
+    } else {
+        (messenger, transmitter)
+    };
+    Ok(CctpDeployment {
+        network,
+        domain: spec.domain,
+        usdc: spec.usdc,
+        token_messenger: messenger,
+        message_transmitter: transmitter,
+    })
+}
+
 impl CctpRoute {
-    /// Circle deployment constants: contract-addresses and usdc-contract-addresses.
-    /// Version is deliberately fixed to V2; domains are not EVM chain IDs.
+    /// Compatibility constructor for the original route and its test counterpart.
     pub(crate) fn new(environment: CctpEnvironment) -> Result<Self, String> {
-        let spec = route_spec(environment);
-        let (source, destination) = match environment {
-            CctpEnvironment::Mainnet => (
-                network_by_id(spec.source_id)
-                    .ok_or("Ethereum is not configured")?
-                    .clone(),
-                network_by_id(spec.destination_id)
-                    .ok_or("Arbitrum One is not configured")?
-                    .clone(),
-            ),
-            CctpEnvironment::Sepolia => (
-                testnet_network(
-                    spec.source_id,
-                    "Ethereum Sepolia",
-                    spec.source_chain,
-                    "https://ethereum-sepolia-rpc.publicnode.com",
-                    spec.source_usdc,
-                )?,
-                testnet_network(
-                    spec.destination_id,
-                    "Arbitrum Sepolia",
-                    spec.destination_chain,
-                    "https://sepolia-rollup.arbitrum.io/rpc",
-                    spec.destination_usdc,
-                )?,
-            ),
-        };
+        match environment {
+            CctpEnvironment::Mainnet => Self::for_networks("ethereum", "arbitrum_one"),
+            CctpEnvironment::Sepolia => Self::for_networks("ethereum_sepolia", "arbitrum_sepolia"),
+        }
+    }
+
+    pub(crate) fn for_networks(source: &str, destination: &str) -> Result<Self, String> {
+        let source = deployment_spec(source)?;
+        let destination = deployment_spec(destination)?;
+        if source.id == destination.id || source.environment != destination.environment {
+            return Err("CCTP requires different chains in the same environment".into());
+        }
         let route = Self {
             protocol_version: CCTP_PROTOCOL_VERSION,
-            environment,
-            source: CctpDeployment {
-                network: source,
-                domain: 0,
-                usdc: spec.source_usdc,
-                token_messenger: spec.messenger,
-                message_transmitter: spec.transmitter,
-            },
-            destination: CctpDeployment {
-                network: destination,
-                domain: 3,
-                usdc: spec.destination_usdc,
-                token_messenger: spec.messenger,
-                message_transmitter: spec.transmitter,
-            },
-            attestation_host: spec.host,
+            environment: source.environment,
+            source: deployment(source)?,
+            destination: deployment(destination)?,
+            attestation_host: contracts(source.environment).2,
         };
         route.validate()?;
         Ok(route)
     }
 
     pub(crate) fn validate(&self) -> Result<(), String> {
-        let spec = route_spec(self.environment);
-        if self.protocol_version != CCTP_PROTOCOL_VERSION {
-            return Err("Unsupported CCTP protocol version".into());
+        let (messenger, transmitter, host) = contracts(self.environment);
+        if self.protocol_version != CCTP_PROTOCOL_VERSION
+            || self.attestation_host != host
+            || self.source.network.id == self.destination.network.id
+        {
+            return Err("Unsupported CCTP protocol, environment, or same-chain route".into());
         }
-        if self.attestation_host != spec.host {
-            return Err("CCTP attestation environment mismatch".into());
-        }
-        for (deployment, id, chain, domain, usdc) in [
-            (
-                &self.source,
-                spec.source_id,
-                spec.source_chain,
-                0,
-                spec.source_usdc,
-            ),
-            (
-                &self.destination,
-                spec.destination_id,
-                spec.destination_chain,
-                3,
-                spec.destination_usdc,
-            ),
-        ] {
+        for deployment in [&self.source, &self.destination] {
+            let spec = deployment_spec(&deployment.network.id)?;
             let network = &deployment.network;
-            if network.id != id
-                || network.kind != "evm"
-                || network.chain_id()? != chain
-                || network.address_key != "evm"
-                || network.transaction_status_provider != Some(TransactionStatusProvider::Evm)
-                || network.native_asset.decimals != 18
-                || network.native_asset.symbol != "ETH"
-                || deployment.domain != domain
-                || !deployment.usdc.eq_ignore_ascii_case(usdc)
-                || !deployment
-                    .token_messenger
-                    .eq_ignore_ascii_case(spec.messenger)
-                || !deployment
-                    .message_transmitter
-                    .eq_ignore_ascii_case(spec.transmitter)
+            let solana = spec.id == "solana";
+            let (expected_messenger, expected_transmitter) = if solana {
+                (SOLANA_MESSENGER, SOLANA_TRANSMITTER)
+            } else {
+                (messenger, transmitter)
+            };
+            if spec.environment != self.environment
+                || network.kind != if solana { "svm" } else { "evm" }
+                || network.chain_id != spec.evm_chain_id
+                || network.address_key != if solana { "solana" } else { "evm" }
+                || network.transaction_status_provider
+                    != Some(if solana {
+                        TransactionStatusProvider::Solana
+                    } else {
+                        TransactionStatusProvider::Evm
+                    })
+                || network.native_asset.decimals != if solana { 9 } else { 18 }
+                || network.native_asset.symbol != spec.symbol
+                || deployment.domain != spec.domain
+                || deployment.usdc != spec.usdc
+                || deployment.token_messenger != expected_messenger
+                || deployment.message_transmitter != expected_transmitter
             {
                 return Err("Unsupported CCTP deployment or mixed environments".into());
             }
@@ -204,7 +292,11 @@ impl CctpRoute {
                 deployment.token_messenger,
                 deployment.message_transmitter,
             ] {
-                validate_address(address)?;
+                if solana {
+                    crate::address::solana::validate_address(address)?;
+                } else {
+                    validate_address(address)?;
+                }
             }
             let url =
                 reqwest::Url::parse(network.rpc_url()?).map_err(|_| "Invalid CCTP RPC URL")?;
@@ -223,15 +315,35 @@ impl CctpRoute {
         Ok(CctpDeploymentIdentity {
             environment: self.environment,
             protocol_version: self.protocol_version,
-            source_chain_id: self.source.network.chain_id()?,
-            destination_chain_id: self.destination.network.chain_id()?,
+            source_chain_id: self.source.network.chain_id,
+            destination_chain_id: self.destination.network.chain_id,
             source_domain: self.source.domain,
             destination_domain: self.destination.domain,
-            source_usdc: self.source.usdc.to_ascii_lowercase(),
-            destination_usdc: self.destination.usdc.to_ascii_lowercase(),
-            token_messenger: self.source.token_messenger.to_ascii_lowercase(),
-            destination_token_messenger: self.destination.token_messenger.to_ascii_lowercase(),
-            source_message_transmitter: self.source.message_transmitter.to_ascii_lowercase(),
+            source_usdc: if self.source.network.kind == "evm" {
+                self.source.usdc.to_ascii_lowercase()
+            } else {
+                self.source.usdc.into()
+            },
+            destination_usdc: if self.destination.network.kind == "evm" {
+                self.destination.usdc.to_ascii_lowercase()
+            } else {
+                self.destination.usdc.into()
+            },
+            token_messenger: if self.source.network.kind == "evm" {
+                self.source.token_messenger.to_ascii_lowercase()
+            } else {
+                self.source.token_messenger.into()
+            },
+            destination_token_messenger: if self.destination.network.kind == "evm" {
+                self.destination.token_messenger.to_ascii_lowercase()
+            } else {
+                self.destination.token_messenger.into()
+            },
+            source_message_transmitter: if self.source.network.kind == "evm" {
+                self.source.message_transmitter.to_ascii_lowercase()
+            } else {
+                self.source.message_transmitter.into()
+            },
             destination_message_transmitter: self
                 .destination
                 .message_transmitter
@@ -268,7 +380,7 @@ fn testnet_network(
     Ok(network)
 }
 
-/// A validated request. The source wallet is also the destination mint caller;
+/// EVM routes bind the source wallet as mint caller; cross-family routes permit relayers.
 /// zero maxFee rejects any protocol fee rather than silently changing net receipt.
 #[derive(Debug)]
 pub(crate) struct CctpTransfer {
@@ -286,25 +398,30 @@ impl CctpTransfer {
         recipient: &str,
         amount: u128,
     ) -> Result<Self, String> {
-        let environment = match (source.network.as_str(), destination.network.as_str()) {
-            ("ethereum", "arbitrum_one") => CctpEnvironment::Mainnet,
-            ("ethereum_sepolia", "arbitrum_sepolia") => CctpEnvironment::Sepolia,
-            _ => return Err("Unsupported CCTP route".into()),
-        };
-        let route = CctpRoute::new(environment)?;
+        let route = CctpRoute::for_networks(&source.network, &destination.network)?;
         for (asset, deployment) in [(source, &route.source), (destination, &route.destination)] {
-            if !asset
-                .token_address
-                .as_deref()
-                .is_some_and(|token| token.eq_ignore_ascii_case(deployment.usdc))
-            {
+            if !asset.token_address.as_deref().is_some_and(|token| {
+                if deployment.network.kind == "evm" {
+                    token.eq_ignore_ascii_case(deployment.usdc)
+                } else {
+                    token == deployment.usdc
+                }
+            }) {
                 return Err("CCTP route supports only Circle-issued native USDC".into());
             }
         }
-        validate_address(sender)?;
-        validate_address(recipient)?;
-        if sender[2..].bytes().all(|byte| byte == b'0')
-            || recipient[2..].bytes().all(|byte| byte == b'0')
+        if route.source.network.kind == "evm" {
+            validate_address(sender)?;
+        } else {
+            crate::address::solana::validate_address(sender)?;
+        }
+        if route.destination.network.kind == "evm" {
+            validate_address(recipient)?;
+        } else {
+            crate::address::solana::validate_address(recipient)?;
+        }
+        if address_word(&route.source.network, sender)? == [0; 32]
+            || address_word(&route.destination.network, recipient)? == [0; 32]
         {
             return Err("CCTP accounts cannot be zero addresses".into());
         }
@@ -325,10 +442,52 @@ impl CctpTransfer {
         &self.recipient
     }
     pub(crate) fn destination_caller(&self) -> &str {
-        &self.sender
+        if self.route.source.network.kind == "evm" && self.route.destination.network.kind == "evm" {
+            &self.sender
+        } else if self.route.destination.network.kind == "evm" {
+            "0x0000000000000000000000000000000000000000"
+        } else {
+            "11111111111111111111111111111111"
+        }
+    }
+    pub(crate) fn source_hash_matches(&self, left: &str, right: &str) -> bool {
+        if self.route.source.network.kind == "evm" {
+            left.eq_ignore_ascii_case(right)
+        } else {
+            left == right
+        }
+    }
+    pub(crate) fn mint_recipient_word(&self) -> Result<[u8; 32], String> {
+        if self.route.destination.network.kind == "svm" {
+            address_word(
+                &self.route.destination.network,
+                &crate::tx::solana::solana_associated_token_address(
+                    self.recipient(),
+                    self.route.destination.usdc,
+                )?,
+            )
+        } else {
+            address_word(&self.route.destination.network, self.recipient())
+        }
+    }
+    pub(crate) fn caller_word(&self) -> Result<[u8; 32], String> {
+        address_word(&self.route.destination.network, self.destination_caller())
     }
     pub(crate) fn amount(&self) -> u128 {
         self.amount
+    }
+}
+
+pub(crate) fn address_word(network: &NetworkConfig, address: &str) -> Result<[u8; 32], String> {
+    if network.kind == "evm" {
+        crate::tx::evm::evm_address_word(address)
+    } else if network.kind == "svm" {
+        use std::str::FromStr;
+        solana_pubkey::Pubkey::from_str(address)
+            .map(|key| key.to_bytes())
+            .map_err(|_| "Invalid Solana CCTP address".into())
+    } else {
+        Err("Unsupported CCTP address family".into())
     }
 }
 

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type {
   AssetIdentity,
+  CctpAttestationProgress,
   FiatCurrency,
   NetworkId,
   SignedTransaction,
@@ -60,6 +61,8 @@ export const walletApi = {
     invoke<WalletSession>("send_transaction", args),
   swapTokens: (args: { fromAsset: AssetIdentity; toAsset: AssetIdentity; amount: string }) =>
     invoke<WalletSession>("swap_tokens", args),
+  pollCctpAttestation: (args: { operationId: string }) =>
+    invoke<CctpAttestationProgress>("poll_cctp_attestation", args),
   checkTransactionStatus: (args: { txHash: string; network: NetworkId }) =>
     invoke<TxStatus | null>("check_transaction_status", args),
 };

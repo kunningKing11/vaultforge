@@ -11,8 +11,9 @@ use crate::cctp::CctpTransfer;
 use crate::derivation::signing_key_from_mnemonic;
 use crate::dto::{AssetIdentity, WalletSession};
 use crate::operations::{
-    EvmAttemptContext, Operation, OperationStep, TransactionAttempt, TransactionStatus,
-    TransactionStep, advance_operation, create_operation, reconcile_operation_with,
+    EvmAttemptContext, Operation, OperationKind, OperationStep, TransactionAttempt,
+    TransactionStatus, TransactionStep, advance_operation, create_operation,
+    reconcile_operation_with,
 };
 use crate::providers::cctp::{CctpPreflight, CctpSourcePreparation};
 use crate::state::{AppState, session_from_state};
@@ -68,7 +69,7 @@ pub(crate) struct CctpPreparedSource {
     pub(crate) context: EvmAttemptContext,
 }
 
-struct ActionGuard<'a> {
+pub(crate) struct ActionGuard<'a> {
     state: &'a Mutex<AppState>,
     key: (u64, String),
 }
@@ -81,7 +82,7 @@ impl Drop for ActionGuard<'_> {
     }
 }
 
-fn begin_action<'a>(
+pub(crate) fn begin_action<'a>(
     state: &'a Mutex<AppState>,
     id: &str,
 ) -> Result<(ActionGuard<'a>, u64, Operation), String> {
@@ -99,19 +100,21 @@ fn begin_action<'a>(
     let transfer = operation.cctp_transfer()?;
     if !wallet
         .addresses
-        .get("evm")
-        .is_some_and(|address| address.eq_ignore_ascii_case(&operation.sender))
+        .get(&transfer.route.source.network.address_key)
+        .is_some_and(|address| {
+            if transfer.route.source.network.kind == "evm" {
+                address.eq_ignore_ascii_case(&operation.sender)
+            } else {
+                address == &operation.sender
+            }
+        })
     {
         return Err("CCTP operation does not belong to this wallet".into());
     }
     let generation = state_guard.wallet_generation;
     let key = (
         generation,
-        format!(
-            "{}:{}",
-            transfer.route.source.network.chain_id()?,
-            operation.sender.to_ascii_lowercase()
-        ),
+        format!("{}:{}", transfer.route.source.network.id, operation.sender),
     );
     if !state_guard.cctp_actions.insert(key.clone()) {
         return Err("A CCTP action is already in progress for this account".into());
@@ -119,7 +122,7 @@ fn begin_action<'a>(
     Ok((ActionGuard { state, key }, generation, operation))
 }
 
-fn check_snapshot(
+pub(crate) fn check_snapshot(
     state: &AppState,
     generation: u64,
     snapshot: &Operation,
@@ -139,7 +142,7 @@ fn check_snapshot(
     Ok(index)
 }
 
-fn save_operation(
+pub(crate) fn save_operation(
     state: &mut AppState,
     generation: u64,
     before: &Operation,
@@ -176,15 +179,17 @@ pub(crate) fn create_source_operation(
         return Err("Wallet is locked".into());
     }
     let wallet = state.wallet.as_ref().ok_or("No wallet exists")?;
+    let route = crate::cctp::CctpRoute::for_networks(&source.network, &destination.network)?;
     let sender = wallet
         .addresses
-        .get("evm")
-        .ok_or("Wallet EVM address unavailable")?
+        .get(&route.source.network.address_key)
+        .ok_or("Wallet source-chain address unavailable")?
         .clone();
     // One active source workflow per account prevents double-click creation from
     // becoming two separately authorized burns. Completed/cancelled records remain.
     if wallet.operations.iter().any(|operation| {
-        operation.sender.eq_ignore_ascii_case(&sender)
+        operation.kind == OperationKind::Cctp
+            && operation.sender.eq_ignore_ascii_case(&sender)
             && !matches!(
                 operation.step,
                 OperationStep::Completed | OperationStep::Cancelled
@@ -253,6 +258,7 @@ fn prepared_view(
             TransactionStep::Approval => "approval",
             TransactionStep::Burn => "burn",
             TransactionStep::Mint => return Err("Mint is not implemented".into()),
+            TransactionStep::Send => return Err("Not a CCTP execution attempt".into()),
         }
         .into(),
         tx_hash: attempt.tx_hash.clone(),
@@ -403,6 +409,7 @@ pub(crate) fn validate_source_attempt(
         TransactionStep::Approval => build_approval_call(&transfer)?,
         TransactionStep::Burn => build_burn_call(&transfer)?,
         TransactionStep::Mint => return Err("Mint is not implemented".into()),
+        TransactionStep::Send => return Err("Not a CCTP execution attempt".into()),
     };
     let raw = hex::decode(
         attempt

@@ -1,10 +1,15 @@
 use super::{
     EvmNonceReservationGuard, ensure_native_balance_covers_debit,
-    ensure_token_balance_covers_amount, reconcile_send_status_with, required_native_debit,
+    ensure_token_balance_covers_amount, mark_send_cancelled, prepare_durable_send,
+    reconcile_send_status_with, required_native_debit, update_send_attempt,
 };
 use crate::activity::{activity, hash_secret, random_hex};
-use crate::dto::{FiatCurrency, Wallet};
+use crate::dto::{AssetIdentity, FiatCurrency, SignedTransaction, Wallet};
+use crate::operations::{
+    OperationKind, TransactionAttempt, TransactionStatus, TransactionStep, create_operation,
+};
 use crate::state::AppState;
+use crate::tx::evm_nonces::EvmNonceManager;
 use crate::tx::tx_status::{Execution, Finality, TxStatus};
 
 fn observation(label: &str) -> TxStatus {
@@ -56,6 +61,28 @@ fn test_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_current_thread()
         .build()
         .unwrap()
+}
+
+#[test]
+fn cancel_marks_durable_send_failed_and_ignores_submitted_attempts() {
+    let directory = send_directory("send-cancel");
+    let state = send_state(directory.join("wallet.json"));
+    let signed = signed_send("solana", "SolFrom", "SolTo", "blockhash", "0xhash");
+    let (operation_id, _) = prepare_durable_send(&state, &signed).unwrap().unwrap();
+
+    {
+        let mut guard = state.lock().unwrap();
+        assert!(mark_send_cancelled(&mut guard, "solana", "SolFrom", "blockhash").unwrap());
+    }
+    update_send_attempt(&state, &operation_id, "0xhash", |attempt| {
+        attempt.status = TransactionStatus::Submitted;
+    })
+    .unwrap();
+    {
+        let mut guard = state.lock().unwrap();
+        assert!(!mark_send_cancelled(&mut guard, "solana", "SolFrom", "blockhash").unwrap());
+    }
+    std::fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]
@@ -207,6 +234,35 @@ fn evm_nonce_reservation_guard_releases_on_drop() {
 }
 
 #[test]
+fn evm_send_operation_advances_recovered_nonce() {
+    let directory = send_directory("send-nonce");
+    let state = send_state(directory.join("wallet.json"));
+    let signed = signed_send("ethereum", "0xabc", "0xdef", "7", "0xhash");
+    let (operation_id, _) = prepare_durable_send(&state, &signed).unwrap().unwrap();
+    update_send_attempt(&state, &operation_id, "0xhash", |attempt| {
+        attempt.status = TransactionStatus::Submitted;
+    })
+    .unwrap();
+
+    let mut manager = EvmNonceManager::default();
+    manager.restore_send_operations(&operations(&state));
+    assert_eq!(manager.reserve(1, "0xabc", 7).unwrap(), 8);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn evm_signed_send_blocks_nonce_until_resolved() {
+    let directory = send_directory("send-signed-block");
+    let state = send_state(directory.join("wallet.json"));
+    let signed = signed_send("ethereum", "0xabc", "0xdef", "7", "0xhash");
+    prepare_durable_send(&state, &signed).unwrap().unwrap();
+    let mut manager = EvmNonceManager::default();
+    manager.restore_send_operations(&operations(&state));
+    assert!(manager.reserve(1, "0xabc", 7).is_err());
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn finalized_receipts_are_not_cleared_when_a_lookup_returns_none() {
     let state = send_state(PathBuf::from("/nonexistent/wallet.json"));
     state.lock().unwrap().wallet.as_mut().unwrap().activity[0].tx_status =
@@ -331,6 +387,190 @@ fn send_observations_save_changed_block_evidence_with_the_same_label() {
 }
 
 #[test]
+fn send_operation_activity_uses_send_kind_and_symbol() {
+    let directory = send_directory("send-activity");
+    let state = send_state(directory.join("wallet.json"));
+    let signed = signed_send("solana", "SolFrom", "SolTo", "blockhash", "0xhash");
+    let (operation_id, _) = prepare_durable_send(&state, &signed).unwrap().unwrap();
+    update_send_attempt(&state, &operation_id, "0xhash", |attempt| {
+        attempt.status = TransactionStatus::Submitted;
+    })
+    .unwrap();
+
+    let guard = state.lock().unwrap();
+    let operation = guard
+        .wallet
+        .as_ref()
+        .unwrap()
+        .operations
+        .iter()
+        .find(|operation| operation.id == operation_id)
+        .unwrap();
+    assert_eq!(operation.kind, OperationKind::Send);
+    let rendered = crate::operations::operation_activity(operation).unwrap();
+    assert_eq!(rendered.kind, "send");
+    assert_eq!(rendered.amount, "-1000000000 SOL");
+    assert_eq!(rendered.network.as_deref(), Some("solana"));
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn send_operation_blocks_second_broadcast_until_reconciled() {
+    let directory = send_directory("send-conflict");
+    let state = send_state(directory.join("wallet.json"));
+    let first = signed_send("solana", "SolFrom", "SolTo", "blockhash-1", "0xhash1");
+    let (operation_id, raw) = prepare_durable_send(&state, &first).unwrap().unwrap();
+    assert_eq!(raw, "raw-0xhash1");
+    let second = signed_send("solana", "SolFrom", "SolTo2", "blockhash-2", "0xhash2");
+    assert!(prepare_durable_send(&state, &second).is_err());
+    // Retrying the same hash reuses the durable attempt.
+    let retry = prepare_durable_send(&state, &first).unwrap().unwrap();
+    assert_eq!(retry.0, operation_id);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn send_operation_persists_signed_attempt_for_recovery() {
+    let directory = send_directory("send-persist");
+    let path = directory.join("wallet.json");
+    let state = send_state(path.clone());
+    let signed = signed_send("xrpl", "rFrom", "rTo", "42", "0xhash");
+    let (operation_id, _) = prepare_durable_send(&state, &signed).unwrap().unwrap();
+
+    assert!(path.exists());
+    let guard = state.lock().unwrap();
+    let operation = guard
+        .wallet
+        .as_ref()
+        .unwrap()
+        .operations
+        .iter()
+        .find(|operation| operation.id == operation_id)
+        .unwrap();
+    assert_eq!(operation.kind, OperationKind::Send);
+    assert_eq!(operation.attempts[0].status, TransactionStatus::Signed);
+    assert_eq!(operation.attempts[0].raw_tx.as_deref(), Some("raw-0xhash"));
+    assert_eq!(
+        operation.attempts[0].nonce_or_sequence.as_deref(),
+        Some("42")
+    );
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn send_save_failure_leaves_no_operation() {
+    let directory = send_directory("send-save-failure");
+    let state = send_state(directory.clone());
+    // Point storage at a directory so the atomic rename cannot replace it.
+    state.lock().unwrap().storage_path = directory.clone();
+    let signed = signed_send("solana", "SolFrom", "SolTo", "blockhash", "0xhash");
+    assert!(prepare_durable_send(&state, &signed).is_err());
+    assert!(
+        state
+            .lock()
+            .unwrap()
+            .wallet
+            .as_ref()
+            .unwrap()
+            .operations
+            .is_empty()
+    );
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn send_status_commit_updates_durable_cctp_operation() {
+    let directory = send_directory("send-cctp-status");
+    let state = send_state(directory.join("wallet.json"));
+    let mut operation = create_operation(
+        AssetIdentity::new(
+            "ethereum",
+            Some("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
+        ),
+        AssetIdentity::new(
+            "arbitrum_one",
+            Some("0xaf88d065e77c8cC2239327C5EDb3A432268e5831"),
+        ),
+        "0x1111111111111111111111111111111111111111".to_string(),
+        "0x2222222222222222222222222222222222222222".to_string(),
+        1_000_000,
+    )
+    .unwrap();
+    operation.attempts.push(TransactionAttempt {
+        step: TransactionStep::Burn,
+        status: TransactionStatus::Submitted,
+        tx_hash: "0xcctp".to_string(),
+        raw_tx: Some("0xraw".to_string()),
+        signature: None,
+        fee: None,
+        nonce_or_sequence: Some("1".to_string()),
+        error: None,
+        updated_at: "2026-10-08T00:00:00Z".to_string(),
+        tx_status: None,
+        evm_context: None,
+    });
+    state
+        .lock()
+        .unwrap()
+        .wallet
+        .as_mut()
+        .unwrap()
+        .operations
+        .push(operation);
+
+    let observed = test_runtime()
+        .block_on(reconcile_send_status_with(
+            &state,
+            "0xcctp",
+            "ethereum",
+            || std::future::ready(Ok(Some(observation("confirmed")))),
+        ))
+        .unwrap()
+        .unwrap();
+    assert_eq!(observed.finality, Finality::Finalized);
+    let guard = state.lock().unwrap();
+    let attempt = &guard.wallet.as_ref().unwrap().operations[0].attempts[0];
+    assert_eq!(attempt.status, TransactionStatus::Confirmed);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn send_status_commit_updates_durable_operation() {
+    let directory = send_directory("send-status");
+    let state = send_state(directory.join("wallet.json"));
+    let signed = signed_send("solana", "SolFrom", "SolTo", "blockhash", "0xhash");
+    let (operation_id, _) = prepare_durable_send(&state, &signed).unwrap().unwrap();
+
+    let observed = test_runtime()
+        .block_on(reconcile_send_status_with(
+            &state,
+            "0xhash",
+            "solana",
+            || std::future::ready(Ok(Some(observation("confirmed")))),
+        ))
+        .unwrap()
+        .unwrap();
+    assert_eq!(observed.execution, Execution::Succeeded);
+
+    let guard = state.lock().unwrap();
+    let attempt = &guard
+        .wallet
+        .as_ref()
+        .unwrap()
+        .operations
+        .iter()
+        .find(|operation| operation.id == operation_id)
+        .unwrap()
+        .attempts[0];
+    assert_eq!(attempt.status, TransactionStatus::Confirmed);
+    assert_eq!(
+        attempt.tx_status.as_ref().unwrap().finality,
+        Finality::Finalized
+    );
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn send_status_does_not_downgrade_a_concurrently_settled_record() {
     let state = send_state(PathBuf::from("/nonexistent/wallet.json"));
     let result = test_runtime()
@@ -355,6 +595,48 @@ fn send_status_does_not_downgrade_a_concurrently_settled_record() {
         state.lock().unwrap().wallet.as_ref().unwrap().activity[0].status,
         "confirmed"
     );
+}
+
+fn signed_send(network: &str, from: &str, to: &str, nonce: &str, hash: &str) -> SignedTransaction {
+    SignedTransaction {
+        token_address: None,
+        from: from.to_string(),
+        to: to.to_string(),
+        symbol: "SOL".to_string(),
+        amount: "1000000000".to_string(),
+        note: String::new(),
+        destination_tag: None,
+        network: network.to_string(),
+        nonce: nonce.to_string(),
+        signed_at: "2026-10-08T00:00:00Z".to_string(),
+        payload_hash: hash.to_string(),
+        signature: "signature".to_string(),
+        fee_amount: "5000".to_string(),
+        fee_symbol: "SOL".to_string(),
+        total_debit: "1000005000".to_string(),
+        post_balance: "1".to_string(),
+        decimals: 9,
+        fiat_value: 0.0,
+        raw_tx: Some(format!("raw-{hash}")),
+        tx_hash: Some(hash.to_string()),
+    }
+}
+
+fn send_directory(name: &str) -> std::path::PathBuf {
+    let directory = std::env::temp_dir().join(format!("vaultforge-{name}-{}", random_hex(16)));
+    std::fs::create_dir(&directory).unwrap();
+    directory
+}
+
+fn operations(state: &Mutex<AppState>) -> Vec<crate::operations::Operation> {
+    state
+        .lock()
+        .unwrap()
+        .wallet
+        .as_ref()
+        .unwrap()
+        .operations
+        .clone()
 }
 
 #[test]

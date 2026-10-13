@@ -5,6 +5,7 @@ mod activity;
 mod address;
 mod assets;
 mod cctp;
+mod cctp_attestation;
 mod cctp_execution;
 mod commands;
 mod derivation;
@@ -73,6 +74,7 @@ pub fn run() {
             commands::tx::cancel_signed_transaction,
             commands::tx::swap_tokens,
             commands::tx::check_transaction_status,
+            commands::cctp::poll_cctp_attestation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running VaultForge Wallet");

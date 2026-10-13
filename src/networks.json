@@ -335,7 +335,17 @@
         "name": "Solana",
         "decimals": 9,
         "coinGeckoId": "solana"
-      }
+      },
+      "tokens": [
+        {
+          "standard": "spl",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "tokenAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "coinGeckoId": "usd-coin"
+        }
+      ]
     },
     {
       "kind": "tron",

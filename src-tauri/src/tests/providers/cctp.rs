@@ -15,15 +15,17 @@ use crate::cctp::{CctpEnvironment, CctpTransfer, tests::transfer};
 use crate::providers::evm::{evm_max_native_fee, fetch_evm_allowance};
 use crate::tx::cctp::{build_approval_call, build_burn_call, build_mint_call};
 
-struct MockRpc {
-    url: String,
-    requests: Arc<Mutex<Vec<serde_json::Value>>>,
+pub(crate) struct MockRpc {
+    pub(crate) url: String,
+    pub(crate) requests: Arc<Mutex<Vec<serde_json::Value>>>,
     stop: Arc<AtomicBool>,
     thread: Option<thread::JoinHandle<()>>,
 }
 
 impl MockRpc {
-    fn new(handler: impl Fn(&serde_json::Value) -> serde_json::Value + Send + 'static) -> Self {
+    pub(crate) fn new(
+        handler: impl Fn(&serde_json::Value) -> serde_json::Value + Send + 'static,
+    ) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());

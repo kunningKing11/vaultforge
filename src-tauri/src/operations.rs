@@ -10,6 +10,15 @@ use crate::providers::http::ProviderClients;
 use crate::providers::tx_observation_provider;
 use crate::tx::tx_status::{Execution, Finality, TxStatus};
 
+/// Distinguishes the CCTP route workflow from a single-transaction chain send.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum OperationKind {
+    #[default]
+    Cctp,
+    Send,
+}
+
 /// A transfer workflow retained in encrypted storage for restart recovery.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct Operation {
@@ -20,6 +29,12 @@ pub(crate) struct Operation {
     pub(crate) recipient: String,
     pub(crate) amount_base_units: String,
     pub(crate) step: OperationStep,
+    #[serde(default)]
+    pub(crate) kind: OperationKind,
+    #[serde(default)]
+    pub(crate) symbol: Option<String>,
+    #[serde(default)]
+    pub(crate) note: Option<String>,
     #[serde(default)]
     pub(crate) required_source_finality: Finality,
     #[serde(default)]
@@ -74,8 +89,18 @@ pub(crate) struct EvmAttemptContext {
 }
 
 /// CCTP recovery payload, separate from transaction attempts and workflow progress.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct CctpData {
+    #[serde(default)]
+    pub(crate) evidence: Option<crate::cctp_attestation::BurnEvidence>,
+    #[serde(default)]
+    pub(crate) nonce: Option<String>,
+    #[serde(default)]
+    pub(crate) simulated: bool,
+    #[serde(default)]
+    pub(crate) signature_verified: bool,
+    #[serde(default)]
+    pub(crate) poll: Option<crate::cctp_attestation::AttestationPoll>,
     pub(crate) message: Vec<u8>,
     #[serde(default)]
     pub(crate) attestation: Option<Vec<u8>>,
@@ -90,6 +115,7 @@ pub(crate) enum OperationStep {
     Mint,
     Completed,
     Cancelled,
+    Send,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -97,6 +123,7 @@ pub(crate) enum TransactionStep {
     Approval,
     Burn,
     Mint,
+    Send,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -145,6 +172,9 @@ pub(crate) fn create_operation(
         recipient,
         amount_base_units: amount_base_units.to_string(),
         step: OperationStep::Approval,
+        kind: OperationKind::Cctp,
+        symbol: None,
+        note: None,
         required_source_finality: transfer.route.required_source_finality(),
         attempts: Vec::new(),
         cctp: None,
@@ -156,9 +186,45 @@ pub(crate) fn create_operation(
     Ok(operation)
 }
 
+/// Creates a durable record for a single-transaction chain send. The signed
+/// attempt is persisted before broadcast so a lost response stays recoverable.
+pub(crate) fn create_send_operation(
+    asset: AssetIdentity,
+    sender: String,
+    recipient: String,
+    amount_base_units: u128,
+    symbol: String,
+    note: String,
+) -> Operation {
+    let asset = AssetIdentity::new(asset.network.as_str(), asset.token_address.as_deref());
+    let now = Utc::now().to_rfc3339();
+    Operation {
+        id: random_hex(16),
+        source_asset: asset.clone(),
+        destination_asset: asset,
+        sender,
+        recipient,
+        amount_base_units: amount_base_units.to_string(),
+        step: OperationStep::Send,
+        kind: OperationKind::Send,
+        symbol: Some(symbol),
+        note: Some(note),
+        required_source_finality: Finality::Finalized,
+        attempts: Vec::new(),
+        cctp: None,
+        deployment: None,
+        created_at: now.clone(),
+        updated_at: now,
+        last_error: None,
+    }
+}
+
 impl Operation {
     /// Legacy records remain readable/reconcilable, but cannot authorize execution.
     pub(crate) fn cctp_transfer(&self) -> Result<CctpTransfer, String> {
+        if self.kind != OperationKind::Cctp {
+            return Err("Operation is not a CCTP transfer".into());
+        }
         let transfer = CctpTransfer::new(
             &self.source_asset,
             &self.destination_asset,
@@ -267,13 +333,37 @@ fn source_finality_reached(operation: &Operation) -> bool {
     })
 }
 
-fn attestation_available(operation: &Operation) -> bool {
-    operation.cctp.as_ref().is_some_and(|cctp| {
-        !cctp.message.is_empty()
-            && cctp
-                .attestation
-                .as_ref()
-                .is_some_and(|attestation| !attestation.is_empty())
+pub(crate) fn attestation_available(operation: &Operation) -> bool {
+    let Ok(transfer) = operation.cctp_transfer() else {
+        return false;
+    };
+    operation.cctp.as_ref().is_some_and(|data| {
+        (if transfer.route.destination.network.kind == "evm" {
+            data.simulated
+        } else {
+            data.signature_verified
+        }) && data
+            .attestation
+            .as_ref()
+            .is_some_and(|bytes| !bytes.is_empty() && bytes.len() % 65 == 0)
+            && data.evidence.as_ref().is_some_and(|evidence| {
+                crate::cctp_attestation::validate_bound_message(operation, evidence, &data.message)
+                    .is_ok()
+                    && operation.attempts.iter().any(|attempt| {
+                        attempt.step == TransactionStep::Burn
+                            && transfer
+                                .source_hash_matches(&attempt.tx_hash, &evidence.transaction_hash)
+                            && attempt.tx_status.as_ref().is_some_and(|status| {
+                                status.execution == Execution::Succeeded
+                                    && status
+                                        .finality
+                                        .satisfies(&operation.required_source_finality)
+                                    && status.block_height == evidence.block_height
+                                    && status.block_hash == evidence.block_hash
+                                    && status.slot == evidence.slot
+                            })
+                    })
+            })
     })
 }
 
@@ -314,8 +404,8 @@ pub(crate) fn record_transaction_attempt(
     Ok(())
 }
 
-/// Stores nonempty, size-bounded payloads without advancing the operation.
-/// Message binding and attestation authenticity are not yet verified.
+/// Stores bound V2 payloads without advancing the operation. Destination simulation
+/// is a separate mandatory gate; local signature recovery is not performed.
 pub(crate) fn record_attestation(
     operation: &mut Operation,
     message: Vec<u8>,
@@ -336,11 +426,22 @@ pub(crate) fn record_attestation(
     if attestation.len() > 16_384 {
         return Err("Attestation is too large".to_string());
     }
-    // TODO: Verify the message's source domain, nonce, and amount against this operation.
-    operation.cctp = Some(CctpData {
-        message,
-        attestation: Some(attestation),
-    });
+    let evidence = operation
+        .cctp
+        .as_ref()
+        .and_then(|data| data.evidence.as_ref())
+        .ok_or("CCTP burn evidence must be bound before attestation")?;
+    crate::cctp_attestation::validate_bound_message(operation, evidence, &message)?;
+    if attestation.len() % 65 != 0 {
+        return Err("Invalid CCTP attestation signature length".into());
+    }
+    let nonce = format!("0x{}", hex::encode(&message[12..44]));
+    let data = operation.cctp.as_mut().ok_or("CCTP evidence missing")?;
+    data.message = message;
+    data.attestation = Some(attestation);
+    data.nonce = Some(nonce);
+    data.simulated = false;
+    data.signature_verified = false;
     operation.updated_at = Utc::now().to_rfc3339();
     if operation
         .last_error
@@ -410,14 +511,31 @@ pub(crate) async fn reconcile_operation(
         });
         async move {
             if let Some(config) = config {
-                crate::providers::evm::fetch_evm_tx_observation(clients.http(), &config, &hash)
+                if config.kind == "svm" {
+                    crate::providers::solana::fetch_solana_tx_observation(
+                        clients.http(),
+                        &config,
+                        &hash,
+                    )
                     .await
+                } else {
+                    crate::providers::evm::fetch_evm_tx_observation(clients.http(), &config, &hash)
+                        .await
+                }
             } else {
                 crate::providers::fetch_tx_observation(clients.http(), &network, &hash).await
             }
         }
     })
     .await
+}
+
+/// The network whose provider confirms an attempt, based on its leg.
+pub(crate) fn operation_step_network(operation: &Operation, step: TransactionStep) -> String {
+    match step {
+        TransactionStep::Mint => operation.destination_asset.network.clone(),
+        _ => operation.source_asset.network.clone(),
+    }
 }
 
 pub(crate) async fn reconcile_operation_with<F, Fut>(
@@ -456,12 +574,7 @@ where
         }
         let leg = operation.attempts[index].step;
         let hash = operation.attempts[index].tx_hash.clone();
-        let network = match leg {
-            TransactionStep::Approval | TransactionStep::Burn => {
-                operation.source_asset.network.clone()
-            }
-            TransactionStep::Mint => operation.destination_asset.network.clone(),
-        };
+        let network = operation_step_network(operation, leg);
         let provider = if operation.deployment.is_some() {
             operation.cctp_transfer().map(|_| ())
         } else {
@@ -519,6 +632,9 @@ where
 }
 
 pub(crate) fn operation_activity(operation: &Operation) -> Result<Activity, String> {
+    if operation.kind == OperationKind::Send {
+        return Ok(send_operation_activity(operation));
+    }
     let title = match operation.step {
         OperationStep::Approval => "Bridging approval pending",
         OperationStep::Burn => "Bridging burn pending",
@@ -532,6 +648,7 @@ pub(crate) fn operation_activity(operation: &Operation) -> Result<Activity, Stri
         OperationStep::Mint => "Bridging mint pending",
         OperationStep::Completed => "Bridged",
         OperationStep::Cancelled => "Bridging cancelled",
+        OperationStep::Send => "Transfer sent",
     }
     .to_string();
     let current_leg = match operation.step {
@@ -540,6 +657,7 @@ pub(crate) fn operation_activity(operation: &Operation) -> Result<Activity, Stri
         OperationStep::Mint | OperationStep::Completed | OperationStep::Cancelled => {
             TransactionStep::Mint
         }
+        OperationStep::Send => TransactionStep::Send,
     };
     let current_attempt = operation
         .attempts
@@ -599,6 +717,51 @@ pub(crate) fn operation_activity(operation: &Operation) -> Result<Activity, Stri
         fee: None,
         tx_status: displayed_attempt.and_then(|attempt| attempt.tx_status.clone()),
     })
+}
+
+/// Renders a durable chain send as the frontend `send` activity it replaces.
+fn send_operation_activity(operation: &Operation) -> Activity {
+    let attempt = operation
+        .attempts
+        .iter()
+        .rfind(|attempt| attempt.step == TransactionStep::Send);
+    let tx_status = attempt.and_then(|attempt| attempt.tx_status.clone());
+    let status = match &tx_status {
+        Some(observation) => observation.legacy_label().to_string(),
+        None if attempt.is_some_and(|attempt| attempt.status == TransactionStatus::Failed) => {
+            "failed".to_string()
+        }
+        None => "pending".to_string(),
+    };
+    let subtitle = match operation.note.as_deref() {
+        Some(note) if !note.trim().is_empty() => note.to_string(),
+        _ => format!("Sent to {}", short_address(&operation.recipient)),
+    };
+    Activity {
+        asset: Some(operation.source_asset.clone()),
+        counter_asset: None,
+        id: operation.id.clone(),
+        kind: "send".to_string(),
+        title: "Transfer sent".to_string(),
+        subtitle,
+        amount: format!(
+            "-{} {}",
+            operation.amount_base_units,
+            operation.symbol.as_deref().unwrap_or("")
+        ),
+        status,
+        timestamp: operation.updated_at.clone(),
+        hash: attempt
+            .map(|attempt| attempt.tx_hash.clone())
+            .unwrap_or_default(),
+        from: Some(operation.sender.clone()),
+        to: Some(operation.recipient.clone()),
+        network: Some(operation.source_asset.network.clone()),
+        payload_hash: attempt.map(|attempt| attempt.tx_hash.clone()),
+        signature: attempt.and_then(|attempt| attempt.signature.clone()),
+        fee: attempt.and_then(|attempt| attempt.fee.clone()),
+        tx_status,
+    }
 }
 
 #[cfg(test)]

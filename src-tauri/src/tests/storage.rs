@@ -49,6 +49,7 @@ fn encrypts_and_decrypts_wallet_payload() {
     wallet.operations[0].cctp = Some(CctpData {
         message: vec![1, 2],
         attestation: Some(vec![3, 4]),
+        ..CctpData::default()
     });
     let mut observation = TxStatus::new(Execution::Succeeded, Finality::Finalized);
     observation.block_height = Some(42);
@@ -58,7 +59,7 @@ fn encrypts_and_decrypts_wallet_payload() {
     wallet.operations[0].attempts[0].tx_status = Some(observation);
     let (key, salt) = derive_storage_key(wallet_password, None).unwrap();
     let mut stored = encrypt_wallet(&wallet, &key, &salt).unwrap();
-    assert_eq!(stored.version, 9);
+    assert_eq!(stored.version, 11);
     assert!(!serde_json::to_string(&stored).unwrap().contains("TREZOR"));
 
     let decrypted = decrypt_wallet(&stored, wallet_password).unwrap();
@@ -101,7 +102,7 @@ fn encrypts_and_decrypts_wallet_payload() {
     let mut ordinary_wallet = wallet.clone();
     ordinary_wallet.bip39_passphrase.clear();
     let ordinary_stored = encrypt_wallet(&ordinary_wallet, &key, &salt).unwrap();
-    assert_eq!(ordinary_stored.version, 9);
+    assert_eq!(ordinary_stored.version, 11);
     assert!(
         decrypt_wallet(&ordinary_stored, wallet_password)
             .unwrap()
@@ -114,7 +115,7 @@ fn encrypts_and_decrypts_wallet_payload() {
     let migrated = decrypt_wallet(&stored, wallet_password).unwrap();
     assert!(!migrated.wallet().use_crypto_symbols);
 
-    for version in [1, 10] {
+    for version in [1, 12] {
         stored.version = version;
         assert_eq!(
             decrypt_wallet(&stored, wallet_password).err().unwrap(),

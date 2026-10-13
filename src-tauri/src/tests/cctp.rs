@@ -15,6 +15,150 @@ pub(crate) fn transfer(environment: CctpEnvironment) -> CctpTransfer {
 }
 
 #[test]
+fn binds_all_solana_directions_with_native_recipient_and_caller_policies() {
+    let solana = &super::SOLANA_DEPLOYMENT;
+    let mut directions = 0;
+    for evm in super::MAINNET_DEPLOYMENTS {
+        for (source, destination, sender, recipient) in [
+            (
+                solana,
+                evm,
+                "Vote111111111111111111111111111111111111111",
+                "0x4444444444444444444444444444444444444444",
+            ),
+            (
+                evm,
+                solana,
+                "0x3333333333333333333333333333333333333333",
+                "Vote111111111111111111111111111111111111111",
+            ),
+        ] {
+            let mut operation = crate::operations::create_operation(
+                AssetIdentity::new(source.id, Some(source.usdc)),
+                AssetIdentity::new(destination.id, Some(destination.usdc)),
+                sender.into(),
+                recipient.into(),
+                1000000,
+            )
+            .unwrap();
+            let transfer = operation.cctp_transfer().unwrap();
+            assert_eq!(transfer.caller_word().unwrap(), [0; 32]);
+            let mut burn = crate::tests::sample_attempt(
+                crate::operations::TransactionStep::Burn,
+                crate::operations::TransactionStatus::Submitted,
+            );
+            if source.id == "solana" {
+                burn.tx_hash = bs58::encode([1; 64]).into_string();
+            }
+            operation.attempts.push(burn.clone());
+            let mut evidence = crate::cctp_attestation::tests::evidence(&operation);
+            if source.id == "solana" {
+                evidence.transaction_hash = burn.tx_hash;
+                evidence.block_height = None;
+                evidence.block_hash = None;
+                evidence.message_log_index = None;
+                evidence.deposit_log_index = None;
+                evidence.slot = Some(42);
+                evidence.message_account = Some(sender.into());
+            }
+            let message = crate::cctp_attestation::tests::attested(&operation);
+            crate::cctp_attestation::validate_bound_message(&operation, &evidence, &message)
+                .unwrap();
+            if destination.id == "solana" {
+                assert_ne!(
+                    transfer.mint_recipient_word().unwrap(),
+                    crate::cctp::address_word(&transfer.route.destination.network, recipient)
+                        .unwrap()
+                );
+            }
+            assert_eq!(
+                transfer.route.source.network.chain_id,
+                if source.id == "solana" {
+                    None
+                } else {
+                    source.evm_chain_id
+                }
+            );
+            let mut wrong = operation.source_asset.clone();
+            if source.id == "solana" {
+                wrong.token_address = Some(source.usdc.to_ascii_lowercase());
+                assert!(
+                    CctpTransfer::new(
+                        &wrong,
+                        &operation.destination_asset,
+                        sender,
+                        recipient,
+                        1000000
+                    )
+                    .is_err()
+                );
+            }
+            directions += 1;
+        }
+    }
+    assert_eq!(directions, 14);
+}
+
+#[test]
+fn builds_and_binds_all_supported_mainnet_evm_directions() {
+    let deployments = super::MAINNET_DEPLOYMENTS;
+    let mut routes = 0;
+    for source in deployments {
+        for destination in deployments {
+            if source.id == destination.id {
+                assert!(CctpRoute::for_networks(source.id, destination.id).is_err());
+                continue;
+            }
+            let transfer = CctpTransfer::new(
+                &AssetIdentity::new(source.id, Some(source.usdc)),
+                &AssetIdentity::new(destination.id, Some(destination.usdc)),
+                "0x3333333333333333333333333333333333333333",
+                "0x4444444444444444444444444444444444444444",
+                1000000,
+            )
+            .unwrap();
+            assert_eq!(transfer.route.source.domain, source.domain);
+            assert_eq!(transfer.route.destination.domain, destination.domain);
+            let call = crate::tx::cctp::build_burn_call(&transfer).unwrap();
+            assert_eq!(
+                &call.data[36..68],
+                &crate::tx::evm::evm_uint_word(destination.domain as u128)
+            );
+            assert_eq!(
+                transfer.route.source.network.chain_id().unwrap(),
+                source.evm_chain_id.unwrap()
+            );
+            assert_eq!(
+                transfer.route.source.network.native_asset.symbol,
+                source.symbol
+            );
+            let mut operation = crate::operations::create_operation(
+                AssetIdentity::new(source.id, Some(source.usdc)),
+                AssetIdentity::new(destination.id, Some(destination.usdc)),
+                transfer.sender().into(),
+                transfer.recipient().into(),
+                1000000,
+            )
+            .unwrap();
+            operation.attempts.push(crate::tests::sample_attempt(
+                crate::operations::TransactionStep::Burn,
+                crate::operations::TransactionStatus::Submitted,
+            ));
+            let evidence = crate::cctp_attestation::tests::evidence(&operation);
+            let message = crate::cctp_attestation::tests::attested(&operation);
+            crate::cctp_attestation::validate_bound_message(&operation, &evidence, &message)
+                .unwrap();
+            assert_eq!(
+                operation.cctp_transfer().unwrap().route.identity().unwrap(),
+                transfer.route.identity().unwrap()
+            );
+            routes += 1;
+        }
+    }
+    assert_eq!(routes, 42);
+}
+
+#[test]
 fn declares_separate_mainnet_and_sepolia_deployments() {
     for (environment, chains, host) in [
         (
@@ -73,10 +217,9 @@ fn rejects_unsupported_assets_routes_accounts_and_amounts() {
                 Some("0xff970a61a04b1ca14834a43f5de4533ebddb5cc8"),
             ),
         ),
-        (destination.clone(), source.clone()),
         (
             source.clone(),
-            AssetIdentity::new("base", Some(t.route.destination.usdc)),
+            AssetIdentity::new("bnb", Some(t.route.destination.usdc)),
         ),
         (
             source.clone(),
