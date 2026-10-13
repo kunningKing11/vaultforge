@@ -1,7 +1,5 @@
 //! Circle V2 reads and destination contract verification without submission.
 
-use std::time::Duration;
-
 use crate::cctp::CctpTransfer;
 use crate::cctp_attestation::{
     AttestationCheck, AttestationProvider, MAX_API_BYTES, MessageResponse,
@@ -42,13 +40,10 @@ async fn fetch_messages_at(
     url: &str,
     hash: &str,
 ) -> Result<MessageResponse, String> {
-    let response = client
-        .get(url)
-        .query(&[("transactionHash", hash)])
-        .timeout(Duration::from_secs(15))
-        .send()
-        .await
-        .map_err(|error| format!("CCTP attestation request failed: {error}"))?;
+    // Same retry discipline as RPC and fee reads; the app client also carries
+    // a 15s global timeout, so a stalled attestation poll cannot hang.
+    let response =
+        crate::providers::http::resilient_get(client, url, &[("transactionHash", hash)]).await?;
     let requested = reqwest::Url::parse(url).map_err(|_| "Invalid CCTP API URL")?;
     if response.url().origin() != requested.origin() {
         return Err("CCTP API redirected outside the configured deployment".into());
@@ -78,12 +73,34 @@ pub(crate) async fn simulate_message(
     message: &[u8],
     attestation: &[u8],
 ) -> Result<(), String> {
+    simulate_message_from(
+        client,
+        transfer,
+        message,
+        attestation,
+        transfer.destination_caller(),
+    )
+    .await
+}
+
+pub(crate) async fn simulate_message_from(
+    client: &reqwest::Client,
+    transfer: &CctpTransfer,
+    message: &[u8],
+    attestation: &[u8],
+    caller: &str,
+) -> Result<(), String> {
     let call = build_mint_call(transfer, message, attestation)?;
     let network = &transfer.route.destination.network;
     verify_evm_chain(client, network).await?;
-    let json = rpc_post(client,network.rpc_url()?,&serde_json::json!({"jsonrpc":"2.0","id":1,"method":"eth_call","params":[{
-        "from":transfer.destination_caller(),"to":call.to,"value":"0x0","data":format!("0x{}",hex::encode(call.data))
-    },"latest"]})).await?;
+    let json = rpc_post(
+        client,
+        network.rpc_url()?,
+        &serde_json::json!({"jsonrpc":"2.0","id":1,"method":"eth_call","params":[{
+        "from":caller,"to":call.to,"value":"0x0","data":format!("0x{}",hex::encode(call.data))
+    },"latest"]}),
+    )
+    .await?;
     let result = json_rpc_result(&json, "CCTP destination simulation")?
         .as_str()
         .ok_or("Invalid CCTP simulation result")?;
@@ -94,6 +111,17 @@ pub(crate) async fn simulate_message(
 }
 
 impl AttestationProvider for CircleAttestationProvider<'_> {
+    async fn consumed_destination(
+        &self,
+        operation: &crate::operations::Operation,
+    ) -> Result<(bool, Option<crate::operations::MintEvidence>, Option<u64>), String> {
+        crate::providers::cctp_execution::LiveCctpProvider {
+            client: self.client,
+        }
+        .replay_page(operation)
+        .await
+    }
+
     async fn receipt(
         &self,
         transfer: &CctpTransfer,

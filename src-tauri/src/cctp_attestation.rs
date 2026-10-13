@@ -68,6 +68,14 @@ pub(crate) trait AttestationProvider {
         transfer: &CctpTransfer,
         hash: &str,
     ) -> impl Future<Output = Result<MessageResponse, String>> + Send;
+    fn consumed_destination(
+        &self,
+        _operation: &Operation,
+    ) -> impl Future<
+        Output = Result<(bool, Option<crate::operations::MintEvidence>, Option<u64>), String>,
+    > + Send {
+        async { Ok((false, None, None)) }
+    }
     fn verify(
         &self,
         transfer: &CctpTransfer,
@@ -353,10 +361,14 @@ pub(crate) fn decode_burn_receipt(
                 && sender == evm_address_word(transfer.sender())?
                 && finality == evm_uint_word(STANDARD_FINALITY_THRESHOLD as u128)
                 && data[..32] == evm_uint_word(transfer.amount())
-                && data[32..64] == evm_address_word(transfer.recipient())?
+                && data[32..64] == transfer.mint_recipient_word()?
                 && data[64..96] == evm_uint_word(transfer.route.destination.domain as u128)
-                && data[96..128] == evm_address_word(transfer.route.destination.token_messenger)?
-                && data[128..160] == evm_address_word(transfer.destination_caller())?
+                && data[96..128]
+                    == address_word(
+                        &transfer.route.destination.network,
+                        transfer.route.destination.token_messenger,
+                    )?
+                && data[128..160] == transfer.caller_word()?
                 && data[160..192] == [0; 32]
             {
                 deposits.push(index);
@@ -620,8 +632,29 @@ async fn poll_once<P: AttestationProvider + Sync>(
         MessageResponse::RateLimited(seconds) => Ok(seconds.clamp(10, 300)),
         MessageResponse::Messages(json) => {
             if let Some((message, attestation)) = select_attestation(operation, &evidence, &json)? {
-                let check = provider.verify(&transfer, &message, &attestation).await?;
+                let verification = provider.verify(&transfer, &message, &attestation).await;
                 crate::operations::record_attestation(operation, message, attestation)?;
+                let check = match verification {
+                    Ok(check) => check,
+                    Err(error) if transfer.route.destination.network.kind == "evm" => {
+                        let (consumed, proof, cursor) =
+                            provider.consumed_destination(operation).await?;
+                        if !consumed {
+                            return Err(error);
+                        }
+                        let data = operation.cctp.as_mut().ok_or("CCTP evidence missing")?;
+                        data.replay_cursor = cursor;
+                        if let Some(proof) = proof {
+                            data.mint_evidence = Some(proof);
+                            AttestationCheck::DestinationSimulation
+                        } else {
+                            // Retain the bound pair and scan cursor, unauthenticated;
+                            // no signing or completion is allowed without event proof.
+                            return Ok(10);
+                        }
+                    }
+                    Err(error) => return Err(error),
+                };
                 let data = operation.cctp.as_mut().ok_or("CCTP evidence missing")?;
                 match check {
                     AttestationCheck::DestinationSimulation
@@ -650,3 +683,72 @@ async fn poll_once<P: AttestationProvider + Sync>(
 #[cfg(test)]
 #[path = "tests/cctp_attestation.rs"]
 pub(crate) mod tests;
+
+/// Explicitly refresh the pair only when no mint can still be pending. Nonce is
+/// pinned across refreshes; replacing a source burn is never part of this action.
+pub(crate) async fn refresh_attestation<P: AttestationProvider + Sync>(
+    state: &Mutex<AppState>,
+    provider: &P,
+    id: &str,
+) -> Result<AttestationProgress, String> {
+    use crate::operations::TransactionStatus;
+    let (_action, generation, before) = begin_action(state, id)?;
+    if !matches!(
+        before.step,
+        OperationStep::AwaitingAttestation | OperationStep::Mint
+    ) {
+        return Err("Transfer is not awaiting a destination mint".into());
+    }
+    for attempt in before
+        .attempts
+        .iter()
+        .filter(|a| a.step == TransactionStep::Mint)
+    {
+        let failed_final = attempt.tx_status.as_ref().is_some_and(|status| {
+            status.execution == Execution::Failed && status.finality == Finality::Finalized
+        });
+        let expired = attempt.status == TransactionStatus::Failed
+            && attempt.error.as_deref() == Some("Blockhash expired without inclusion");
+        if !matches!(
+            attempt.status,
+            TransactionStatus::Signed | TransactionStatus::Superseded
+        ) && !failed_final
+            && !expired
+        {
+            return Err(
+                "Reconcile the pending or uncertain mint before refreshing its attestation".into(),
+            );
+        }
+    }
+    let mut after = before.clone();
+    after.step = OperationStep::AwaitingAttestation;
+    let old_nonce = before.cctp.as_ref().and_then(|data| data.nonce.clone());
+    let data = after.cctp.get_or_insert_with(Default::default);
+    data.simulated = false;
+    data.signature_verified = false;
+    data.poll = None;
+    poll_once(provider, &mut after).await?;
+    if !crate::operations::attestation_available(&after) {
+        return Err(
+            "A refreshed verified pair is not available yet; saved mint remains unchanged".into(),
+        );
+    }
+    if old_nonce.is_some()
+        && after.cctp.as_ref().and_then(|data| data.nonce.as_ref()) != old_nonce.as_ref()
+    {
+        return Err("Refreshed attestation changed the pinned mint nonce".into());
+    }
+    for attempt in after
+        .attempts
+        .iter_mut()
+        .filter(|a| a.step == TransactionStep::Mint && a.status == TransactionStatus::Signed)
+    {
+        attempt.status = TransactionStatus::Superseded;
+        attempt.error = Some("Unsubmitted mint retired for explicit attestation refresh".into());
+    }
+    after.last_error = None;
+    after.updated_at = Utc::now().to_rfc3339();
+    let mut state = state.lock().map_err(|_| "State lock failed")?;
+    save_operation(&mut state, generation, &before, &after)?;
+    Ok(progress(&state, &after, Utc::now().timestamp()))
+}

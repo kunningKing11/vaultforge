@@ -36,13 +36,13 @@ fn bytes(value: &serde_json::Value) -> Result<Vec<u8>, String> {
         .decode(encoded)
         .map_err(|_| "Invalid Solana account data".into())
 }
-fn account_data(value: &serde_json::Value, owner: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn account_data(value: &serde_json::Value, owner: &str) -> Result<Vec<u8>, String> {
     if value["owner"] != owner || value["executable"] != false {
         return Err("Solana CCTP account owner mismatch".into());
     }
     bytes(value)
 }
-fn keys(transaction: &serde_json::Value) -> Result<Vec<String>, String> {
+pub(crate) fn keys(transaction: &serde_json::Value) -> Result<Vec<String>, String> {
     let mut keys = transaction["transaction"]["message"]["accountKeys"]
         .as_array()
         .ok_or("Missing Solana transaction keys")?
@@ -65,7 +65,7 @@ fn keys(transaction: &serde_json::Value) -> Result<Vec<String>, String> {
     }
     Ok(keys)
 }
-fn instruction_key<'a>(
+pub(crate) fn instruction_key<'a>(
     instruction: &serde_json::Value,
     position: usize,
     keys: &'a [String],
@@ -77,7 +77,7 @@ fn instruction_key<'a>(
         .map(String::as_str)
         .ok_or_else(|| "Solana instruction account out of range".into())
 }
-fn instruction_data(instruction: &serde_json::Value) -> Result<Vec<u8>, String> {
+pub(crate) fn instruction_data(instruction: &serde_json::Value) -> Result<Vec<u8>, String> {
     let encoded = instruction["data"]
         .as_str()
         .ok_or("Missing Solana instruction data")?;
@@ -256,7 +256,7 @@ pub(crate) fn decode_source_evidence(
     })
 }
 
-async fn verify_mainnet(
+pub(crate) async fn verify_mainnet(
     client: &reqwest::Client,
     transfer: &CctpTransfer,
     destination: bool,

@@ -27,6 +27,8 @@ pub(crate) struct Operation {
     pub(crate) destination_asset: AssetIdentity,
     pub(crate) sender: String,
     pub(crate) recipient: String,
+    #[serde(default)]
+    pub(crate) destination_signer: Option<String>,
     pub(crate) amount_base_units: String,
     pub(crate) step: OperationStep,
     #[serde(default)]
@@ -70,6 +72,42 @@ pub(crate) struct TransactionAttempt {
     pub(crate) tx_status: Option<TxStatus>,
     #[serde(default)]
     pub(crate) evm_context: Option<EvmAttemptContext>,
+    #[serde(default)]
+    pub(crate) solana_context: Option<SolanaAttemptContext>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct SolanaLookup {
+    pub(crate) address: String,
+    pub(crate) addresses: Vec<String>,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct SolanaAttemptContext {
+    pub(crate) payer: String,
+    pub(crate) blockhash: String,
+    pub(crate) last_valid_height: u64,
+    #[serde(with = "u64_units")]
+    pub(crate) fee_lamports: u64,
+    #[serde(with = "u64_units")]
+    pub(crate) rent_lamports: u64,
+    pub(crate) event_account: Option<String>,
+    pub(crate) fee_recipient: Option<String>,
+    pub(crate) lookup: Option<SolanaLookup>,
+    pub(crate) setup_slot: Option<u64>,
+    pub(crate) create_ata: bool,
+    pub(crate) provisional_destination_fee: Option<String>,
+}
+
+mod u64_units {
+    use serde::{Deserialize, Deserializer, Serializer};
+    pub(super) fn serialize<S: Serializer>(value: &u64, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&value.to_string())
+    }
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u64, D::Error> {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(serde::de::Error::custom)
+    }
 }
 
 /// Exact unsigned EVM context corresponding to the encrypted signed bytes.
@@ -92,6 +130,14 @@ pub(crate) struct EvmAttemptContext {
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct CctpData {
     #[serde(default)]
+    pub(crate) mint_evidence: Option<MintEvidence>,
+    #[serde(default)]
+    pub(crate) replay_cursor: Option<u64>,
+    #[serde(default)]
+    pub(crate) native_lookup: Option<SolanaLookup>,
+    #[serde(default)]
+    pub(crate) replay_signature: Option<String>,
+    #[serde(default)]
     pub(crate) evidence: Option<crate::cctp_attestation::BurnEvidence>,
     #[serde(default)]
     pub(crate) nonce: Option<String>,
@@ -104,6 +150,29 @@ pub(crate) struct CctpData {
     pub(crate) message: Vec<u8>,
     #[serde(default)]
     pub(crate) attestation: Option<Vec<u8>>,
+}
+
+/// Finalized destination execution with decoded message and mint logs.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct MintEvidence {
+    pub(crate) transaction_hash: String,
+    pub(crate) message_hash: String,
+    pub(crate) observation: TxStatus,
+}
+
+pub(crate) fn mint_evidence_matches(operation: &Operation, hash: &str) -> bool {
+    use sha3::{Digest, Keccak256};
+    operation.cctp.as_ref().is_some_and(|data| {
+        data.mint_evidence.as_ref().is_some_and(|proof| {
+            (if operation.destination_asset.network == "solana" {
+                proof.transaction_hash == hash
+            } else {
+                proof.transaction_hash.eq_ignore_ascii_case(hash)
+            }) && proof.message_hash == hex::encode(Keccak256::digest(&data.message))
+                && proof.observation.execution == Execution::Succeeded
+                && proof.observation.finality == Finality::Finalized
+        })
+    })
 }
 
 /// Recovery position; errors are stored separately so failed attempts do not erase it.
@@ -120,6 +189,7 @@ pub(crate) enum OperationStep {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) enum TransactionStep {
+    DestinationSetup,
     Approval,
     Burn,
     Mint,
@@ -135,6 +205,8 @@ pub(crate) enum TransactionStatus {
     SubmissionUnknown,
     Confirmed,
     Failed,
+    /// Unable to execute after verified completion and nonce/expiry reconciliation.
+    Superseded,
 }
 
 /// Creates an approval-stage record for the supported CCTP route and native USDC.
@@ -170,6 +242,7 @@ pub(crate) fn create_operation(
         destination_asset: destination,
         sender,
         recipient,
+        destination_signer: None,
         amount_base_units: amount_base_units.to_string(),
         step: OperationStep::Approval,
         kind: OperationKind::Cctp,
@@ -204,6 +277,7 @@ pub(crate) fn create_send_operation(
         destination_asset: asset,
         sender,
         recipient,
+        destination_signer: None,
         amount_base_units: amount_base_units.to_string(),
         step: OperationStep::Send,
         kind: OperationKind::Send,
@@ -239,7 +313,7 @@ impl Operation {
         {
             return Err("CCTP operation deployment is missing or changed".into());
         }
-        Ok(transfer)
+        transfer.with_destination_fee_payer(self.destination_signer.as_deref())
     }
 }
 
@@ -295,11 +369,14 @@ pub(crate) fn advance_operation(
             }
         }
         (OperationStep::Mint, OperationStep::Completed) => {
-            if !source_finality_reached(operation) {
-                return Err("Source burn has not reached the required finality".to_string());
+            if !source_finality_reached(operation) || !attestation_available(operation) {
+                return Err(
+                    "Bound attestation and required source finality are missing".to_string()
+                );
             }
             let minted = operation.attempts.iter().any(|attempt| {
                 attempt.step == TransactionStep::Mint
+                    && mint_evidence_matches(operation, &attempt.tx_hash)
                     && matches!(attempt.status, TransactionStatus::Confirmed)
                     && attempt.tx_status.as_ref().is_some_and(|status| {
                         status.execution == Execution::Succeeded
@@ -484,6 +561,24 @@ pub(crate) fn cancel_operation(operation: &mut Operation) -> Result<(), String> 
     if operation.step != OperationStep::Approval {
         return Err("Cannot cancel after burn step".to_string());
     }
+    // Unbroadcast attempts must not keep protecting the account nonce after
+    // cancellation; without this the account could never transact again.
+    for attempt in &mut operation.attempts {
+        let resolved = attempt
+            .tx_status
+            .as_ref()
+            .is_some_and(|status| status.finality == Finality::Finalized);
+        if !resolved
+            && matches!(
+                attempt.status,
+                TransactionStatus::Signed
+                    | TransactionStatus::Submitted
+                    | TransactionStatus::SubmissionUnknown
+            )
+        {
+            attempt.status = TransactionStatus::Superseded;
+        }
+    }
     operation.step = OperationStep::Cancelled;
     operation.updated_at = Utc::now().to_rfc3339();
     operation.last_error = None;
@@ -533,7 +628,9 @@ pub(crate) async fn reconcile_operation(
 /// The network whose provider confirms an attempt, based on its leg.
 pub(crate) fn operation_step_network(operation: &Operation, step: TransactionStep) -> String {
     match step {
-        TransactionStep::Mint => operation.destination_asset.network.clone(),
+        TransactionStep::Mint | TransactionStep::DestinationSetup => {
+            operation.destination_asset.network.clone()
+        }
         _ => operation.source_asset.network.clone(),
     }
 }
@@ -546,13 +643,6 @@ where
     F: FnMut(String, String) -> Fut,
     Fut: std::future::Future<Output = Result<Option<TxStatus>, String>>,
 {
-    if matches!(
-        operation.step,
-        OperationStep::Completed | OperationStep::Cancelled
-    ) {
-        return Ok(());
-    }
-
     let mut changed = false;
     for index in 0..operation.attempts.len() {
         if operation.attempts[index]
@@ -591,6 +681,15 @@ where
         match result {
             Ok(None) => {
                 let attempt = &mut operation.attempts[index];
+                if attempt
+                    .error
+                    .as_deref()
+                    .is_some_and(|error| error.starts_with("Status check failed:"))
+                {
+                    attempt.error = None;
+                    attempt.updated_at = Utc::now().to_rfc3339();
+                    changed = true;
+                }
                 if attempt.tx_status.take().is_some() {
                     attempt.status = TransactionStatus::SubmissionUnknown;
                     attempt.updated_at = Utc::now().to_rfc3339();
@@ -636,6 +735,14 @@ pub(crate) fn operation_activity(operation: &Operation) -> Result<Activity, Stri
         return Ok(send_operation_activity(operation));
     }
     let title = match operation.step {
+        OperationStep::Approval
+            if operation
+                .attempts
+                .last()
+                .is_some_and(|attempt| attempt.step == TransactionStep::DestinationSetup) =>
+        {
+            "Destination account setup"
+        }
         OperationStep::Approval => "Bridging approval pending",
         OperationStep::Burn => "Bridging burn pending",
         OperationStep::AwaitingAttestation if !source_finality_reached(operation) => {
@@ -652,6 +759,14 @@ pub(crate) fn operation_activity(operation: &Operation) -> Result<Activity, Stri
     }
     .to_string();
     let current_leg = match operation.step {
+        OperationStep::Approval
+            if operation
+                .attempts
+                .last()
+                .is_some_and(|attempt| attempt.step == TransactionStep::DestinationSetup) =>
+        {
+            TransactionStep::DestinationSetup
+        }
         OperationStep::Approval => TransactionStep::Approval,
         OperationStep::Burn | OperationStep::AwaitingAttestation => TransactionStep::Burn,
         OperationStep::Mint | OperationStep::Completed | OperationStep::Cancelled => {
@@ -688,6 +803,12 @@ pub(crate) fn operation_activity(operation: &Operation) -> Result<Activity, Stri
                 .attempts
                 .iter()
                 .rfind(|attempt| attempt.step == TransactionStep::Approval)
+        })
+        .or_else(|| {
+            operation
+                .attempts
+                .iter()
+                .rfind(|attempt| attempt.step == TransactionStep::DestinationSetup)
         });
     let hash = displayed_attempt
         .map(|attempt| attempt.tx_hash.clone())
@@ -709,7 +830,9 @@ pub(crate) fn operation_activity(operation: &Operation) -> Result<Activity, Stri
         from: Some(operation.sender.clone()),
         to: Some(operation.recipient.clone()),
         network: Some(match displayed_attempt.map(|attempt| attempt.step) {
-            Some(TransactionStep::Mint) => operation.destination_asset.network.clone(),
+            Some(TransactionStep::Mint | TransactionStep::DestinationSetup) => {
+                operation.destination_asset.network.clone()
+            }
             _ => operation.source_asset.network.clone(),
         }),
         payload_hash: None,

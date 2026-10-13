@@ -208,3 +208,70 @@ export interface NetworkInstance {
 }
 
 export type Network = NetworkConfig & NetworkInstance;
+
+export type CctpPreparedStep = {
+  operation_id: string;
+  step: "approval" | "burn" | "mint" | "destination_setup";
+  tx_hash: string;
+  network: string;
+  from: string;
+  contract: string;
+  recipient: string;
+  amount_base_units: string;
+  max_native_fee: string;
+  context: {
+    chain_id: number;
+    from: string;
+    to: string;
+    value: string;
+    data: string;
+    nonce: number;
+    gas_limit: number;
+    max_fee_per_gas: string;
+    max_priority_fee_per_gas: string;
+    provisional_burn_fee: string | null;
+    provisional_destination_fee: string;
+  } | null;
+  solana_context: {
+    payer: string;
+    blockhash: string;
+    last_valid_height: number;
+    fee_lamports: string;
+    rent_lamports: string;
+    event_account: string | null;
+    fee_recipient: string | null;
+    lookup: { address: string; addresses: string[] } | null;
+    setup_slot: number | null;
+    create_ata: boolean;
+    provisional_destination_fee: string | null;
+  } | null;
+};
+export type CctpState = {
+  routes: {
+    source: string;
+    destination: string;
+    source_usdc: string;
+    destination_usdc: string;
+    sender: string;
+    destination_address: string;
+    environment: "Mainnet" | "Sepolia";
+    executable: boolean;
+  }[];
+  operations: {
+    id: string;
+    source: string;
+    destination: string;
+    recipient: string;
+    amount_base_units: string;
+    step: "Approval" | "Burn" | "AwaitingAttestation" | "Mint" | "Completed" | "Cancelled";
+    progress: Activity;
+    can_mint: boolean;
+    last_error: string | null;
+    needs_sync: boolean;
+    prepared: CctpPreparedStep | null;
+    attempt_step: string | null;
+    attempt_status: string | null;
+    attempt_error: string | null;
+    attempt_hash: string | null;
+  }[];
+};

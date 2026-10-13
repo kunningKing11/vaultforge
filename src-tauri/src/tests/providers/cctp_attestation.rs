@@ -5,6 +5,7 @@ use std::{
     io::{Read, Write},
     net::TcpListener,
     thread,
+    time::Duration,
 };
 
 fn response_server(status: u16, body: String, extra: &str) -> (String, thread::JoinHandle<()>) {
@@ -70,7 +71,7 @@ fn rejects_invalid_attestation_rpc_and_false_simulation_results() {
             "eth_call" if case == 0 => {
                 serde_json::json!({"result":format!("0x{}",hex::encode(evm_uint_word(1)))})
             }
-            "eth_call" => {
+            "eth_call" if case == 1 => {
                 serde_json::json!({"error":{"code":-32000,"message":"invalid attestation"}})
             }
             "eth_call" => {

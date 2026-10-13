@@ -218,6 +218,7 @@ fn prepare_durable_send(
         updated_at: Utc::now().to_rfc3339(),
         tx_status: None,
         evm_context: None,
+        solana_context: None,
     });
     let operation_id = operation.id.clone();
     wallet.operations.push(operation);

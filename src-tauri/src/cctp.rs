@@ -8,6 +8,10 @@ use crate::registry::{NetworkConfig, TransactionStatusProvider, configured_asset
 use crate::tx::tx_status::Finality;
 
 pub(crate) const CCTP_PROTOCOL_VERSION: u32 = 2;
+// Native construction/recovery is covered by mocks; enable execution only after
+// a funded native-route integration proves the pinned deployment and restart.
+pub(crate) const NATIVE_EXECUTION_ENABLED: bool = false;
+
 pub(crate) const STANDARD_FINALITY_THRESHOLD: u32 = 2000;
 pub(crate) const MAX_BURN_AMOUNT: u128 = 10_000_000 * 1_000_000;
 // Provisional budgets, not RPC estimates or guaranteed upper bounds. Every real call
@@ -388,6 +392,7 @@ pub(crate) struct CctpTransfer {
     sender: String,
     recipient: String,
     amount: u128,
+    fee_payer: Option<String>,
 }
 
 impl CctpTransfer {
@@ -433,7 +438,34 @@ impl CctpTransfer {
             sender: sender.into(),
             recipient: recipient.into(),
             amount,
+            fee_payer: None,
         })
+    }
+    pub(crate) fn with_destination_fee_payer(
+        mut self,
+        address: Option<&str>,
+    ) -> Result<Self, String> {
+        if let Some(address) = address {
+            address_word(&self.route.destination.network, address)?;
+            if self.route.source.network.kind == "evm"
+                && self.route.destination.network.kind == "evm"
+                && !address.eq_ignore_ascii_case(&self.sender)
+            {
+                return Err("Destination payer differs from bound caller".into());
+            }
+            self.fee_payer = Some(address.into());
+        }
+        Ok(self)
+    }
+    pub(crate) fn destination_fee_payer(&self) -> Result<&str, String> {
+        self.fee_payer
+            .as_deref()
+            .or_else(|| {
+                (self.route.source.network.kind == "evm"
+                    && self.route.destination.network.kind == "evm")
+                    .then_some(self.sender.as_str())
+            })
+            .ok_or("Destination wallet fee payer is missing".into())
     }
     pub(crate) fn sender(&self) -> &str {
         &self.sender

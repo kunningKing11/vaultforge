@@ -33,7 +33,11 @@ impl EvmNonceManager {
             }
             for attempt in &operation.attempts {
                 if attempt.raw_tx.is_none()
-                    || attempt.status == crate::operations::TransactionStatus::Built
+                    || matches!(
+                        attempt.status,
+                        crate::operations::TransactionStatus::Built
+                            | crate::operations::TransactionStatus::Superseded
+                    )
                 {
                     continue;
                 }
@@ -45,14 +49,27 @@ impl EvmNonceManager {
                 }
                 if let Some(context) = &attempt.evm_context {
                     let transfer = operation.cctp_transfer()?;
-                    let expected_chain = if attempt.step == crate::operations::TransactionStep::Mint
-                    {
+                    let expected_chain = if matches!(
+                        attempt.step,
+                        crate::operations::TransactionStep::Mint
+                            | crate::operations::TransactionStep::DestinationSetup
+                    ) {
                         transfer.route.destination.network.chain_id()?
                     } else {
                         transfer.route.source.network.chain_id()?
                     };
                     if context.chain_id != expected_chain
-                        || !context.from.eq_ignore_ascii_case(&operation.sender)
+                        || !context.from.eq_ignore_ascii_case(
+                            if matches!(
+                                attempt.step,
+                                crate::operations::TransactionStep::Mint
+                                    | crate::operations::TransactionStep::DestinationSetup
+                            ) {
+                                transfer.destination_fee_payer()?
+                            } else {
+                                &operation.sender
+                            },
+                        )
                     {
                         return Err("Persisted EVM nonce context does not match operation".into());
                     }
@@ -63,7 +80,11 @@ impl EvmNonceManager {
                     ));
                 } else if let Some(nonce) = &attempt.nonce_or_sequence {
                     // Legacy signed attempts still protect their known EVM account.
-                    let network = if attempt.step == crate::operations::TransactionStep::Mint {
+                    let network = if matches!(
+                        attempt.step,
+                        crate::operations::TransactionStep::Mint
+                            | crate::operations::TransactionStep::DestinationSetup
+                    ) {
                         &operation.destination_asset.network
                     } else {
                         &operation.source_asset.network

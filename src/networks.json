@@ -60,6 +60,34 @@
     },
     {
       "kind": "evm",
+      "id": "arbitrum_one",
+      "transactionStatusProvider": "evm",
+      "name": "Arbitrum One",
+      "nickname": "Arbitrum",
+      "chainId": 42161,
+      "isL2": true,
+      "addressKey": "evm",
+      "rpcUrl": "https://arbitrum-one-rpc.publicnode.com",
+      "nativeAsset": {
+        "symbol": "ETH",
+        "unicodeSymbol": "Ξ",
+        "name": "Ether",
+        "decimals": 18,
+        "coinGeckoId": "ethereum"
+      },
+      "tokens": [
+        {
+          "standard": "erc20",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "tokenAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+          "coinGeckoId": "usd-coin"
+        }
+      ]
+    },
+    {
+      "kind": "evm",
       "id": "avalanche_c",
       "transactionStatusProvider": "evm",
       "name": "Avalanche C-Chain",
@@ -90,6 +118,33 @@
           "decimals": 6,
           "tokenAddress": "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7",
           "coinGeckoId": "tether"
+        }
+      ]
+    },
+    {
+      "kind": "evm",
+      "id": "base",
+      "transactionStatusProvider": "evm",
+      "name": "Base",
+      "chainId": 8453,
+      "isL2": true,
+      "addressKey": "evm",
+      "rpcUrl": "https://mainnet.base.org",
+      "nativeAsset": {
+        "symbol": "ETH",
+        "unicodeSymbol": "Ξ",
+        "name": "Ether",
+        "decimals": 18,
+        "coinGeckoId": "ethereum"
+      },
+      "tokens": [
+        {
+          "standard": "erc20",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "coinGeckoId": "usd-coin"
         }
       ]
     },
@@ -165,61 +220,6 @@
           "name": "USD Coin",
           "decimals": 6,
           "tokenAddress": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
-          "coinGeckoId": "usd-coin"
-        }
-      ]
-    },
-    {
-      "kind": "evm",
-      "id": "arbitrum_one",
-      "transactionStatusProvider": "evm",
-      "name": "Arbitrum One",
-      "nickname": "Arbitrum",
-      "chainId": 42161,
-      "isL2": true,
-      "addressKey": "evm",
-      "rpcUrl": "https://arbitrum-one-rpc.publicnode.com",
-      "nativeAsset": {
-        "symbol": "ETH",
-        "unicodeSymbol": "Ξ",
-        "name": "Ether",
-        "decimals": 18,
-        "coinGeckoId": "ethereum"
-      },
-      "tokens": [
-        {
-          "standard": "erc20",
-          "symbol": "USDC",
-          "name": "USD Coin",
-          "decimals": 6,
-          "tokenAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-          "coinGeckoId": "usd-coin"
-        }
-      ]
-    },
-    {
-      "kind": "evm",
-      "id": "base",
-      "transactionStatusProvider": "evm",
-      "name": "Base",
-      "chainId": 8453,
-      "isL2": true,
-      "addressKey": "evm",
-      "rpcUrl": "https://base-rpc.publicnode.com",
-      "nativeAsset": {
-        "symbol": "ETH",
-        "unicodeSymbol": "Ξ",
-        "name": "Ether",
-        "decimals": 18,
-        "coinGeckoId": "ethereum"
-      },
-      "tokens": [
-        {
-          "standard": "erc20",
-          "symbol": "USDC",
-          "name": "USD Coin",
-          "decimals": 6,
-          "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
           "coinGeckoId": "usd-coin"
         }
       ]

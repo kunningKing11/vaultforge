@@ -2,9 +2,9 @@
 
 use crate::cctp::{BURN_GAS_BUDGET, CctpTransfer, MINT_GAS_BUDGET, STANDARD_FINALITY_THRESHOLD};
 use crate::providers::evm::{
-    EvmCallEstimate, estimate_evm_call, evm_max_native_fee, fetch_evm_allowance,
-    fetch_evm_fee_estimate, fetch_evm_native_balance, fetch_evm_token_balance_for_contract,
-    verify_evm_chain,
+    EvmCallEstimate, estimate_evm_call, estimate_with_fee_headroom, evm_max_native_fee,
+    fetch_evm_allowance, fetch_evm_fee_estimate, fetch_evm_native_balance,
+    fetch_evm_token_balance_for_contract, verify_evm_chain,
 };
 use crate::tx::cctp::{build_approval_call, build_burn_call, build_mint_call};
 use crate::tx::evm::EvmCall;
@@ -56,12 +56,13 @@ fn validate_standard_fee(json: &serde_json::Value) -> Result<(), String> {
     Ok(())
 }
 
-async fn fetch_standard_fee_at(client: &reqwest::Client, url: &str) -> Result<(), String> {
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|error| format!("CCTP fee request failed: {error}"))?;
+pub(crate) async fn fetch_standard_fee_at(
+    client: &reqwest::Client,
+    url: &str,
+) -> Result<(), String> {
+    // A single dropped connection must not fail the transfer; retry transport
+    // errors, then fail closed on any missing or nonzero fee.
+    let response = crate::providers::http::resilient_get(client, url, &[]).await?;
     if !response.status().is_success() {
         return Err(format!(
             "CCTP fee request returned HTTP {}",
@@ -87,9 +88,7 @@ pub(crate) async fn prepare_cctp_source(
     transfer: &CctpTransfer,
 ) -> Result<CctpPreflight, String> {
     transfer.route.validate()?;
-    if transfer.route.source.network.kind != "evm"
-        || transfer.route.destination.network.kind != "evm"
-    {
+    if transfer.route.source.network.kind != "evm" {
         return Err("Solana CCTP source execution preparation is unavailable; native attestation reads are supported".into());
     }
 
@@ -112,7 +111,9 @@ async fn prepare_source_after_fee_check(
     let source = &transfer.route.source;
     let destination = &transfer.route.destination;
     verify_evm_chain(client, &source.network).await?;
-    verify_evm_chain(client, &destination.network).await?;
+    if destination.network.kind == "evm" {
+        verify_evm_chain(client, &destination.network).await?;
+    }
     let usdc = fetch_evm_token_balance_for_contract(
         client,
         &source.network,
@@ -133,20 +134,31 @@ async fn prepare_source_after_fee_check(
     .await?;
     let source_balance =
         fetch_evm_native_balance(client, &source.network, transfer.sender()).await?;
-    let destination_balance =
-        fetch_evm_native_balance(client, &destination.network, transfer.destination_caller())
-            .await?;
-    let destination_fees = fetch_evm_fee_estimate(client, &destination.network).await?;
-    let provisional_destination_fee =
-        evm_max_native_fee(MINT_GAS_BUDGET, destination_fees.max_fee_per_gas)?;
-    require_gas(
-        destination_balance,
-        provisional_destination_fee,
-        "provisional destination mint budget",
-    )?;
+    let provisional_destination_fee = if destination.network.kind == "svm" {
+        u128::from(
+            crate::providers::cctp_native::LiveNative { client }
+                .destination_budget(transfer)
+                .await?,
+        )
+    } else {
+        let balance = fetch_evm_native_balance(
+            client,
+            &destination.network,
+            transfer.destination_fee_payer()?,
+        )
+        .await?;
+        let fees = fetch_evm_fee_estimate(client, &destination.network).await?;
+        let budget = evm_max_native_fee(
+            MINT_GAS_BUDGET,
+            crate::providers::evm::with_fee_headroom(fees.max_fee_per_gas)?,
+        )?;
+        require_gas(balance, budget, "provisional destination mint budget")?;
+        budget
+    };
     let (source_preparation, source_native_budget) = if allowance.covers(transfer.amount()) {
         let call = build_burn_call(transfer)?;
-        let estimate = estimate_evm_call(client, &source.network, transfer.sender(), &call).await?;
+        let raw = estimate_evm_call(client, &source.network, transfer.sender(), &call).await?;
+        let estimate = estimate_with_fee_headroom(raw)?;
         let fee = estimate.max_native_fee;
         (
             CctpSourcePreparation::Burn(PreparedCctpCall { call, estimate }),
@@ -154,7 +166,8 @@ async fn prepare_source_after_fee_check(
         )
     } else {
         let call = build_approval_call(transfer)?;
-        let estimate = estimate_evm_call(client, &source.network, transfer.sender(), &call).await?;
+        let raw = estimate_evm_call(client, &source.network, transfer.sender(), &call).await?;
+        let estimate = estimate_with_fee_headroom(raw)?;
         let provisional_burn_fee =
             evm_max_native_fee(BURN_GAS_BUDGET, estimate.fees.max_fee_per_gas)?;
         let total = estimate
@@ -194,8 +207,19 @@ pub(crate) async fn prepare_cctp_mint(
     let call = build_mint_call(transfer, message, attestation)?;
     let network = &transfer.route.destination.network;
     verify_evm_chain(client, network).await?;
-    let estimate = estimate_evm_call(client, network, transfer.destination_caller(), &call).await?;
-    let balance = fetch_evm_native_balance(client, network, transfer.destination_caller()).await?;
+    crate::providers::cctp_attestation::simulate_message_from(
+        client,
+        transfer,
+        message,
+        attestation,
+        transfer.destination_fee_payer()?,
+    )
+    .await?;
+    let estimate = estimate_with_fee_headroom(
+        estimate_evm_call(client, network, transfer.destination_fee_payer()?, &call).await?,
+    )?;
+    let balance =
+        fetch_evm_native_balance(client, network, transfer.destination_fee_payer()?).await?;
     require_gas(balance, estimate.max_native_fee, "destination mint")?;
     Ok(PreparedCctpCall { call, estimate })
 }

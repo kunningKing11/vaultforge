@@ -18,7 +18,7 @@ use crate::operations::{
 use crate::providers::cctp::{CctpPreflight, CctpSourcePreparation};
 use crate::state::{AppState, session_from_state};
 use crate::storage::persist_state_wallet;
-use crate::tx::cctp::{build_approval_call, build_burn_call};
+use crate::tx::cctp::{build_approval_call, build_burn_call, build_mint_call};
 use crate::tx::evm::{Eip1559TxDraft, EvmCall, sign_eip1559_transfer};
 use crate::tx::tx_status::{Execution, Finality, TxStatus};
 
@@ -66,7 +66,9 @@ pub(crate) struct CctpPreparedSource {
     pub(crate) contract: String,
     pub(crate) recipient: String,
     pub(crate) amount_base_units: String,
-    pub(crate) context: EvmAttemptContext,
+    pub(crate) max_native_fee: String,
+    pub(crate) context: Option<EvmAttemptContext>,
+    pub(crate) solana_context: Option<crate::operations::SolanaAttemptContext>,
 }
 
 pub(crate) struct ActionGuard<'a> {
@@ -110,6 +112,21 @@ pub(crate) fn begin_action<'a>(
         })
     {
         return Err("CCTP operation does not belong to this wallet".into());
+    }
+    if let Some(payer) = operation.destination_signer.as_deref() {
+        if !wallet
+            .addresses
+            .get(&transfer.route.destination.network.address_key)
+            .is_some_and(|address| {
+                if transfer.route.destination.network.kind == "evm" {
+                    address.eq_ignore_ascii_case(payer)
+                } else {
+                    address == payer
+                }
+            })
+        {
+            return Err("Destination signer does not belong to this wallet".into());
+        }
     }
     let generation = state_guard.wallet_generation;
     let key = (
@@ -197,13 +214,17 @@ pub(crate) fn create_source_operation(
     }) {
         return Err("Resume the existing CCTP operation before creating another".into());
     }
-    let operation = create_operation(
+    let mut operation = create_operation(
         source,
         destination,
         sender,
         recipient,
         amount.parse().map_err(|_| "Invalid CCTP amount")?,
     )?;
+    operation.destination_signer = wallet
+        .addresses
+        .get(&route.destination.network.address_key)
+        .cloned();
     let id = operation.id.clone();
     state
         .wallet
@@ -244,30 +265,72 @@ async fn reconcile_source<P: CctpSourceProvider>(
     Ok(after)
 }
 
-fn prepared_view(
+pub(crate) fn prepared_view(
     operation: &Operation,
     attempt: &TransactionAttempt,
 ) -> Result<CctpPreparedSource, String> {
-    let context = attempt
-        .evm_context
-        .clone()
-        .ok_or("Legacy attempt cannot be submitted; reconciliation only")?;
+    if attempt.evm_context.is_none() && attempt.solana_context.is_none() {
+        return Err("Legacy attempt has no execution context; reconcile only".into());
+    }
+    let max_native_fee = if let Some(context) = &attempt.evm_context {
+        crate::providers::evm::evm_max_native_fee(
+            context.gas_limit,
+            context
+                .max_fee_per_gas
+                .parse()
+                .map_err(|_| "Invalid saved fee cap")?,
+        )?
+        .to_string()
+    } else {
+        attempt
+            .solana_context
+            .as_ref()
+            .ok_or("Native context missing")?
+            .fee_lamports
+            .to_string()
+    };
+    let destination = matches!(
+        attempt.step,
+        TransactionStep::Mint | TransactionStep::DestinationSetup
+    );
     Ok(CctpPreparedSource {
         operation_id: operation.id.clone(),
         step: match attempt.step {
             TransactionStep::Approval => "approval",
             TransactionStep::Burn => "burn",
-            TransactionStep::Mint => return Err("Mint is not implemented".into()),
-            TransactionStep::Send => return Err("Not a CCTP execution attempt".into()),
+            TransactionStep::Mint => "mint",
+            TransactionStep::DestinationSetup => "destination_setup",
+            TransactionStep::Send => return Err("Not CCTP".into()),
         }
         .into(),
         tx_hash: attempt.tx_hash.clone(),
-        network: operation.source_asset.network.clone(),
-        from: operation.sender.clone(),
-        contract: context.to.clone(),
+        network: if destination {
+            operation.destination_asset.network.clone()
+        } else {
+            operation.source_asset.network.clone()
+        },
+        from: attempt
+            .evm_context
+            .as_ref()
+            .map(|c| c.from.clone())
+            .or_else(|| attempt.solana_context.as_ref().map(|c| c.payer.clone()))
+            .ok_or("Signer missing")?,
+        contract: attempt
+            .evm_context
+            .as_ref()
+            .map(|c| c.to.clone())
+            .unwrap_or_else(|| {
+                if destination {
+                    crate::cctp::SOLANA_TRANSMITTER.into()
+                } else {
+                    crate::cctp::SOLANA_MESSENGER.into()
+                }
+            }),
         recipient: operation.recipient.clone(),
         amount_base_units: operation.amount_base_units.clone(),
-        context,
+        max_native_fee,
+        context: attempt.evm_context.clone(),
+        solana_context: attempt.solana_context.clone(),
     })
 }
 
@@ -295,13 +358,25 @@ pub(crate) async fn prepare_source_step<P: CctpSourceProvider + Sync>(
     }
     let transfer = operation.cctp_transfer()?;
     let preflight = provider.prepare(&transfer).await?;
+    if preflight.protocol_fee != 0
+        || preflight.expected_receive_amount != transfer.amount()
+        || preflight.source_native_budget == 0
+    {
+        return Err(
+            "CCTP preflight changed the zero-fee transfer policy or omitted source funding".into(),
+        );
+    }
     let destination_fee = preflight.provisional_destination_fee.to_string();
     let (step, prepared, provisional_burn_fee) = match preflight.source {
         CctpSourcePreparation::Approval {
             approval,
             provisional_burn_fee,
         } => {
-            if !operation.attempts.is_empty() {
+            if operation
+                .attempts
+                .iter()
+                .any(|a| matches!(a.step, TransactionStep::Approval | TransactionStep::Burn))
+            {
                 return Err(
                     "Approval allowance is insufficient; automatic replacement is unavailable"
                         .into(),
@@ -376,6 +451,7 @@ pub(crate) async fn prepare_source_step<P: CctpSourceProvider + Sync>(
             updated_at: Utc::now().to_rfc3339(),
             tx_status: None,
             evm_context: Some(context),
+            solana_context: None,
         };
         let mut after = operation.clone();
         if step == TransactionStep::Burn && after.step == OperationStep::Approval {
@@ -408,7 +484,20 @@ pub(crate) fn validate_source_attempt(
     let call = match attempt.step {
         TransactionStep::Approval => build_approval_call(&transfer)?,
         TransactionStep::Burn => build_burn_call(&transfer)?,
-        TransactionStep::Mint => return Err("Mint is not implemented".into()),
+        TransactionStep::DestinationSetup => {
+            return Err("Native destination setup requires native validation".into());
+        }
+        TransactionStep::Mint => {
+            if !crate::operations::attestation_available(operation) {
+                return Err("Bound attestation and finalized source evidence are required".into());
+            }
+            let data = operation.cctp.as_ref().ok_or("CCTP data missing")?;
+            build_mint_call(
+                &transfer,
+                &data.message,
+                data.attestation.as_deref().ok_or("Attestation missing")?,
+            )?
+        }
         TransactionStep::Send => return Err("Not a CCTP execution attempt".into()),
     };
     let raw = hex::decode(
@@ -430,8 +519,20 @@ pub(crate) fn validate_source_attempt(
     if tx.item_count().map_err(parse_error)? != 12 || tx.as_raw().len() != raw.len() - 1 {
         return Err("Malformed signed EVM transaction".into());
     }
-    if context.chain_id != transfer.route.source.network.chain_id()?
-        || !context.from.eq_ignore_ascii_case(transfer.sender())
+    if context.chain_id
+        != (if attempt.step == TransactionStep::Mint {
+            &transfer.route.destination.network
+        } else {
+            &transfer.route.source.network
+        })
+        .chain_id()?
+        || !context
+            .from
+            .eq_ignore_ascii_case(if attempt.step == TransactionStep::Mint {
+                transfer.destination_fee_payer()?
+            } else {
+                transfer.sender()
+            })
         || !context.to.eq_ignore_ascii_case(&call.to)
         || context.value != "0"
         || context.data != hex::encode(&call.data)
@@ -481,7 +582,11 @@ pub(crate) fn validate_source_attempt(
         "0x{}",
         hex::encode(&Keccak256::digest(&public.as_bytes()[1..])[12..])
     );
-    if !sender.eq_ignore_ascii_case(transfer.sender()) {
+    if !sender.eq_ignore_ascii_case(if attempt.step == TransactionStep::Mint {
+        transfer.destination_fee_payer()?
+    } else {
+        transfer.sender()
+    }) {
         return Err("Stored signature does not match operation sender".into());
     }
     Ok(call)
@@ -512,12 +617,16 @@ pub(crate) async fn submit_source_step<P: CctpSourceProvider + Sync>(
         check_snapshot(&state, generation, &operation)?;
         return Ok(session_from_state(&state)); // included/finalized: never re-execute
     }
-    if attempt
+    if let Some(detail) = attempt
         .error
         .as_deref()
-        .is_some_and(|error| error.starts_with("Status check failed:"))
+        .filter(|error| error.starts_with("Status check failed:"))
     {
-        return Err("Reconciliation failed; submission is blocked".into());
+        // Fail closed without hiding the cause: nothing was broadcast, and the
+        // same step succeeds once the provider responds.
+        return Err(format!(
+            "Reconciliation failed; submission is blocked ({detail}). Nothing was broadcast; retry the same step"
+        ));
     }
     if !matches!(
         attempt.status,
@@ -604,4 +713,4 @@ pub(crate) async fn submit_source_step<P: CctpSourceProvider + Sync>(
 
 #[cfg(test)]
 #[path = "tests/cctp_execution.rs"]
-mod tests;
+pub(crate) mod tests;

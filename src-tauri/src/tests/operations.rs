@@ -47,6 +47,20 @@ fn advances_only_with_required_evidence() {
     .unwrap();
     operation.attempts.last_mut().unwrap().tx_status =
         Some(TxStatus::new(Execution::Succeeded, Finality::Finalized));
+    let mint_hash = operation
+        .attempts
+        .iter()
+        .find(|a| a.step == TransactionStep::Mint)
+        .unwrap()
+        .tx_hash
+        .clone();
+    let data = operation.cctp.get_or_insert_with(CctpData::default);
+    use sha3::{Digest, Keccak256};
+    data.mint_evidence = Some(crate::operations::MintEvidence {
+        transaction_hash: mint_hash,
+        message_hash: hex::encode(Keccak256::digest(&data.message)),
+        observation: TxStatus::new(Execution::Succeeded, Finality::Finalized),
+    });
     advance_operation(&mut operation, OperationStep::Completed).unwrap();
     let original = operation.clone();
     assert!(advance_operation(&mut operation, OperationStep::Burn).is_err());
@@ -84,6 +98,23 @@ fn attestation_storage_checks_stage_and_bounds_without_advancing() {
     assert_eq!(operation.step, OperationStep::AwaitingAttestation);
     assert!(!operation.cctp.as_ref().unwrap().simulated);
     assert_eq!(operation.cctp.unwrap().attestation, Some(vec![2; 65]));
+}
+
+#[test]
+fn cancel_supersedes_unbroadcast_attempts_and_releases_account_nonce() {
+    let mut operation = sample_operation();
+    operation.attempts.push(sample_attempt(
+        TransactionStep::Approval,
+        TransactionStatus::Signed,
+    ));
+    cancel_operation(&mut operation).unwrap();
+    assert_eq!(operation.step, OperationStep::Cancelled);
+    assert_eq!(operation.attempts[0].status, TransactionStatus::Superseded);
+    let mut nonces = crate::tx::evm_nonces::EvmNonceManager::default();
+    nonces
+        .restore_operations(std::slice::from_ref(&operation))
+        .unwrap();
+    assert_eq!(nonces.reserve(1, &operation.sender, 7).unwrap(), 7);
 }
 
 #[test]
@@ -229,8 +260,23 @@ fn included_observations_remain_trackable_and_do_not_complete_mint() {
         }))
         .unwrap();
     let mut burn = sample_attempt(TransactionStep::Burn, TransactionStatus::Confirmed);
-    burn.tx_status = Some(TxStatus::new(Execution::Succeeded, Finality::Finalized));
+    burn.tx_status = Some(observation(Finality::Finalized));
     operation.attempts.push(burn);
+    operation.cctp = Some(bound_data(&operation));
+    let mint_hash = operation
+        .attempts
+        .iter()
+        .find(|a| a.step == TransactionStep::Mint)
+        .unwrap()
+        .tx_hash
+        .clone();
+    let data = operation.cctp.get_or_insert_with(CctpData::default);
+    use sha3::{Digest, Keccak256};
+    data.mint_evidence = Some(crate::operations::MintEvidence {
+        transaction_hash: mint_hash,
+        message_hash: hex::encode(Keccak256::digest(&data.message)),
+        observation: TxStatus::new(Execution::Succeeded, Finality::Finalized),
+    });
     advance_operation(&mut operation, OperationStep::Completed).unwrap();
 }
 

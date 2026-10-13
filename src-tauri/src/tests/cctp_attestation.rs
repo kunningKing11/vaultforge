@@ -60,6 +60,7 @@ pub(crate) fn bound_data(operation: &Operation) -> CctpData {
         simulated: true,
         signature_verified: false,
         poll: None,
+        ..CctpData::default()
     }
 }
 
@@ -91,10 +92,14 @@ pub(crate) fn receipt(operation: &Operation) -> serde_json::Value {
     let mut deposit = Vec::new();
     for word in [
         evm_uint_word(t.amount()),
-        evm_address_word(t.recipient()).unwrap(),
-        evm_uint_word(3),
-        evm_address_word(t.route.destination.token_messenger).unwrap(),
-        evm_address_word(t.destination_caller()).unwrap(),
+        t.mint_recipient_word().unwrap(),
+        evm_uint_word(t.route.destination.domain as u128),
+        address_word(
+            &t.route.destination.network,
+            t.route.destination.token_messenger,
+        )
+        .unwrap(),
+        t.caller_word().unwrap(),
         evm_uint_word(0),
         evm_uint_word(224),
         evm_uint_word(0),
@@ -131,6 +136,65 @@ fn binds_v2_mutable_fields_without_accepting_immutable_changes() {
     changed = message;
     changed[144..148].copy_from_slice(&1000u32.to_be_bytes());
     assert!(validate_bound_message(&operation, &evidence, &changed).is_err());
+}
+
+#[test]
+fn decodes_evm_burns_for_every_evm_and_native_destination() {
+    for source in [
+        "ethereum",
+        "avalanche_c",
+        "optimism",
+        "arbitrum_one",
+        "base",
+        "polygon",
+        "monad",
+    ] {
+        for destination in [
+            "ethereum",
+            "avalanche_c",
+            "optimism",
+            "arbitrum_one",
+            "base",
+            "polygon",
+            "monad",
+            "solana",
+        ] {
+            if source == destination {
+                continue;
+            }
+            let route = crate::cctp::CctpRoute::for_networks(source, destination).unwrap();
+            let recipient = if destination == "solana" {
+                "Vote111111111111111111111111111111111111111"
+            } else {
+                "0x4444444444444444444444444444444444444444"
+            };
+            let mut operation = crate::operations::create_operation(
+                crate::dto::AssetIdentity::new(source, Some(route.source.usdc)),
+                crate::dto::AssetIdentity::new(destination, Some(route.destination.usdc)),
+                "0x3333333333333333333333333333333333333333".into(),
+                recipient.into(),
+                1000000,
+            )
+            .unwrap();
+            operation.attempts.push(crate::tests::sample_attempt(
+                TransactionStep::Burn,
+                crate::operations::TransactionStatus::Submitted,
+            ));
+            let receipt = receipt(&operation);
+            let proof = evidence(&operation);
+            assert_eq!(
+                decode_burn_receipt(
+                    &operation,
+                    &receipt,
+                    &observation(Finality::Finalized),
+                    &proof.transaction_hash
+                )
+                .unwrap(),
+                proof,
+                "{source}->{destination}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -202,65 +266,6 @@ fn legacy_attestation_payloads_do_not_imply_binding_or_simulation() {
     operation.attempts[0].tx_status = Some(observation(Finality::Finalized));
     operation.cctp = Some(legacy);
     assert!(crate::operations::advance_operation(&mut operation, OperationStep::Mint).is_err());
-}
-
-#[test]
-fn polling_preserves_finality_gate_and_restart_backoff() {
-    let directory = directory();
-    let state = state(&directory);
-    let operation = state.lock().unwrap().wallet.as_ref().unwrap().operations[0].clone();
-    let provider = mock_provider(&operation, Finality::Included);
-    let result = runtime()
-        .block_on(poll_attestation_at(&state, &provider, &operation.id, 1000))
-        .unwrap();
-    assert_eq!(result.state, "waiting_source_finality");
-    assert_eq!(result.retry_after_secs, 10);
-    let stored = state.lock().unwrap().wallet.as_ref().unwrap().operations[0].clone();
-    assert_eq!(stored.step, OperationStep::AwaitingAttestation);
-    let mut stored_clone = stored.clone();
-    assert!(crate::operations::advance_operation(&mut stored_clone, OperationStep::Mint).is_err());
-    runtime()
-        .block_on(poll_attestation_at(&state, &provider, &operation.id, 1001))
-        .unwrap();
-    assert_eq!(provider.calls.load(std::sync::atomic::Ordering::Relaxed), 1);
-    // Decode the actual persisted envelope to prove emitted bytes, attested bytes,
-    // nonce, simulation gate, and deadline survive an encrypted restart.
-    let envelope = crate::storage::read_stored_wallet(&directory.join("wallet.json"))
-        .unwrap()
-        .unwrap();
-    let ciphertext = base64::Engine::decode(
-        &base64::engine::general_purpose::STANDARD,
-        &envelope.ciphertext,
-    )
-    .unwrap();
-    let nonce = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &envelope.nonce)
-        .unwrap();
-    use aes_gcm::{KeyInit, aead::Aead};
-    let cipher = aes_gcm::Aes256Gcm::new_from_slice(&[1; 32]).unwrap();
-    let plaintext = cipher
-        .decrypt(
-            &aes_gcm::Nonce::try_from(nonce.as_slice()).unwrap(),
-            ciphertext.as_ref(),
-        )
-        .unwrap();
-    let payload: crate::dto::WalletPayload = serde_json::from_slice(&plaintext).unwrap();
-    assert_eq!(payload.operations[0], stored);
-    let mut guard = state.lock().unwrap();
-    guard.wallet.as_mut().unwrap().operations = payload.operations;
-    guard.advance_wallet_generation();
-    drop(guard);
-    runtime()
-        .block_on(poll_attestation_at(&state, &provider, &operation.id, 1002))
-        .unwrap();
-    assert_eq!(provider.calls.load(std::sync::atomic::Ordering::Relaxed), 1);
-    let finalized = mock_provider(&operation, Finality::Finalized);
-    let result = runtime()
-        .block_on(poll_attestation_at(&state, &finalized, &operation.id, 1010))
-        .unwrap();
-    assert_eq!(result.state, "available");
-    let mut operation = state.lock().unwrap().wallet.as_ref().unwrap().operations[0].clone();
-    crate::operations::advance_operation(&mut operation, OperationStep::Mint).unwrap();
-    std::fs::remove_dir_all(directory).unwrap();
 }
 
 struct MockProvider {
@@ -343,6 +348,65 @@ fn directory() -> std::path::PathBuf {
     ));
     std::fs::create_dir(&directory).unwrap();
     directory
+}
+
+#[test]
+fn polling_preserves_finality_gate_and_restart_backoff() {
+    let directory = directory();
+    let state = state(&directory);
+    let operation = state.lock().unwrap().wallet.as_ref().unwrap().operations[0].clone();
+    let provider = mock_provider(&operation, Finality::Included);
+    let result = runtime()
+        .block_on(poll_attestation_at(&state, &provider, &operation.id, 1000))
+        .unwrap();
+    assert_eq!(result.state, "waiting_source_finality");
+    assert_eq!(result.retry_after_secs, 10);
+    let stored = state.lock().unwrap().wallet.as_ref().unwrap().operations[0].clone();
+    assert_eq!(stored.step, OperationStep::AwaitingAttestation);
+    let mut stored_clone = stored.clone();
+    assert!(crate::operations::advance_operation(&mut stored_clone, OperationStep::Mint).is_err());
+    runtime()
+        .block_on(poll_attestation_at(&state, &provider, &operation.id, 1001))
+        .unwrap();
+    assert_eq!(provider.calls.load(std::sync::atomic::Ordering::Relaxed), 1);
+    // Decode the actual persisted envelope to prove emitted bytes, attested bytes,
+    // nonce, simulation gate, and deadline survive an encrypted restart.
+    let envelope = crate::storage::read_stored_wallet(&directory.join("wallet.json"))
+        .unwrap()
+        .unwrap();
+    let ciphertext = base64::Engine::decode(
+        &base64::engine::general_purpose::STANDARD,
+        &envelope.ciphertext,
+    )
+    .unwrap();
+    let nonce = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &envelope.nonce)
+        .unwrap();
+    use aes_gcm::{KeyInit, aead::Aead};
+    let cipher = aes_gcm::Aes256Gcm::new_from_slice(&[1; 32]).unwrap();
+    let plaintext = cipher
+        .decrypt(
+            &aes_gcm::Nonce::try_from(nonce.as_slice()).unwrap(),
+            ciphertext.as_ref(),
+        )
+        .unwrap();
+    let payload: crate::dto::WalletPayload = serde_json::from_slice(&plaintext).unwrap();
+    assert_eq!(payload.operations[0], stored);
+    let mut guard = state.lock().unwrap();
+    guard.wallet.as_mut().unwrap().operations = payload.operations;
+    guard.advance_wallet_generation();
+    drop(guard);
+    runtime()
+        .block_on(poll_attestation_at(&state, &provider, &operation.id, 1002))
+        .unwrap();
+    assert_eq!(provider.calls.load(std::sync::atomic::Ordering::Relaxed), 1);
+    let finalized = mock_provider(&operation, Finality::Finalized);
+    let result = runtime()
+        .block_on(poll_attestation_at(&state, &finalized, &operation.id, 1010))
+        .unwrap();
+    assert_eq!(result.state, "available");
+    let mut operation = state.lock().unwrap().wallet.as_ref().unwrap().operations[0].clone();
+    crate::operations::advance_operation(&mut operation, OperationStep::Mint).unwrap();
+    std::fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]

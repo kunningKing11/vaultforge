@@ -63,7 +63,6 @@ import {
 import type {
   Activity,
   Asset,
-  AssetIdentity,
   FiatCurrency,
   NetworkId,
   QrResilience,
@@ -79,6 +78,7 @@ import type {
 import { appVersion } from "../version";
 import { walletApi } from "../walletApi";
 import { walletPasswordStrength } from "../walletPassword";
+import { BridgeView, type CctpRunner } from "./BridgeView";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./disclaimer";
 import {
   addressForNetwork,
@@ -130,7 +130,7 @@ const NAV_ITEMS: ReadonlyArray<{
   { view: "dashboard", label: "Dashboard", icon: dashboardIcon },
   { view: "send", label: "Send", icon: sendUpIcon },
   { view: "receive", label: "Receive", icon: receiveIcon },
-  { view: "swap", label: "Swap", icon: swapIcon },
+  { view: "swap", label: "Transfer USDC", icon: swapIcon },
   { view: "assets", label: "Assets", icon: assetsIcon },
   { view: "activity", label: "Activity", icon: activityIcon },
   { view: "settings", label: "Settings", icon: settingsIcon },
@@ -555,20 +555,20 @@ function WalletApplication({
     }
   }, [beginOperation, endOperation, toast]);
 
-  const swapTokens = useCallback(
-    async (fromAsset: AssetIdentity, toAsset: AssetIdentity, amount: string) => {
-      const wallet = stateRef.current.wallet;
-      if (wallet.status !== "unlocked") return;
-      const source = findAsset(wallet.assets, fromAsset);
-      if (!source || !findAsset(wallet.assets, toAsset)) {
-        toast("Selected asset is no longer available.", "error");
-        return;
+  const runCctp = useCallback(
+    async <T,>(action: () => Promise<T>): Promise<T | null> => {
+      if (stateRef.current.wallet.status !== "unlocked" || !beginOperation()) return null;
+      try {
+        const result = await action();
+        return lockRequestedRef.current ? null : result;
+      } catch (error) {
+        toast(formatError(error), "error");
+        return null;
+      } finally {
+        endOperation();
       }
-      await runSessionCommand("swap_tokens", () =>
-        walletApi.swapTokens({ fromAsset, toAsset, amount: toWei(amount, source.decimals) }),
-      );
     },
-    [runSessionCommand, toast],
+    [beginOperation, endOperation, toast],
   );
 
   const saveWalletSettings = useCallback(
@@ -759,7 +759,8 @@ function WalletApplication({
           onRefresh={() => void refreshPortfolio()}
           onSign={signTransaction}
           onSaveSettings={saveWalletSettings}
-          onSwap={swapTokens}
+          runCctp={runCctp}
+          onCctpSession={commitSession}
           selectView={selectView}
           setColorScheme={setColorScheme}
           setState={setState}
@@ -1283,7 +1284,8 @@ function WalletShell({
   onRefresh,
   onSign,
   onSaveSettings,
-  onSwap,
+  runCctp,
+  onCctpSession,
   selectView,
   setColorScheme,
   setState,
@@ -1303,7 +1305,8 @@ function WalletShell({
   onSaveSettings: (
     settings: Parameters<typeof walletApi.updateWalletSettings>[0],
   ) => Promise<boolean>;
-  onSwap: (fromAsset: AssetIdentity, toAsset: AssetIdentity, amount: string) => Promise<void>;
+  runCctp: CctpRunner;
+  onCctpSession: (session: WalletSession) => void;
   selectView: (view: View) => void;
   setColorScheme: (scheme: ColorScheme) => void;
   setState: React.Dispatch<React.SetStateAction<AppState>>;
@@ -1403,7 +1406,8 @@ function WalletShell({
             onCancelSignedTransaction={onCancelSignedTransaction}
             onSign={onSign}
             onSaveSettings={onSaveSettings}
-            onSwap={onSwap}
+            runCctp={runCctp}
+            onCctpSession={onCctpSession}
             selectView={selectView}
             setColorScheme={setColorScheme}
             setState={setState}
@@ -1426,7 +1430,8 @@ function WalletView({
   onCancelSignedTransaction,
   onSign,
   onSaveSettings,
-  onSwap,
+  runCctp,
+  onCctpSession,
   selectView,
   setColorScheme,
   setState,
@@ -1444,7 +1449,8 @@ function WalletView({
   onSaveSettings: (
     settings: Parameters<typeof walletApi.updateWalletSettings>[0],
   ) => Promise<boolean>;
-  onSwap: (fromAsset: AssetIdentity, toAsset: AssetIdentity, amount: string) => Promise<void>;
+  runCctp: CctpRunner;
+  onCctpSession: (session: WalletSession) => void;
   selectView: (view: View) => void;
   setColorScheme: (scheme: ColorScheme) => void;
   setState: React.Dispatch<React.SetStateAction<AppState>>;
@@ -1477,7 +1483,7 @@ function WalletView({
     );
   }
   if (state.navigation.currentView === "swap")
-    return <SwapView busy={state.operation.busy} onSwap={onSwap} wallet={wallet} />;
+    return <BridgeView busy={state.operation.busy} run={runCctp} onSession={onCctpSession} />;
   if (state.navigation.currentView === "assets") return <AssetsView wallet={wallet} />;
   if (state.navigation.currentView === "activity")
     return <ActivityView copyText={copyText} setState={setState} state={state} wallet={wallet} />;
@@ -2269,7 +2275,7 @@ function DashboardView({
           Receive
         </Button>
         <Button block onClick={() => selectView("swap")} variant="secondary">
-          Swap
+          Transfer USDC
         </Button>
       </ContentCard>
     </Grid>
@@ -2676,70 +2682,6 @@ function ReceiveView({
           Copy address
         </Button>
       </VStack>
-    </ContentCard>
-  );
-}
-
-function SwapView({
-  busy,
-  onSwap,
-  wallet,
-}: {
-  busy: boolean;
-  onSwap: (fromAsset: AssetIdentity, toAsset: AssetIdentity, amount: string) => Promise<void>;
-  wallet: Extract<WalletState, { status: "unlocked" }>;
-}) {
-  const [fromKey, setFromKey] = useState(wallet.assets[0] ? assetKey(wallet.assets[0]) : "");
-  const [toKey, setToKey] = useState(() => {
-    const destination =
-      wallet.assets.find((asset, index) => index !== 0 && asset.symbol === "USDC") ??
-      wallet.assets[1];
-    return destination ? assetKey(destination) : "";
-  });
-  const [amount, setAmount] = useState("");
-  const submit: SubmitEventHandler<HTMLFormElement> = (event) => {
-    event.preventDefault();
-    const from = wallet.assets.find((asset) => assetKey(asset) === fromKey);
-    const to = wallet.assets.find((asset) => assetKey(asset) === toKey);
-    if (!from || !to) return;
-    void onSwap(
-      { network: from.network, token_address: from.token_address ?? null },
-      { network: to.network, token_address: to.token_address ?? null },
-      amount,
-    );
-  };
-  const options = wallet.assets.map((asset) => ({
-    label: `${displayAssetSymbol(asset, wallet)} - ${asset.name} (${networkDisplayName(asset.network)})`,
-    value: assetKey(asset),
-  }));
-  return (
-    <ContentCard background="bgElevation1" borderRadius={400} gap={3} maxWidth="760px" padding={4}>
-      <VStack gap={1}>
-        <Text color="fgMuted" font="label2">
-          Exchange
-        </Text>
-        <Text as="h2" font="title1">
-          Swap assets
-        </Text>
-      </VStack>
-      <form onSubmit={submit}>
-        <VStack gap={2}>
-          <Grid columnMin="200px" gap={2}>
-            <CdsSelect label="From" onChange={setFromKey} options={options} value={fromKey} />
-            <CdsSelect label="To" onChange={setToKey} options={options} value={toKey} />
-          </Grid>
-          <TextInput
-            label="Amount"
-            inputMode="decimal"
-            onChange={(event) => setAmount(event.target.value)}
-            required
-            value={amount}
-          />
-          <Button loading={busy} type="submit">
-            Swap (not implemented)
-          </Button>
-        </VStack>
-      </form>
     </ContentCard>
   );
 }

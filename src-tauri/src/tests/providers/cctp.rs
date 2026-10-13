@@ -124,6 +124,15 @@ fn rpc(
                 assert_eq!(request["params"][1], "latest");
                 if data.starts_with("0x70a08231") {
                     serde_json::json!(format!("0x{usdc:064x}"))
+                } else if expected_call
+                    .as_ref()
+                    .is_some_and(|expected| data == format!("0x{}", hex::encode(expected)))
+                {
+                    assert_eq!(
+                        request["params"][0]["from"],
+                        "0x3333333333333333333333333333333333333333"
+                    );
+                    serde_json::json!(format!("0x{:064x}", 1))
                 } else {
                     assert!(data.starts_with("0xdd62ed3e"));
                     assert_eq!(data.len(), 138);
@@ -164,7 +173,7 @@ fn mocked_transfer(source: &MockRpc, destination: &MockRpc) -> CctpTransfer {
 fn estimates_real_mint_calldata_and_rechecks_destination_gas() {
     let template = transfer(CctpEnvironment::Mainnet);
     let call = build_mint_call(&template, &[1; 33], &[2; 65]).unwrap();
-    for balance in [299, 300] {
+    for balance in [399, 400] {
         let source = rpc(1, 1_000_000, 1_000_000, &format!("0x{:064x}", 0), None);
         let destination = rpc(42161, balance, 0, "", Some(call.data.clone()));
         let t = mocked_transfer(&source, &destination);
@@ -174,9 +183,9 @@ fn estimates_real_mint_calldata_and_rechecks_destination_gas() {
             &[1; 33],
             &[2; 65],
         ));
-        assert_eq!(result.is_ok(), balance == 300);
+        assert_eq!(result.is_ok(), balance == 400);
         if let Ok(prepared) = result {
-            assert_eq!(prepared.estimate.max_native_fee, 300);
+            assert_eq!(prepared.estimate.max_native_fee, 400);
         }
     }
 }
@@ -249,13 +258,13 @@ fn prepares_approval_budget_without_estimating_burn_before_allowance() {
         &format!("0x{:064x}", 999999),
         Some(build_approval_call(&template).unwrap().data),
     );
-    let destination = rpc(42161, 1_000_000, 0, "", None);
+    let destination = rpc(42161, 2_000_000, 0, "", None);
     let t = mocked_transfer(&source, &destination);
     let quote = runtime()
         .block_on(prepare_source_after_fee_check(&reqwest::Client::new(), &t))
         .unwrap();
-    assert_eq!(quote.source_native_budget, 600300);
-    assert_eq!(quote.provisional_destination_fee, 900000);
+    assert_eq!(quote.source_native_budget, 800400);
+    assert_eq!(quote.provisional_destination_fee, 1_200_000);
     assert_eq!(quote.protocol_fee, 0);
     assert_eq!(quote.expected_receive_amount, 1000000);
     let CctpSourcePreparation::Approval {
@@ -266,7 +275,7 @@ fn prepares_approval_budget_without_estimating_burn_before_allowance() {
         panic!("Expected approval")
     };
     assert_eq!(approval.call.to, t.route.source.usdc);
-    assert_eq!(provisional_burn_fee, 600000);
+    assert_eq!(provisional_burn_fee, 800000);
 }
 
 #[test]
@@ -283,7 +292,7 @@ fn propagates_rpc_errors_without_preparing_source_or_mint_calls() {
         "eth_feeHistory" => {
             serde_json::json!({"result":{"baseFeePerGas":["0x1"],"reward":[["0x1"]]}})
         }
-        "eth_estimateGas" => {
+        "eth_estimateGas" | "eth_call" => {
             serde_json::json!({"error":{"code":-32000,"message":"invalid attestation"}})
         }
         method => panic!("Unexpected method {method}"),
@@ -350,12 +359,12 @@ fn skips_approval_and_estimates_burn_when_allowance_covers() {
             &allowance,
             Some(build_burn_call(&template).unwrap().data),
         );
-        let destination = rpc(42161, 1_000_000, 0, "", None);
+        let destination = rpc(42161, 2_000_000, 0, "", None);
         let t = mocked_transfer(&source, &destination);
         let quote = runtime()
             .block_on(prepare_source_after_fee_check(&reqwest::Client::new(), &t))
             .unwrap();
-        assert_eq!(quote.source_native_budget, 300);
+        assert_eq!(quote.source_native_budget, 400);
         let CctpSourcePreparation::Burn(burn) = quote.source else {
             panic!("Expected burn")
         };

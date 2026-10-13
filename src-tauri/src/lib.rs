@@ -7,6 +7,8 @@ mod assets;
 mod cctp;
 mod cctp_attestation;
 mod cctp_execution;
+mod cctp_mint;
+mod cctp_native;
 mod commands;
 mod derivation;
 mod dto;
@@ -75,6 +77,13 @@ pub fn run() {
             commands::tx::swap_tokens,
             commands::tx::check_transaction_status,
             commands::cctp::poll_cctp_attestation,
+            commands::cctp::refresh_cctp_attestation,
+            commands::cctp::get_cctp_state,
+            commands::cctp::create_cctp_transfer,
+            commands::cctp::prepare_cctp_step,
+            commands::cctp::submit_cctp_step,
+            commands::cctp::cancel_cctp_transfer,
+            commands::cctp::sync_cctp_transfer,
         ])
         .run(tauri::generate_context!())
         .expect("error while running VaultForge Wallet");

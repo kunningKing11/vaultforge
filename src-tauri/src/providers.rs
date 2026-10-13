@@ -63,6 +63,8 @@ pub(crate) async fn fetch_tx_observation(
 pub(crate) mod bitcoin;
 pub(crate) mod cctp;
 pub(crate) mod cctp_attestation;
+pub(crate) mod cctp_execution;
+pub(crate) mod cctp_native;
 pub(crate) mod cctp_solana;
 pub(crate) mod evm;
 pub(crate) mod http;

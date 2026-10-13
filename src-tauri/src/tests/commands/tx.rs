@@ -508,6 +508,7 @@ fn send_status_commit_updates_durable_cctp_operation() {
         updated_at: "2026-10-08T00:00:00Z".to_string(),
         tx_status: None,
         evm_context: None,
+        solana_context: None,
     });
     state
         .lock()

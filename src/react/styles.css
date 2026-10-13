@@ -593,3 +593,16 @@ textarea {
     padding: var(--space-3);
   }
 }
+
+.cctp-route-select {
+  width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--color-bgLine);
+  border-radius: var(--borderRadius-200);
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+.cctp-route-select:focus-visible {
+  outline: 2px solid var(--color-bgPrimary);
+}

@@ -1,7 +1,7 @@
 use crate::assets::cached_asset;
 use crate::dto::Asset;
 use crate::providers::NetworkAssetRefresh;
-use crate::providers::http::{json_rpc_result, optional_tx_hash, rpc_post};
+use crate::providers::http::{json_rpc_result, optional_tx_hash, rpc_post_network};
 use crate::registry::{AssetConfig, NetworkConfig, network_by_id};
 use crate::tx::evm::{EvmCall, evm_address_word, evm_uint_word};
 use crate::tx::tx_status::{Execution, Finality, TxStatus, legacy_tx_status};
@@ -38,7 +38,7 @@ pub(crate) async fn fetch_evm_native_balance(
         "id": 1,
     });
 
-    let json = rpc_post(client, config.rpc_url()?, &body).await?;
+    let json = rpc_post_network(client, &config.id, config.rpc_url()?, &body).await?;
     parse_evm_balance(&json, "EVM balance")
 }
 
@@ -75,7 +75,7 @@ pub(crate) async fn fetch_evm_token_balance_for_contract(
         "id": 1,
     });
 
-    let json = rpc_post(client, config.rpc_url()?, &body).await?;
+    let json = rpc_post_network(client, &config.id, config.rpc_url()?, &body).await?;
     parse_evm_balance(&json, "EVM token balance")
 }
 
@@ -100,8 +100,9 @@ pub(crate) async fn fetch_evm_allowance(
     let mut data = vec![0xdd, 0x62, 0xed, 0x3e];
     data.extend_from_slice(&evm_address_word(owner)?);
     data.extend_from_slice(&evm_address_word(spender)?);
-    let json = rpc_post(
+    let json = rpc_post_network(
         client,
+        &config.id,
         config.rpc_url()?,
         &serde_json::json!({
             "jsonrpc": "2.0", "method": "eth_call", "id": 1,
@@ -130,8 +131,9 @@ pub(crate) async fn verify_evm_chain(
     client: &reqwest::Client,
     config: &EvmNetworkConfig,
 ) -> Result<(), String> {
-    let json = rpc_post(
+    let json = rpc_post_network(
         client,
+        &config.id,
         config.rpc_url()?,
         &serde_json::json!({"jsonrpc":"2.0", "method":"eth_chainId", "params":[], "id":1}),
     )
@@ -166,6 +168,38 @@ pub(crate) fn evm_max_native_fee(gas_limit: u64, max_fee_per_gas: u128) -> Resul
     (gas_limit as u128)
         .checked_mul(max_fee_per_gas)
         .ok_or_else(|| "EVM maximum fee overflows base units".into())
+}
+
+/// ~15% headroom on the EIP-1559 fee cap so a signed transaction survives
+/// modest base-fee movement between preparation and submission. The cap is a
+/// worst case, not the paid price, so this never spends more on its own.
+/// Integer math only; rounds up so dust estimates keep at least +1 wei.
+pub(crate) fn with_fee_headroom(max_fee_per_gas: u128) -> Result<u128, String> {
+    const NUMERATOR: u128 = 23;
+    const DENOMINATOR: u128 = 20;
+    max_fee_per_gas
+        .checked_mul(NUMERATOR)
+        .and_then(|scaled| scaled.checked_add(DENOMINATOR - 1))
+        .map(|scaled| scaled / DENOMINATOR)
+        .filter(|capped| *capped >= max_fee_per_gas)
+        .ok_or_else(|| "EVM fee headroom overflows base units".into())
+}
+
+/// Recomputes the spending ceiling after headroom so balance checks, saved
+/// contexts, and displayed fees all cover the same worst case that gets signed.
+pub(crate) fn estimate_with_fee_headroom(
+    estimate: EvmCallEstimate,
+) -> Result<EvmCallEstimate, String> {
+    let max_fee_per_gas = with_fee_headroom(estimate.fees.max_fee_per_gas)?;
+    let max_native_fee = evm_max_native_fee(estimate.gas_limit, max_fee_per_gas)?;
+    Ok(EvmCallEstimate {
+        gas_limit: estimate.gas_limit,
+        fees: EvmFeeEstimate {
+            max_priority_fee_per_gas: estimate.fees.max_priority_fee_per_gas,
+            max_fee_per_gas,
+        },
+        max_native_fee,
+    })
 }
 
 /// Shared preparation seam for native/token sends and supported contract calls.
@@ -270,7 +304,7 @@ pub(crate) async fn fetch_evm_nonce(
         "params": [address, "pending"],
         "id": 1,
     });
-    let json = rpc_post(client, config.rpc_url()?, &body).await?;
+    let json = rpc_post_network(client, &config.id, config.rpc_url()?, &body).await?;
     let hex_str = json_rpc_result(&json, "EVM nonce")?
         .as_str()
         .ok_or_else(|| "EVM nonce RPC result is not a hex quantity".to_string())?;
@@ -289,7 +323,7 @@ pub(crate) async fn fetch_evm_gas_price(
         "params": [],
         "id": 1,
     });
-    let json = rpc_post(client, config.rpc_url()?, &body).await?;
+    let json = rpc_post_network(client, &config.id, config.rpc_url()?, &body).await?;
     let hex_str = json_rpc_result(&json, "EVM gas price")?
         .as_str()
         .ok_or_else(|| "EVM gas price RPC result is not a hex quantity".to_string())?;
@@ -309,7 +343,7 @@ pub(crate) async fn fetch_evm_fee_estimate(
         "id": 1,
     });
 
-    match rpc_post(client, config.rpc_url()?, &body).await {
+    match rpc_post_network(client, &config.id, config.rpc_url()?, &body).await {
         Ok(json) => parse_evm_fee_history(&json),
         Err(_) => {
             let gas_price = fetch_evm_gas_price(client, config).await?;
@@ -378,7 +412,7 @@ pub(crate) async fn fetch_evm_estimated_gas(
         "params": [params],
         "id": 1,
     });
-    let json = rpc_post(client, config.rpc_url()?, &body).await?;
+    let json = rpc_post_network(client, &config.id, config.rpc_url()?, &body).await?;
     let hex_str = json_rpc_result(&json, "EVM gas estimate")?
         .as_str()
         .ok_or_else(|| "EVM gas estimate RPC result is not a hex quantity".to_string())?;
@@ -397,7 +431,7 @@ pub(crate) async fn broadcast_evm_tx(
         "params": [raw_tx_hex],
         "id": 1,
     });
-    let json = rpc_post(client, config.rpc_url()?, &body).await?;
+    let json = rpc_post_network(client, &config.id, config.rpc_url()?, &body).await?;
     json_rpc_result(&json, "EVM broadcast")?
         .as_str()
         .map(|s| s.to_string())
@@ -425,7 +459,7 @@ pub(crate) async fn fetch_evm_tx_observation(
         "params": [tx_hash],
         "id": 1,
     });
-    let json = rpc_post(client, config.rpc_url()?, &body).await?;
+    let json = rpc_post_network(client, &config.id, config.rpc_url()?, &body).await?;
 
     let result = json_rpc_result(&json, "EVM transaction status")?;
 
@@ -435,12 +469,12 @@ pub(crate) async fn fetch_evm_tx_observation(
     let height = observation
         .block_height
         .ok_or_else(|| "Missing EVM receipt height".to_string())?;
-    let finalized = match rpc_post(client, config.rpc_url()?, &serde_json::json!({"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["finalized",false],"id":3})).await {
+    let finalized = match rpc_post_network(client, &config.id, config.rpc_url()?, &serde_json::json!({"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["finalized",false],"id":3})).await {
         Ok(json) => json.get("result").cloned().unwrap_or(serde_json::Value::Null),
         Err(_) => serde_json::Value::Null,
     };
     // Check canonical inclusion after reading finality so an intervening reorg cannot finalize an old fork.
-    let canonical = rpc_post(client, config.rpc_url()?, &serde_json::json!({"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":[format!("0x{height:x}"),false],"id":2})).await?;
+    let canonical = rpc_post_network(client, &config.id, config.rpc_url()?, &serde_json::json!({"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":[format!("0x{height:x}"),false],"id":2})).await?;
     let canonical = json_rpc_result(&canonical, "EVM canonical block")?;
     finalize_evm_observation(observation, canonical, &finalized)
 }

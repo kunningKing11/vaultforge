@@ -1,5 +1,29 @@
-use super::{evm_config_by_id, parse_evm_balance, parse_evm_fee_history, parse_evm_tx_receipt};
+use super::{
+    estimate_with_fee_headroom, evm_config_by_id, parse_evm_balance, parse_evm_fee_history,
+    parse_evm_tx_receipt, with_fee_headroom,
+};
+use crate::providers::evm::{EvmCallEstimate, EvmFeeEstimate};
 use crate::tx::tx_status::{Execution, Finality, legacy_tx_status};
+
+#[test]
+fn adds_fifteen_percent_fee_headroom_to_signing_caps() {
+    assert_eq!(with_fee_headroom(42_000_000_000).unwrap(), 48_300_000_000);
+    assert_eq!(with_fee_headroom(3).unwrap(), 4);
+    assert_eq!(with_fee_headroom(0).unwrap(), 0);
+    assert!(with_fee_headroom(u128::MAX).is_err());
+    let headed = estimate_with_fee_headroom(EvmCallEstimate {
+        gas_limit: 100,
+        fees: EvmFeeEstimate {
+            max_priority_fee_per_gas: 1,
+            max_fee_per_gas: 3,
+        },
+        max_native_fee: 300,
+    })
+    .unwrap();
+    assert_eq!(headed.fees.max_fee_per_gas, 4);
+    assert_eq!(headed.fees.max_priority_fee_per_gas, 1);
+    assert_eq!(headed.max_native_fee, 400);
+}
 
 #[test]
 fn finalizes_evm_only_with_matching_canonical_block_and_finalized_head() {

@@ -22,13 +22,13 @@ const TEST_MNEMONIC: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 const RECIPIENT: &str = "0x4444444444444444444444444444444444444444";
 
-struct MockSourceProvider {
-    preflight: Mutex<Option<Result<CctpPreflight, String>>>,
-    pending_nonce: Mutex<u64>,
-    observation: Mutex<Option<Result<Option<TxStatus>, String>>>,
+pub(crate) struct MockSourceProvider {
+    pub(crate) preflight: Mutex<Option<Result<CctpPreflight, String>>>,
+    pub(crate) pending_nonce: Mutex<u64>,
+    pub(crate) observation: Mutex<Option<Result<Option<TxStatus>, String>>>,
     signed_preflight: Mutex<Option<Result<(), String>>>,
-    broadcasts: Mutex<VecDeque<Result<String, String>>>,
-    broadcast_calls: Mutex<usize>,
+    pub(crate) broadcasts: Mutex<VecDeque<Result<String, String>>>,
+    pub(crate) broadcast_calls: Mutex<usize>,
     balances: Mutex<Result<(u128, u128), String>>,
 }
 
@@ -108,7 +108,7 @@ fn test_address() -> String {
     crate::derivation::ethereum_address_from_private_key(&bytes).unwrap()
 }
 
-fn temp_dir(name: &str) -> PathBuf {
+pub(crate) fn temp_dir(name: &str) -> PathBuf {
     let directory = std::env::temp_dir().join(format!(
         "vaultforge-{name}-{}",
         crate::activity::random_hex(16)
@@ -117,7 +117,7 @@ fn temp_dir(name: &str) -> PathBuf {
     directory
 }
 
-fn execution_state(directory: &Path) -> Mutex<AppState> {
+pub(crate) fn execution_state(directory: &Path) -> Mutex<AppState> {
     let mut state = AppState::from_storage(directory.join("wallet.json"));
     let mut addresses = HashMap::new();
     addresses.insert("evm".to_string(), test_address());
@@ -144,14 +144,14 @@ fn execution_state(directory: &Path) -> Mutex<AppState> {
     Mutex::new(state)
 }
 
-fn source_asset() -> AssetIdentity {
+pub(crate) fn source_asset() -> AssetIdentity {
     AssetIdentity::new(
         "ethereum",
         Some("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
     )
 }
 
-fn destination_asset() -> AssetIdentity {
+pub(crate) fn destination_asset() -> AssetIdentity {
     AssetIdentity::new(
         "arbitrum_one",
         Some("0xaf88d065e77c8cC2239327C5EDb3A432268e5831"),
@@ -187,7 +187,7 @@ fn fee_estimate() -> EvmCallEstimate {
     }
 }
 
-fn approval_preflight(transfer: &CctpTransfer) -> CctpPreflight {
+pub(crate) fn approval_preflight(transfer: &CctpTransfer) -> CctpPreflight {
     CctpPreflight {
         source: CctpSourcePreparation::Approval {
             approval: PreparedCctpCall {
@@ -203,7 +203,7 @@ fn approval_preflight(transfer: &CctpTransfer) -> CctpPreflight {
     }
 }
 
-fn burn_preflight(transfer: &CctpTransfer) -> CctpPreflight {
+pub(crate) fn burn_preflight(transfer: &CctpTransfer) -> CctpPreflight {
     CctpPreflight {
         source: CctpSourcePreparation::Burn(PreparedCctpCall {
             call: build_burn_call(transfer).unwrap(),
@@ -406,6 +406,71 @@ fn persists_signed_attempt_before_broadcast_and_survives_lost_response() {
         .unwrap();
     assert_eq!(*provider.broadcast_calls.lock().unwrap(), 1);
     assert_eq!(last_attempt(&state).status, TransactionStatus::Confirmed);
+
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn reconciliation_failure_blocks_submit_with_provider_detail() {
+    let directory = temp_dir("cctp-reconcile-block");
+    let state = execution_state(&directory);
+    let id = create_operation(&state);
+    let provider = MockSourceProvider::default();
+    let prepared = prepare_approval(&state, &provider, &id);
+
+    provider.observation.lock().unwrap().replace(Err(
+        "RPC request failed (attempt 3/3): connection refused".to_string(),
+    ));
+    let error = block_err(test_runtime().block_on(submit_source_step(
+        &state,
+        &provider,
+        &id,
+        &prepared.tx_hash,
+    )));
+    assert!(error.contains("Reconciliation failed"), "{error}");
+    assert!(error.contains("Status check failed"), "{error}");
+    assert!(error.contains("Nothing was broadcast"), "{error}");
+    assert_eq!(*provider.broadcast_calls.lock().unwrap(), 0);
+    assert_eq!(last_attempt(&state).status, TransactionStatus::Signed);
+
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn recovered_reconciliation_unblocks_submit() {
+    let directory = temp_dir("cctp-reconcile-retry");
+    let state = execution_state(&directory);
+    let id = create_operation(&state);
+    let provider = MockSourceProvider::default();
+    let prepared = prepare_approval(&state, &provider, &id);
+
+    provider
+        .observation
+        .lock()
+        .unwrap()
+        .replace(Err("RPC request failed (attempt 3/3): timeout".to_string()));
+    block_err(test_runtime().block_on(submit_source_step(
+        &state,
+        &provider,
+        &id,
+        &prepared.tx_hash,
+    )));
+
+    provider.observation.lock().unwrap().replace(Ok(None));
+    provider
+        .broadcasts
+        .lock()
+        .unwrap()
+        .push_back(Ok(prepared.tx_hash.clone()));
+    test_runtime()
+        .block_on(submit_source_step(
+            &state,
+            &provider,
+            &id,
+            &prepared.tx_hash,
+        ))
+        .unwrap();
+    assert_eq!(last_attempt(&state).status, TransactionStatus::Submitted);
 
     std::fs::remove_dir_all(directory).unwrap();
 }

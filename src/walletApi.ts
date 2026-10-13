@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AssetIdentity,
   CctpAttestationProgress,
+  CctpPreparedStep,
+  CctpState,
   FiatCurrency,
   NetworkId,
   SignedTransaction,
@@ -61,6 +63,23 @@ export const walletApi = {
     invoke<WalletSession>("send_transaction", args),
   swapTokens: (args: { fromAsset: AssetIdentity; toAsset: AssetIdentity; amount: string }) =>
     invoke<WalletSession>("swap_tokens", args),
+  getCctpState: () => invoke<CctpState>("get_cctp_state"),
+  createCctpTransfer: (args: {
+    sourceNetwork: string;
+    destinationNetwork: string;
+    recipient: string;
+    amountBaseUnits: string;
+  }) => invoke<{ operation_id: string; session: WalletSession }>("create_cctp_transfer", args),
+  prepareCctpStep: (args: { operationId: string }) =>
+    invoke<CctpPreparedStep>("prepare_cctp_step", args),
+  submitCctpStep: (args: { operationId: string; expectedHash: string }) =>
+    invoke<WalletSession>("submit_cctp_step", args),
+  cancelCctpTransfer: (args: { operationId: string }) =>
+    invoke<WalletSession>("cancel_cctp_transfer", args),
+  syncCctpTransfer: (args: { operationId: string }) =>
+    invoke<WalletSession>("sync_cctp_transfer", args),
+  refreshCctpAttestation: (args: { operationId: string }) =>
+    invoke<CctpAttestationProgress>("refresh_cctp_attestation", args),
   pollCctpAttestation: (args: { operationId: string }) =>
     invoke<CctpAttestationProgress>("poll_cctp_attestation", args),
   checkTransactionStatus: (args: { txHash: string; network: NetworkId }) =>

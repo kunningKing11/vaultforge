@@ -140,7 +140,7 @@ fn write_wallet_atomically(path: &Path, contents: &[u8]) -> Result<(), String> {
     result
 }
 
-/// Encrypts a wallet with a fresh nonce; operation-aware wallets use version 11.
+/// Encrypts a wallet with a fresh nonce; operation-aware wallets use version 12.
 pub(crate) fn encrypt_wallet(
     wallet: &Wallet,
     key: &[u8; 32],
@@ -175,7 +175,7 @@ pub(crate) fn encrypt_wallet(
     let ciphertext = ciphertext.map_err(|_| "Failed to encrypt wallet")?;
 
     Ok(StoredWalletFile {
-        version: 11,
+        version: 12,
         wallet_name: wallet.name.clone(),
         network: "ethereum".to_string(),
         salt: BASE64.encode(salt),
@@ -184,12 +184,12 @@ pub(crate) fn encrypt_wallet(
     })
 }
 
-/// Decrypts stored versions 2–11, filling preferences absent from older payloads.
+/// Decrypts stored versions 2–12, filling preferences absent from older payloads.
 pub(crate) fn decrypt_wallet(
     stored: &StoredWalletFile,
     wallet_password: &str,
 ) -> Result<DecryptedWallet, String> {
-    if !matches!(stored.version, 2..=11) {
+    if !matches!(stored.version, 2..=12) {
         return Err("Unsupported wallet version".to_string());
     }
     let salt = BASE64
