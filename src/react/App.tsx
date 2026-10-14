@@ -7,7 +7,7 @@ import { useMediaQuery } from "@coinbase/cds-web/hooks/useMediaQuery";
 import { Icon } from "@coinbase/cds-web/icons/Icon";
 import { Box, Grid, HStack, VStack } from "@coinbase/cds-web/layout";
 import { Sidebar, SidebarItem } from "@coinbase/cds-web/navigation";
-import { Modal, PortalProvider } from "@coinbase/cds-web/overlays";
+import { Modal, PortalProvider, Tooltip } from "@coinbase/cds-web/overlays";
 import { useToast } from "@coinbase/cds-web/overlays/useToast";
 import { MediaQueryProvider, ThemeProvider } from "@coinbase/cds-web/system";
 import { Text } from "@coinbase/cds-web/typography";
@@ -2174,6 +2174,19 @@ function AddressList({
   );
 }
 
+function HiddenAssetsNote() {
+  return (
+    <HStack alignItems="center" gap={1}>
+      <Text color="fgMuted" font="label1">
+        Why am I not seeing all my assets?
+      </Text>
+      <Tooltip content="Assets with a value under $1 in your portfolio are hidden. You can change this at any time in settings.">
+        <Icon name="info" size="s" />
+      </Tooltip>
+    </HStack>
+  );
+}
+
 function DashboardView({
   selectView,
   wallet,
@@ -2205,6 +2218,7 @@ function DashboardView({
               </Text>
             </VStack>
           </HStack>
+          <HiddenAssetsNote />
           {assets.length > 0 ? (
             <>
               <div className="asset-scroll" data-horizontal-scroll>
@@ -2698,6 +2712,7 @@ function AssetsView({ wallet }: { wallet: Extract<WalletState, { status: "unlock
           {assets.length} tracked
         </Text>
       </HStack>
+      <HiddenAssetsNote />
       <Grid className="assets-grid" columnMin="280px" gap={2}>
         {assets.map((asset) => (
           <AssetCard asset={asset} key={assetKey(asset)} wallet={wallet} />
