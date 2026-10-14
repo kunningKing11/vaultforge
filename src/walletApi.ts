@@ -47,6 +47,7 @@ export const walletApi = {
     fiatCurrency: FiatCurrency;
     autoLockTimeoutSecs: number | null;
     useCryptoSymbols: boolean;
+    hideBelowUsd: number;
   }) => invoke<WalletSession>("update_wallet_settings", args),
   signTransaction: (args: {
     to: string;

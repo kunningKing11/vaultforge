@@ -112,6 +112,7 @@ export type WalletState =
       enabledNetworks: NetworkId[];
       autoLockTimeoutSecs: number | null;
       useCryptoSymbols: boolean;
+      hideBelowUsd: number;
     };
 
 export type SetupWizardState = {
@@ -287,6 +288,7 @@ export function walletStateFromSession(session: WalletSession): WalletState {
     }),
     autoLockTimeoutSecs: session.auto_lock_timeout_secs,
     useCryptoSymbols: session.use_crypto_symbols,
+    hideBelowUsd: session.hide_below_usd ?? 1,
   };
 }
 

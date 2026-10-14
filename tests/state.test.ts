@@ -16,6 +16,7 @@ function session(overrides: Partial<WalletSession> = {}): WalletSession {
     enabled_networks: ["ethereum"],
     auto_lock_timeout_secs: 300,
     use_crypto_symbols: true,
+    hide_below_usd: 1,
     ...overrides,
   };
 }
@@ -46,6 +47,19 @@ describe("wallet session transitions", () => {
     });
   });
 
+  test("maps the hidden-asset cutoff and defaults it to $1", () => {
+    expect(walletStateFromSession(session({ hide_below_usd: 2.5 }))).toMatchObject({
+      status: "unlocked",
+      hideBelowUsd: 2.5,
+    });
+    expect(
+      walletStateFromSession(session({ hide_below_usd: null as unknown as number })),
+    ).toMatchObject({
+      status: "unlocked",
+      hideBelowUsd: 1,
+    });
+  });
+
   test("normalizes an unlocked session and filters unknown networks", () => {
     expect(
       walletStateFromSession(
@@ -67,6 +81,7 @@ describe("wallet session transitions", () => {
       enabledNetworks: ["ethereum"],
       autoLockTimeoutSecs: 300,
       useCryptoSymbols: true,
+      hideBelowUsd: 1,
     });
   });
 

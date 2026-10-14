@@ -31,6 +31,7 @@ fn locked_session_does_not_expose_secrets() {
         enabled_networks: vec![],
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
+        hide_below_usd: crate::dto::default_hide_below_usd(),
     };
     state.wallet = Some(wallet);
     state.locked = true;
@@ -82,6 +83,7 @@ fn unlocked_tron_state() -> AppState {
         enabled_networks: vec!["tron".to_string()],
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
+        hide_below_usd: crate::dto::default_hide_below_usd(),
     });
     state
 }

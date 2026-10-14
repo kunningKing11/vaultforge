@@ -32,6 +32,7 @@ const unlockedSession: WalletSession = {
   enabled_networks: ["ethereum", "xrpl"],
   auto_lock_timeout_secs: null,
   use_crypto_symbols: false,
+  hide_below_usd: 1,
 };
 
 const ethereumAsset: Asset = {

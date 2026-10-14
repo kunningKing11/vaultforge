@@ -2174,13 +2174,20 @@ function AddressList({
   );
 }
 
-function HiddenAssetsNote() {
+function formatUsdCutoff(value: number) {
+  return `$${Number.isInteger(value) ? value : value.toFixed(2)}`;
+}
+
+function HiddenAssetsNote({ cutoff }: { cutoff: number }) {
+  const formatted = formatUsdCutoff(cutoff);
   return (
     <HStack alignItems="center" gap={1}>
       <Text color="fgMuted" font="label1">
         Why am I not seeing all my assets?
       </Text>
-      <Tooltip content="Assets with a value under $1 in your portfolio are hidden. You can change this at any time in settings.">
+      <Tooltip
+        content={`Assets worth less than ${formatted} in your portfolio are hidden. You can change this at any time in settings.`}
+      >
         <Icon name="info" size="s" />
       </Tooltip>
     </HStack>
@@ -2218,7 +2225,7 @@ function DashboardView({
               </Text>
             </VStack>
           </HStack>
-          <HiddenAssetsNote />
+          <HiddenAssetsNote cutoff={wallet.hideBelowUsd} />
           {assets.length > 0 ? (
             <>
               <div className="asset-scroll" data-horizontal-scroll>
@@ -2712,7 +2719,7 @@ function AssetsView({ wallet }: { wallet: Extract<WalletState, { status: "unlock
           {assets.length} tracked
         </Text>
       </HStack>
-      <HiddenAssetsNote />
+      <HiddenAssetsNote cutoff={wallet.hideBelowUsd} />
       <Grid className="assets-grid" columnMin="280px" gap={2}>
         {assets.map((asset) => (
           <AssetCard asset={asset} key={assetKey(asset)} wallet={wallet} />
@@ -2794,9 +2801,20 @@ function SettingsView({
   const [fiatCurrency, setFiatCurrency] = useState(wallet.fiatCurrency);
   const [autoLockTimeoutSecs, setAutoLockTimeoutSecs] = useState(wallet.autoLockTimeoutSecs);
   const [useCryptoSymbols, setUseCryptoSymbols] = useState(wallet.useCryptoSymbols);
+  const [hideBelowUsd, setHideBelowUsd] = useState(String(wallet.hideBelowUsd));
+  const hideBelowParsed = Number(hideBelowUsd);
+  const hideBelowValid =
+    hideBelowUsd.trim() !== "" && Number.isFinite(hideBelowParsed) && hideBelowParsed >= 0;
   const submit: SubmitEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault();
-    await onSave({ name, fiatCurrency, autoLockTimeoutSecs, useCryptoSymbols });
+    if (!hideBelowValid) return;
+    await onSave({
+      name,
+      fiatCurrency,
+      autoLockTimeoutSecs,
+      useCryptoSymbols,
+      hideBelowUsd: hideBelowParsed,
+    });
   };
   return (
     <ContentCard background="bgElevation1" borderRadius={400} gap={3} maxWidth="760px" padding={4}>
@@ -2835,6 +2853,12 @@ function SettingsView({
             }))}
             value={fiatCurrency}
           />
+          <TextInput
+            label="Hide assets worth less than (USD)"
+            inputMode="decimal"
+            onChange={(event) => setHideBelowUsd(event.target.value)}
+            value={hideBelowUsd}
+          />
           <Switch
             checked={useCryptoSymbols}
             onChange={(event) => setUseCryptoSymbols(event.target.checked)}
@@ -2842,7 +2866,7 @@ function SettingsView({
             Use crypto symbols where available
           </Switch>
           <ColorSchemeToggle colorScheme={colorScheme} setColorScheme={setColorScheme} />
-          <Button loading={busy} type="submit">
+          <Button disabled={!hideBelowValid} loading={busy} type="submit">
             Save settings
           </Button>
         </VStack>
@@ -3244,7 +3268,9 @@ function useQrSvg(payload: string, resilience: QrResilience, toast: ToastFn): st
 
 function visibleAssets(wallet: Extract<WalletState, { status: "unlocked" }>) {
   return sortAssetsByValue(
-    wallet.assets.filter((asset) => asset.price_usd <= 0 || assetValueUsd(asset) >= 1),
+    wallet.assets.filter(
+      (asset) => asset.price_usd <= 0 || assetValueUsd(asset) >= wallet.hideBelowUsd,
+    ),
   );
 }
 

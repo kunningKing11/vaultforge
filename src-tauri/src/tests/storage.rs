@@ -5,7 +5,7 @@ use super::{
     decrypt_wallet, derive_storage_key, encrypt_wallet, persist_state_wallet, read_stored_wallet,
 };
 use crate::activity::{activity, hash_secret};
-use crate::dto::{AssetIdentity, FiatCurrency, Wallet};
+use crate::dto::{AssetIdentity, FiatCurrency, Wallet, WalletPayload};
 use crate::operations::{CctpData, OperationStep, TransactionStatus, TransactionStep};
 use crate::state::AppState;
 use crate::tests::{sample_attempt, sample_operation, starter_assets};
@@ -38,6 +38,7 @@ fn encrypts_and_decrypts_wallet_payload() {
         enabled_networks: vec!["evm".to_string(), "bitcoin".to_string()],
         auto_lock_timeout_secs: Some(300),
         use_crypto_symbols: true,
+        hide_below_usd: crate::dto::default_hide_below_usd(),
     };
     wallet.activity[0].asset = Some(AssetIdentity::new("ethereum", Some("0xABC")));
     wallet.activity[0].counter_asset = Some(AssetIdentity::new("base", Some("0xABC")));
@@ -143,4 +144,19 @@ fn encrypts_and_decrypts_wallet_payload() {
     assert_eq!(restored.wallet().bip39_passphrase, wallet.bip39_passphrase);
     std::fs::remove_file(&path).unwrap();
     std::fs::remove_dir(&directory).unwrap();
+}
+
+#[test]
+fn legacy_payloads_default_the_hide_below_cutoff_to_one_dollar() {
+    let payload: WalletPayload = serde_json::from_value(serde_json::json!({
+        "wallet_name": "Legacy",
+        "mnemonic": "test mnemonic",
+        "created_at": "2025-01-01T00:00:00Z",
+        "addresses": {},
+        "wallet_password_hash": "hash",
+        "assets": [],
+        "activity": [],
+    }))
+    .unwrap();
+    assert_eq!(payload.hide_below_usd, 1.0);
 }

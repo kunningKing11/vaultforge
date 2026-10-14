@@ -56,6 +56,7 @@ export type WalletSession = {
   enabled_networks: string[];
   auto_lock_timeout_secs: number | null;
   use_crypto_symbols: boolean;
+  hide_below_usd: number;
 };
 
 export type CctpAttestationProgress = {

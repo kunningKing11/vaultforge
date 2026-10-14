@@ -33,6 +33,10 @@ fn default_usd_exchange_rate() -> f64 {
     1.0
 }
 
+pub(crate) fn default_hide_below_usd() -> f64 {
+    1.0
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct Wallet {
     pub(crate) name: String,
@@ -57,6 +61,8 @@ pub(crate) struct Wallet {
     pub(crate) auto_lock_timeout_secs: Option<u64>,
     #[serde(default)]
     pub(crate) use_crypto_symbols: bool,
+    #[serde(default = "default_hide_below_usd")]
+    pub(crate) hide_below_usd: f64,
 }
 
 impl Drop for Wallet {
@@ -90,6 +96,8 @@ pub(crate) struct WalletPayload {
     pub(crate) auto_lock_timeout_secs: Option<u64>,
     #[serde(default)]
     pub(crate) use_crypto_symbols: bool,
+    #[serde(default = "default_hide_below_usd")]
+    pub(crate) hide_below_usd: f64,
 }
 
 fn default_enabled_networks() -> Vec<String> {
@@ -164,7 +172,9 @@ pub(crate) struct WalletSession {
     pub(crate) enabled_networks: Vec<String>,
     #[serde(default)]
     pub(crate) auto_lock_timeout_secs: Option<u64>,
+    #[serde(default)]
     pub(crate) use_crypto_symbols: bool,
+    pub(crate) hide_below_usd: f64,
 }
 
 #[derive(Clone, Serialize)]

@@ -49,6 +49,7 @@ fn send_state(path: PathBuf) -> Mutex<AppState> {
         enabled_networks: vec!["ethereum".to_string(), "base".to_string()],
         auto_lock_timeout_secs: Some(60),
         use_crypto_symbols: false,
+        hide_below_usd: crate::dto::default_hide_below_usd(),
     });
     state.encryption_key = Some([7; 32]);
     state.storage_salt = Some(vec![1; 16]);

@@ -3,7 +3,9 @@ use std::sync::Mutex;
 use tauri::State;
 use zeroize::Zeroize;
 
-use crate::dto::{RefreshWarning, Wallet, WalletRefreshResult, WalletSession};
+use crate::dto::{
+    RefreshWarning, Wallet, WalletRefreshResult, WalletSession, default_hide_below_usd,
+};
 use crate::operations::operation_activity;
 use crate::providers::bitcoin::BitcoinAccountSnapshot;
 use crate::storage::read_stored_wallet;
@@ -91,6 +93,7 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
                 enabled_networks: vec![],
                 auto_lock_timeout_secs: None,
                 use_crypto_symbols: false,
+                hide_below_usd: default_hide_below_usd(),
             };
         }
 
@@ -106,6 +109,7 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
             enabled_networks: vec![],
             auto_lock_timeout_secs: None,
             use_crypto_symbols: false,
+            hide_below_usd: default_hide_below_usd(),
         };
     };
 
@@ -122,6 +126,7 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
             enabled_networks: vec![],
             auto_lock_timeout_secs: None,
             use_crypto_symbols: false,
+            hide_below_usd: default_hide_below_usd(),
         };
     }
 
@@ -166,6 +171,7 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
         enabled_networks: wallet.enabled_networks.clone(),
         auto_lock_timeout_secs: wallet.auto_lock_timeout_secs,
         use_crypto_symbols: wallet.use_crypto_symbols,
+        hide_below_usd: wallet.hide_below_usd,
     }
 }
 

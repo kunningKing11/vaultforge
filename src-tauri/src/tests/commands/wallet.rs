@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use super::{apply_wallet_settings, finish_operation_recovery, refresh_filecoin_address};
+use super::{
+    apply_wallet_settings, finish_operation_recovery, refresh_filecoin_address,
+    validate_hide_below_usd,
+};
 use crate::dto::{FiatCurrency, Wallet};
 use crate::state::{AppState, StoredWalletMetadata};
 use crate::tests::sample_operation;
@@ -23,6 +26,7 @@ fn recovery_state(path: PathBuf) -> AppState {
         enabled_networks: vec!["ethereum".to_string(), "base".to_string()],
         auto_lock_timeout_secs: Some(60),
         use_crypto_symbols: false,
+        hide_below_usd: crate::dto::default_hide_below_usd(),
     });
     state.stored_wallet = Some(StoredWalletMetadata {
         wallet_name: "Recovery wallet".to_string(),
@@ -51,6 +55,7 @@ fn applies_all_wallet_settings_together() {
         enabled_networks: vec![],
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
+        hide_below_usd: crate::dto::default_hide_below_usd(),
     };
 
     apply_wallet_settings(
@@ -60,6 +65,7 @@ fn applies_all_wallet_settings_together() {
         0.92,
         Some(300),
         true,
+        2.5,
     );
 
     assert_eq!(wallet.name, "Renamed wallet");
@@ -67,6 +73,7 @@ fn applies_all_wallet_settings_together() {
     assert_eq!(wallet.usd_exchange_rate, 0.92);
     assert_eq!(wallet.auto_lock_timeout_secs, Some(300));
     assert!(wallet.use_crypto_symbols);
+    assert_eq!(wallet.hide_below_usd, 2.5);
 }
 
 #[test]
@@ -135,6 +142,15 @@ fn recovery_without_changes_returns_unlocked_session_without_writing() {
 }
 
 #[test]
+fn rejects_invalid_hide_below_usd_settings() {
+    assert!(validate_hide_below_usd(0.0).is_ok());
+    assert!(validate_hide_below_usd(2.5).is_ok());
+    for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -0.01] {
+        assert!(validate_hide_below_usd(invalid).is_err());
+    }
+}
+
+#[test]
 fn unlock_migrates_legacy_filecoin_addresses() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     let mut wallet = Wallet {
@@ -155,6 +171,7 @@ fn unlock_migrates_legacy_filecoin_addresses() {
         enabled_networks: vec!["filecoin".to_string()],
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
+        hide_below_usd: crate::dto::default_hide_below_usd(),
     };
     refresh_filecoin_address(&mut wallet).unwrap();
     assert_eq!(

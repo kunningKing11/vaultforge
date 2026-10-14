@@ -79,8 +79,11 @@ type WalletSession = {
   enabled_networks: string[];
   auto_lock_timeout_secs: number | null;
   use_crypto_symbols: boolean;
+  hide_below_usd: number;
 };
 ```
+
+`hide_below_usd` is the USD value below which assets are hidden from portfolio views. It defaults to 1 for new wallets and legacy payloads without the field, so no envelope version bump is required; the settings command rejects non-finite or negative amounts.
 
 `Asset.token_address` is optional and nullable. Native assets use `null`; ERC-20 assets use the contract; SPL assets use the mint. Asset identity is the pair of network ID and nullable token identifier, never a ticker or display name. EVM contracts compare case-insensitively; Solana mints and Tron identifiers compare exactly. Use the shared identity helpers for selection and cache lookups. Both `symbol` and `unicode_symbol` are display metadata; native/token signing dispatch depends on the presence of `token_address`.
 

@@ -9,7 +9,9 @@ use crate::derivation::{
     BitcoinAccount, derive_addresses_from_mnemonic_filtered, generate_mnemonic,
     validate_recovery_phrase_word_count,
 };
-use crate::dto::{FiatCurrency, Wallet, WalletRefreshResult, WalletSession};
+use crate::dto::{
+    FiatCurrency, Wallet, WalletRefreshResult, WalletSession, default_hide_below_usd,
+};
 use crate::operations::Operation;
 use crate::operations::reconcile_operation;
 use crate::providers::bitcoin::BitcoinAccountSnapshot;
@@ -72,12 +74,21 @@ fn apply_wallet_settings(
     usd_exchange_rate: f64,
     auto_lock_timeout_secs: Option<u64>,
     use_crypto_symbols: bool,
+    hide_below_usd: f64,
 ) {
     wallet.name = clean_name(name);
     wallet.fiat_currency = fiat_currency;
     wallet.usd_exchange_rate = usd_exchange_rate;
     wallet.auto_lock_timeout_secs = auto_lock_timeout_secs;
     wallet.use_crypto_symbols = use_crypto_symbols;
+    wallet.hide_below_usd = hide_below_usd;
+}
+
+fn validate_hide_below_usd(hide_below_usd: f64) -> Result<(), String> {
+    if !hide_below_usd.is_finite() || hide_below_usd < 0.0 {
+        return Err("Hide-below amount must be a non-negative dollar amount".to_string());
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -88,6 +99,7 @@ pub(crate) async fn update_wallet_settings(
     fiat_currency: FiatCurrency,
     auto_lock_timeout_secs: Option<u64>,
     use_crypto_symbols: bool,
+    hide_below_usd: f64,
 ) -> Result<WalletSession, String> {
     let (wallet_generation, current_currency, current_exchange_rate) = {
         let state = state.lock().map_err(|_| "State lock failed")?;
@@ -111,6 +123,7 @@ pub(crate) async fn update_wallet_settings(
         fetch_usd_exchange_rate(clients.http(), fiat_currency).await?
     };
 
+    validate_hide_below_usd(hide_below_usd)?;
     let mut state = state.lock().map_err(|_| "State lock failed")?;
     if !state.can_commit_refresh(wallet_generation) {
         return Err("Wallet changed while updating settings".to_string());
@@ -126,6 +139,7 @@ pub(crate) async fn update_wallet_settings(
         usd_exchange_rate,
         auto_lock_timeout_secs,
         use_crypto_symbols,
+        hide_below_usd,
     );
     state.advance_wallet_generation();
     persist_state_wallet(&mut state)?;
@@ -187,6 +201,7 @@ pub(crate) async fn create_wallet(
         enabled_networks,
         auto_lock_timeout_secs,
         use_crypto_symbols,
+        hide_below_usd: default_hide_below_usd(),
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
@@ -255,6 +270,7 @@ pub(crate) async fn import_wallet(
         enabled_networks,
         auto_lock_timeout_secs,
         use_crypto_symbols,
+        hide_below_usd: default_hide_below_usd(),
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;

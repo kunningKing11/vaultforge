@@ -164,6 +164,7 @@ pub(crate) fn encrypt_wallet(
         enabled_networks: wallet.enabled_networks.clone(),
         auto_lock_timeout_secs: wallet.auto_lock_timeout_secs,
         use_crypto_symbols: wallet.use_crypto_symbols,
+        hide_below_usd: wallet.hide_below_usd,
     };
     let plaintext = serde_json::to_vec(&payload);
     clear_secret_string(&mut payload.mnemonic);
@@ -248,6 +249,7 @@ pub(crate) fn decrypt_wallet(
             } else {
                 false
             },
+            hide_below_usd: payload.hide_below_usd,
         }),
         key: Some(key),
         salt: Some(salt),
