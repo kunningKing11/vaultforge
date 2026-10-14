@@ -460,6 +460,18 @@ export function BridgeView({
               value={recipient || route?.destination_address || ""}
               onChange={(event) => setRecipient(event.target.value)}
               disabled={busy}
+              end={
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="s"
+                  accessibilityLabel={`Use my ${name(selectedDestination)} address`}
+                  disabled={busy || !route?.destination_address}
+                  onClick={() => setRecipient(route?.destination_address ?? "")}
+                >
+                  Me
+                </Button>
+              }
             />
             {route && (
               <Text font="caption" color="fgMuted">
