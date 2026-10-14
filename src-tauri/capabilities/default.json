@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default permissions for the main wallet window",
   "windows": ["main"],
-  "permissions": ["core:default", "clipboard-manager:allow-write-text"]
+  "permissions": ["core:default", "clipboard-manager:allow-write-text", "opener:allow-open-url"]
 }

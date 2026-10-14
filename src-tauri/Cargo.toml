@@ -52,6 +52,7 @@ tauri = { version = "2.12", features = ["image-png"] }
 # cookie 0.18.1 does not compile against time 0.3.52's parsing API.
 time = "=0.3.55"
 tauri-plugin-clipboard-manager = "2.4"
+tauri-plugin-opener = "2"
 tauri-plugin-process = "2.4"
 xrpl-rust = { version = "=1.3.0", default-features = false, features = ["core"] }
 

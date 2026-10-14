@@ -5,11 +5,12 @@ import { TextInput } from "@coinbase/cds-web/controls";
 import { Box, HStack, VStack } from "@coinbase/cds-web/layout";
 import { DefaultStepperProgressHorizontal, Stepper } from "@coinbase/cds-web/stepper";
 import type { StepperProgressProps } from "@coinbase/cds-web/stepper";
-import { Text } from "@coinbase/cds-web/typography";
+import { Link, Text } from "@coinbase/cds-web/typography";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { formatWei, toWei } from "../format";
-import { networkById, networkDisplayName } from "../networks";
+import { explorerTxUrl, networkById, networkDisplayName } from "../networks";
 import type { CctpPreparedStep, CctpState, WalletSession } from "../types";
 import { walletApi } from "../walletApi";
 
@@ -393,6 +394,15 @@ export function BridgeView({
     estimate?.context?.provisional_destination_fee ??
     estimate?.solana_context?.provisional_destination_fee;
   const gasSymbol = estimate ? (networkById(estimate.network)?.nativeAsset.symbol ?? "ETH") : "ETH";
+  const attemptStep = (focused?.attempt_step ?? "transaction").toLowerCase();
+  const attemptNetwork =
+    focused?.attempt_step === "Mint" || focused?.attempt_step === "DestinationSetup"
+      ? (focused?.destination ?? "")
+      : (focused?.source ?? "");
+  const attemptUrl =
+    focused?.attempt_hash && attemptNetwork
+      ? explorerTxUrl(attemptNetwork, focused.attempt_hash)
+      : null;
   return (
     <VStack gap={3}>
       <ContentCard background="bgElevation1" borderRadius={400} gap={3} padding={4}>
@@ -606,9 +616,26 @@ export function BridgeView({
                   <Text font="body">{focused.progress.title}</Text>
                   {focused.attempt_status && (
                     <Text font="body">
-                      Latest {(focused.attempt_step ?? "transaction").toLowerCase()} transaction
-                      {focused.attempt_hash ? ` ${focused.attempt_hash}` : ""}:{" "}
-                      {attemptStatusText(focused.attempt_status)}
+                      Latest {attemptStep} transaction{" "}
+                      {focused.attempt_hash ? (
+                        attemptUrl ? (
+                          <Link
+                            href={attemptUrl}
+                            openInNewWindow
+                            onClick={(event) => {
+                              event.preventDefault();
+                              void openUrl(attemptUrl);
+                            }}
+                          >
+                            {focused.attempt_hash}
+                          </Link>
+                        ) : (
+                          focused.attempt_hash
+                        )
+                      ) : (
+                        ""
+                      )}
+                      : {attemptStatusText(focused.attempt_status)}
                     </Text>
                   )}
                   {["Burn", "AwaitingAttestation", "Mint"].includes(focused.step) && (

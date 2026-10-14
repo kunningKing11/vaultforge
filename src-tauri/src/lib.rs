@@ -44,6 +44,7 @@ pub fn run() {
 
     builder
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let icon =
                 tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png"))?.to_owned(); // TODO: upscale
