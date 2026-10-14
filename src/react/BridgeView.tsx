@@ -9,10 +9,12 @@ import { Link, Text } from "@coinbase/cds-web/typography";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { chainIconPath } from "../assetIcons";
 import { formatWei, toWei } from "../format";
 import { explorerTxUrl, networkById, networkDisplayName } from "../networks";
 import type { CctpPreparedStep, CctpState, WalletSession } from "../types";
 import { walletApi } from "../walletApi";
+import { SelectionIcon } from "./SelectionIcon";
 
 export type CctpRunner = <T>(action: () => Promise<T>) => Promise<T | null>;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -180,9 +182,14 @@ export function BridgeView({
         .map((route) => route.destination),
     ),
   ].sort((a, b) => name(a).localeCompare(name(b)));
-  const sourceOptions = sourceNetworks.map((network) => ({ label: name(network), value: network }));
+  const sourceOptions = sourceNetworks.map((network) => ({
+    label: name(network),
+    value: network,
+    media: <SelectionIcon src={chainIconPath(network)} />,
+  }));
   const destinationOptions = destinationNetworks.map((network) => ({
     label: name(network),
+    media: <SelectionIcon src={chainIconPath(network)} />,
     value: network,
   }));
   const active = data.operations.find((operation) => !TERMINAL_STEPS.includes(operation.step));
@@ -431,6 +438,7 @@ export function BridgeView({
                   : (sourceOptions[0]?.value ?? "")
               }
               options={sourceOptions}
+              startNode={<SelectionIcon src={chainIconPath(selectedSource)} />}
               disabled={busy || sourceOptions.length === 0}
               onChange={(value) => {
                 if (value === null) return;
@@ -451,6 +459,7 @@ export function BridgeView({
                   : (destinationOptions[0]?.value ?? "")
               }
               options={destinationOptions}
+              startNode={<SelectionIcon src={chainIconPath(selectedDestination)} />}
               disabled={busy || destinationOptions.length === 0}
               onChange={(value) => {
                 if (value === null) return;

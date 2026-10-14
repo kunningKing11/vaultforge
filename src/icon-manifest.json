@@ -1,0 +1,250 @@
+{
+  "schemaVersion": 1,
+  "fallback": "unknown",
+  "assets": {
+    "ethereum": {
+      "url": "https://ethereum.org/images/assets/svgs/eth-diamond-black-white.svg",
+      "file": "chains/ethereum.svg",
+      "sha256": "80b0d456357828eedd321b8ed17426c909444f400d51390d9555fa649e20fe64",
+      "sourcePage": "https://ethereum.org/en/assets/",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "bitcoin": {
+      "url": "https://bitcoin.org/img/icons/logotop.svg",
+      "file": "chains/bitcoin.svg",
+      "sha256": "7c54efe750e2d25f4a726ae59952ae3149e50ef0b3b59285939eccfdcfbfb54d",
+      "sourcePage": "https://bitcoin.org",
+      "usage": "Official project artwork; project brand terms apply.",
+      "svgTransform": "bitcoin_symbol"
+    },
+    "polygon": {
+      "url": "https://polygon.technology/favicon.svg",
+      "file": "chains/polygon.svg",
+      "sha256": "7eda178dc46658f07c55fa47d0d4d51840547f1ff73eab4da28a22923f9baf5b",
+      "sourcePage": "https://polygon.technology",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "base": {
+      "url": "https://raw.githubusercontent.com/base/brand-kit/HEAD/logo/TheSquare/Digital/Base_square_blue.svg",
+      "file": "chains/base.svg",
+      "sha256": "b4f2b487011713f98481cc53c4ce095629b4876acbdbc2f0f3ad69a9688ba82e",
+      "sourcePage": "https://www.base.org",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "optimism": {
+      "url": "https://cdn.sanity.io/images/y6ka751a/production/f1133ac9c16e91a384121b8e590a584fa824d91c-2500x1875.svg",
+      "file": "chains/optimism.svg",
+      "sha256": "657fbf2563806337de0e5cbd453eb62d56e459c4c5b7b20ea5835c76426ae744",
+      "sourcePage": "https://optimism.io/brand",
+      "usage": "Official project artwork; project brand terms apply.",
+      "svgTransform": "optimism_token"
+    },
+    "avalanche_c": {
+      "url": "https://www.avax.network/favicon-light.svg",
+      "file": "chains/avalanche_c.svg",
+      "sha256": "8843998a7b91875f3dc6027bd1383ccf97c3d1534d2f3e56d363706039146882",
+      "sourcePage": "https://www.avax.network",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "solana": {
+      "url": "https://solana.com/src/img/branding/solanaLogoMark.svg",
+      "file": "chains/solana.svg",
+      "sha256": "3d3401109aa061dec40a8659f1847817a8e647f98de1e65e76e86a95bbe1f08a",
+      "sourcePage": "https://solana.com",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "filecoin": {
+      "url": "https://filecoin.io",
+      "file": "chains/filecoin.svg",
+      "sha256": "36147e5da6742619701ca66255f1c8b668cec3eec4bea33a8432586f020d4a3f",
+      "sourcePage": "https://filecoin.io",
+      "usage": "Official project artwork; project brand terms apply.",
+      "inlineSvgMatch": "id=\"filecoin-logo-icon_svg__Layer_1\""
+    },
+    "injective": {
+      "url": "https://injective.com",
+      "file": "chains/injective.svg",
+      "sha256": "5e04b9f1ce7352caaaa177db11f9327f5d66a318cdd19ab05cd238a65e5df717",
+      "sourcePage": "https://injective.com/brand",
+      "usage": "Official project artwork; project brand terms apply.",
+      "inlineSvgMatch": "icon-name=\"logoInjectiveMark\"",
+      "svgTransform": "injective_purple"
+    },
+    "xrpl": {
+      "url": "https://raw.githubusercontent.com/XRPLF/xrpl-dev-portal/HEAD/static/img/logos/xrp-mark.svg",
+      "file": "chains/xrpl.svg",
+      "sha256": "d3379146e59cbf34668fbc57f781444eac58055a04baa33b05cc67cd30061303",
+      "sourcePage": "https://xrpl.org",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "tron": {
+      "url": "https://tron.network/favicon.svg",
+      "file": "chains/tron.svg",
+      "sha256": "8d48c2ffbd6255f5f027ee977609de5aa3c534db0a55ea03b6cd426700b86fe3",
+      "sourcePage": "https://tron.network",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "zcash": {
+      "url": "https://z.cash/wp-content/uploads/2023/03/zcash-logo.svg",
+      "file": "chains/zcash.svg",
+      "sha256": "6f6c9e5284da79f50bdb70c6c99071b2462e0dd8340315e79410641dffc339f8",
+      "sourcePage": "https://z.cash",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "usdt": {
+      "url": "https://tether.to/images/logoMarkGreen.svg",
+      "file": "coins/usdt.svg",
+      "sha256": "155d19d88ac9043f7233662c20396e41b0a71a68f3811889de07baff82afc2f6",
+      "sourcePage": "https://tether.to/en/media/",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "unknown": {
+      "url": "https://raw.githubusercontent.com/feathericons/feather/v4.29.2/icons/help-circle.svg",
+      "file": "fallback/unknown.svg",
+      "sha256": "0fe14a3e1e00e2941c1d57189fd1514a7ce171b5520f8671148fb89152248703",
+      "sourcePage": "https://github.com/feathericons/feather/tree/v4.29.2",
+      "usage": "MIT"
+    },
+    "bnb": {
+      "url": "https://raw.githubusercontent.com/bnb-chain/bnb-chain.github.io/HEAD/docs/assets/logo.svg",
+      "file": "chains/bnb.svg",
+      "sha256": "60791a3d8459c1952547335493cedf56d3d131e3bb4949b5151f7eb5551f055b",
+      "sourcePage": "https://github.com/bnb-chain/bnb-chain.github.io",
+      "usage": "Official project artwork; project brand terms apply.",
+      "svgTransform": "bnb_symbol"
+    },
+    "usdc": {
+      "url": "https://6778953.fs1.hubspotusercontent-na1.net/hubfs/6778953/Pressroom/brandkit/logo-downloads/usdc.zip",
+      "archiveMember": "Token Logo/USDC Token.svg",
+      "file": "coins/usdc.svg",
+      "sha256": "fe4f9d5f34ef4ebeb5d80e1f5ff63dcaf5a0d5495f4adf206e4c3011d1f5c57d",
+      "sourcePage": "https://www.circle.com/pressroom#brand-kit",
+      "usage": "Circle brand use policy applies."
+    },
+    "monad": {
+      "url": "https://www.monad.xyz",
+      "file": "chains/monad.svg",
+      "sha256": "88373a76a1114553be834d8b4fdba47e65cf3985afbdb12b55a4ec61a29f98f9",
+      "sourcePage": "https://www.monad.xyz",
+      "usage": "Official project artwork; project brand terms apply.",
+      "inlineSvgLabel": "Monad Logomark"
+    },
+    "arbitrum_one": {
+      "url": "https://docs.arbitrum.io/img/logo.svg",
+      "file": "chains/arbitrum_one.svg",
+      "sha256": "aa503c2b5318494157bee5dccf26632932d8571a111981cfd484785d90320920",
+      "sourcePage": "https://docs.arbitrum.io",
+      "usage": "Official project artwork; project brand terms apply."
+    }
+  },
+  "chains": {
+    "ethereum": "ethereum",
+    "polygon": "polygon",
+    "base": "base",
+    "optimism": "optimism",
+    "avalanche_c": "avalanche_c",
+    "solana": "solana",
+    "bitcoin": "bitcoin",
+    "filecoin": "filecoin",
+    "injective": "injective",
+    "tron": "tron",
+    "xrpl": "xrpl",
+    "zcash": "zcash",
+    "bnb": "bnb",
+    "monad": "monad",
+    "arbitrum_one": "arbitrum_one",
+    "ethereum_sepolia": "ethereum",
+    "arbitrum_sepolia": "arbitrum_one"
+  },
+  "tokens": [
+    {
+      "network": "arbitrum_one",
+      "tokenAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      "icon": "usdc"
+    },
+    {
+      "network": "avalanche_c",
+      "tokenAddress": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+      "icon": "usdc"
+    },
+    {
+      "network": "avalanche_c",
+      "tokenAddress": "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7",
+      "icon": "usdt"
+    },
+    {
+      "network": "base",
+      "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "icon": "usdc"
+    },
+    {
+      "network": "ethereum",
+      "tokenAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "icon": "usdc"
+    },
+    {
+      "network": "ethereum",
+      "tokenAddress": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "icon": "usdt"
+    },
+    {
+      "network": "monad",
+      "tokenAddress": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+      "icon": "usdc"
+    },
+    {
+      "network": "optimism",
+      "tokenAddress": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+      "icon": "usdc"
+    },
+    {
+      "network": "polygon",
+      "tokenAddress": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+      "icon": "usdc"
+    },
+    {
+      "network": "polygon",
+      "tokenAddress": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+      "icon": "usdc"
+    },
+    {
+      "network": "polygon",
+      "tokenAddress": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+      "icon": "usdt"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "icon": "usdc"
+    },
+    {
+      "network": "tron",
+      "tokenAddress": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+      "icon": "usdt"
+    },
+    {
+      "network": "tron",
+      "tokenAddress": "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8",
+      "icon": "usdc"
+    }
+  ],
+  "nativeCoins": {
+    "ethereum": "ethereum",
+    "polygon": "polygon",
+    "base": "ethereum",
+    "optimism": "ethereum",
+    "avalanche_c": "avalanche_c",
+    "solana": "solana",
+    "bitcoin": "bitcoin",
+    "filecoin": "filecoin",
+    "injective": "injective",
+    "tron": "tron",
+    "xrpl": "xrpl",
+    "zcash": "zcash",
+    "bnb": "bnb",
+    "monad": "monad",
+    "arbitrum_one": "ethereum",
+    "ethereum_sepolia": "ethereum",
+    "arbitrum_sepolia": "ethereum"
+  }
+}

@@ -82,6 +82,14 @@ The table distinguishes implemented backend paths from network entries that are 
 
 ## Development
 
+### Chain and coin icons
+
+`src/icon-manifest.json` curates official project artwork, source pages, local filenames, SHA-256 checksums, chain mappings, and token mappings by network and contract/mint. Only SVG vector artwork is bundled in `public/icons/` for offline display; raster images and embedded raster content are rejected. Some chain assets are official website icons or wordmarks rather than standalone symbols; project branding terms still apply.
+
+Run `bun run icons:download` to download the pinned assets (Bun and `unzip` are required for Circle's USDC archive), or `bun run icons:check` to verify existing files without network access. Changed upstream files fail checksum validation; review them before updating the manifest. The downloader rejects active SVG content; USDT uses Tether’s official green SVG logo mark. Explicit manifest transforms extract the original Bitcoin and BNB symbol paths from wordmarks and normalize Injective’s inline SVG attributes, apply its official `#4D3DFF` brand purple, and remove the OP token preview background and padding. Original symbol geometry is preserved.
+
+Use `assetIconPath(asset)` and `chainIconPath(network)` from `src/assetIcons.ts` in image elements. Unknown identities return the bundled question-mark icon. Native ETH on Base, Optimism, and Arbitrum uses the ETH coin icon while the chain helper returns the corresponding chain badge. Dashboard and Assets share one `AssetCard` that uses these helpers for a coin icon and a small chain badge; missing or failed images use the question-mark fallback. Adding an icon does not declare transaction support. The question-mark artwork comes from Feather under the MIT license, included at `public/icons/fallback/LICENSE.txt`.
+
 ### Setup
 
 This project requires Bun `v1.4.0` or newer and uses the native TypeScript 7 compiler installed from the project's dependencies.

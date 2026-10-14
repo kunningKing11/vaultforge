@@ -21,7 +21,9 @@
     "prepare": "lefthook install",
     "hooks:check": "bash scripts/hook-checks.sh",
     "sync-cargo-version": "bun scripts/sync-cargo-version.mts",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "icons:download": "bun scripts/download-icons.mts",
+    "icons:check": "bun scripts/download-icons.mts --check"
   },
   "dependencies": {
     "@coinbase/cds-web": "^9.29.0",

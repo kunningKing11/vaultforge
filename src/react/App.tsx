@@ -29,6 +29,7 @@ import {
 
 import licenseText from "../../LICENSE?raw";
 import appLogoUrl from "../../src-tauri/icons/icon.svg";
+import { assetIconPath, chainIconPath, UNKNOWN_ASSET_ICON } from "../assetIcons";
 import activityIcon from "../assets/icons/activity.svg?raw";
 import assetsIcon from "../assets/icons/assets.svg?raw";
 import copyIcon from "../assets/icons/copy.svg?raw";
@@ -104,6 +105,7 @@ import {
   type WalletState,
 } from "./model";
 import { PasswordInput } from "./PasswordInput";
+import { SelectionIcon } from "./SelectionIcon";
 import { vaultForgeTheme } from "./theme";
 
 const MINIMUM_SPLASH_DURATION_MS = 650;
@@ -2397,6 +2399,7 @@ function SendForm({
             }}
             options={availableNetworks.map((network) => ({
               label: network.name,
+              icon: chainIconPath(network.id),
               value: network.id,
             }))}
             style={{ width: "100%" }}
@@ -2424,6 +2427,7 @@ function SendForm({
                 }}
                 options={availableAssets.map((asset) => ({
                   label: `${displayAssetSymbol(asset, wallet)} - ${asset.name}`,
+                  icon: assetIconPath(asset),
                   value: assetKey(asset),
                 }))}
                 style={{ width: "100%" }}
@@ -2629,6 +2633,7 @@ function ReceiveView({
           }
           options={availableNetworks.map((item) => ({
             label: `${item.name} - ${networkLabel(item, wallet.useCryptoSymbols)}`,
+            icon: chainIconPath(item.id),
             value: item.id,
           }))}
           style={{ width: "100%" }}
@@ -3022,17 +3027,45 @@ function AssetCard({
       padding={3}
     >
       <HStack alignItems="start" justifyContent="space-between">
-        <VStack gap={0.25}>
-          <Text font="title3">{displayAssetSymbol(asset, wallet)}</Text>
-          <Text color="fgMuted" font="body">
-            {asset.name} on {networkDisplayName(asset.network)}
+        <HStack alignItems="center" gap={2} style={{ flex: 1, minWidth: 0 }}>
+          <span aria-hidden="true" className="asset-card-icon">
+            <img
+              alt=""
+              className="asset-card-coin-icon"
+              src={assetIconPath(asset)}
+              onError={(event) => {
+                const image = event.currentTarget;
+                if (image.getAttribute("src") !== UNKNOWN_ASSET_ICON)
+                  image.src = UNKNOWN_ASSET_ICON;
+              }}
+            />
+            <img
+              alt=""
+              className="asset-card-chain-icon"
+              src={chainIconPath(asset.network)}
+              onError={(event) => {
+                const image = event.currentTarget;
+                if (image.getAttribute("src") !== UNKNOWN_ASSET_ICON)
+                  image.src = UNKNOWN_ASSET_ICON;
+              }}
+            />
+          </span>
+          <Text font="title3" overflow="truncate" style={{ minWidth: 0 }}>
+            {displayAssetSymbol(asset, wallet)}
           </Text>
-        </VStack>
-        <Text color={asset.change_24h >= 0 ? "fgPositive" : "fgNegative"} font="label2">
+        </HStack>
+        <Text
+          color={asset.change_24h >= 0 ? "fgPositive" : "fgNegative"}
+          font="label2"
+          style={{ flexShrink: 0, whiteSpace: "nowrap" }}
+        >
           {asset.change_24h >= 0 ? "+" : ""}
           {asset.change_24h.toFixed(2)}%
         </Text>
       </HStack>
+      <Text color="fgMuted" font="body" overflow="truncate" style={{ width: "100%" }}>
+        {asset.name} on {networkDisplayName(asset.network)}
+      </Text>
       <Text font="title2">
         {money(usdToFiat(valueUsd, wallet.usdExchangeRate), wallet.fiatCurrency)}
       </Text>
@@ -3218,10 +3251,11 @@ function CdsSelect({
   disabled?: boolean;
   label?: string;
   onChange: (value: string) => void;
-  options: ReadonlyArray<{ label: string; value: string }>;
+  options: ReadonlyArray<{ label: string; value: string; icon?: string }>;
   style?: CSSProperties;
   value: string;
 }) {
+  const selectedIcon = options.find((option) => option.value === value)?.icon;
   return (
     <Select
       accessibilityLabel={accessibilityLabel ?? label}
@@ -3231,7 +3265,11 @@ function CdsSelect({
       onChange={(next) => {
         if (next !== null) onChange(next);
       }}
-      options={options.map((option) => ({ ...option }))}
+      options={options.map(({ icon, ...option }) => ({
+        ...option,
+        media: icon ? <SelectionIcon src={icon} /> : undefined,
+      }))}
+      startNode={selectedIcon ? <SelectionIcon src={selectedIcon} /> : undefined}
       style={style}
       value={value}
     />

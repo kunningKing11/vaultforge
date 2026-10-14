@@ -274,6 +274,42 @@ textarea {
   display: none;
 }
 
+.asset-card-icon {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+}
+
+.asset-card-coin-icon {
+  width: 40px;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 4px;
+  border: 1px solid var(--color-bgLine);
+  border-radius: 50%;
+  background: var(--color-bgSecondary);
+  object-fit: contain;
+}
+
+.asset-card-chain-icon {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 18px;
+  height: 18px;
+  padding: 2px;
+  border-radius: 50%;
+  background: var(--color-bgSecondary);
+  object-fit: contain;
+}
+
+.asset-card-coin-icon[src="/icons/chains/ethereum.svg"],
+.asset-card-chain-icon[src="/icons/chains/ethereum.svg"] {
+  background: #fff;
+}
+
 .asset-card {
   flex: 0 0 270px;
   min-width: 0;
@@ -605,4 +641,21 @@ textarea {
 
 .cctp-route-select:focus-visible {
   outline: 2px solid var(--color-bgPrimary);
+}
+
+.selection-icon {
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  padding: 3px;
+  border: 1px solid var(--color-bgLine);
+  border-radius: 50%;
+  background: var(--color-bgSecondary);
+  object-fit: contain;
+}
+
+.selection-icon[src="/icons/chains/ethereum.svg"],
+.selection-icon[src="/icons/fallback/unknown.svg"] {
+  background: #fff;
 }
