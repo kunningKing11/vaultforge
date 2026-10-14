@@ -503,8 +503,8 @@ export function BridgeView({
             <Text font="body">{focused.progress.title}</Text>
             <Text font="body">
               {done
-                ? "Transfer complete. The USDC is on the destination chain."
-                : "This transfer was cancelled. Funds stay on the source chain."}{" "}
+                ? `Transfer complete. The USDC is now on ${name(focused.destination)}.`
+                : `This transfer was cancelled. Funds are still on ${name(focused.source)}.`}{" "}
               Recipient: {focused.recipient}
             </Text>
             <Button
