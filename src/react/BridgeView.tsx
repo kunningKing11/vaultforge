@@ -5,15 +5,15 @@ import { TextInput } from "@coinbase/cds-web/controls";
 import { Box, HStack, VStack } from "@coinbase/cds-web/layout";
 import { DefaultStepperProgressHorizontal, Stepper } from "@coinbase/cds-web/stepper";
 import type { StepperProgressProps } from "@coinbase/cds-web/stepper";
-import { Link, Text } from "@coinbase/cds-web/typography";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { Text } from "@coinbase/cds-web/typography";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { chainIconPath } from "../assetIcons";
 import { formatWei, toWei } from "../format";
-import { explorerUrl, networkById, networkDisplayName } from "../networks";
+import { networkById, networkDisplayName } from "../networks";
 import type { CctpPreparedStep, CctpState, WalletSession } from "../types";
 import { walletApi } from "../walletApi";
+import { ExplorerLink } from "./ExplorerLink";
 import { SelectionIcon } from "./SelectionIcon";
 
 export type CctpRunner = <T>(action: () => Promise<T>) => Promise<T | null>;
@@ -406,13 +406,6 @@ export function BridgeView({
     focused?.attempt_step === "Mint" || focused?.attempt_step === "DestinationSetup"
       ? (focused?.destination ?? "")
       : (focused?.source ?? "");
-  const attemptUrl =
-    focused?.attempt_hash && attemptNetwork
-      ? explorerUrl(attemptNetwork, focused.attempt_hash, "tx")
-      : null;
-  const recipientUrl = focused
-    ? explorerUrl(focused.destination, focused.recipient, "address")
-    : null;
   return (
     <VStack gap={3}>
       <ContentCard background="bgElevation1" borderRadius={400} gap={3} padding={4}>
@@ -520,20 +513,11 @@ export function BridgeView({
             </Text>
             <Text>
               Recipient:{" "}
-              {recipientUrl ? (
-                <Link
-                  href={recipientUrl}
-                  openInNewWindow
-                  onClick={(event) => {
-                    event.preventDefault();
-                    void openUrl(recipientUrl);
-                  }}
-                >
-                  {focused.recipient}
-                </Link>
-              ) : (
-                focused.recipient
-              )}
+              <ExplorerLink
+                network={focused.destination}
+                value={focused.recipient}
+                type="address"
+              />
             </Text>
             <Button
               disabled={busy}
@@ -645,24 +629,11 @@ export function BridgeView({
                   {focused.attempt_status && (
                     <Text font="body">
                       Latest {attemptStep} transaction{" "}
-                      {focused.attempt_hash ? (
-                        attemptUrl ? (
-                          <Link
-                            href={attemptUrl}
-                            openInNewWindow
-                            onClick={(event) => {
-                              event.preventDefault();
-                              void openUrl(attemptUrl);
-                            }}
-                          >
-                            {focused.attempt_hash}
-                          </Link>
-                        ) : (
-                          focused.attempt_hash
-                        )
-                      ) : (
-                        ""
-                      )}
+                      <ExplorerLink
+                        network={attemptNetwork}
+                        value={focused.attempt_hash ?? ""}
+                        type="tx"
+                      />
                       : {attemptStatusText(focused.attempt_status)}
                     </Text>
                   )}

@@ -201,17 +201,33 @@ const explorerBaseUrl: Record<string, string> = {
   arbitrum_sepolia: "https://sepolia.arbiscan.io/",
   avalanche_c: "https://snowtrace.io/",
   base: "https://basescan.org/",
+  bitcoin: "https://blockstream.info/",
+  bnb: "https://bscscan.com/",
   ethereum: "https://etherscan.io/",
   ethereum_sepolia: "https://sepolia.etherscan.io/",
+  filecoin: "https://filfox.info/en/",
+  injective: "https://explorer.injective.network/",
+  monad: "https://monadvision.com/",
   optimism: "https://optimistic.etherscan.io/",
   polygon: "https://polygonscan.com/",
   solana: "https://solscan.io/",
+  tron: "https://tronscan.org/#/",
+  xrpl: "https://xrpscan.com/",
+  zcash: "https://3xpl.com/zcash/",
+};
+
+const explorerPaths: Record<string, Partial<Record<"tx" | "address", string>>> = {
+  filecoin: { tx: "message" },
+  injective: { tx: "transaction", address: "account" },
+  solana: { address: "account" },
+  xrpl: { address: "account" },
+  zcash: { tx: "transaction" },
 };
 
 export function explorerUrl(networkId: string, value: string, type: "tx" | "address") {
   const base = explorerBaseUrl[networkId];
   if (!base || !value) return null;
-  const path = networkId === "solana" && type === "address" ? "account" : type;
+  const path = explorerPaths[networkId]?.[type] ?? type;
   return `${base}${path}/${value}`;
 }
 

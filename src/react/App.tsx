@@ -83,6 +83,7 @@ import { walletPasswordStrength } from "../walletPassword";
 import { type AssetGroup, assetGroupChains, assetGroups } from "./assetGroups";
 import { BridgeView, type CctpRunner } from "./BridgeView";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./disclaimer";
+import { ExplorerLink } from "./ExplorerLink";
 import {
   addressForNetwork,
   applyTransactionObservations,
@@ -2140,7 +2141,13 @@ function AddressList({
     const address = addressForNetwork(wallet, network);
     if (!address || addresses.has(network.addressKey)) return [];
     addresses.add(network.addressKey);
-    return [{ address, label: network.addressKey === "evm" ? "EVM" : network.name }];
+    return [
+      {
+        address,
+        network: network.addressKey === "evm" ? "ethereum" : network.id,
+        label: network.addressKey === "evm" ? "EVM" : network.name,
+      },
+    ];
   });
   return (
     <Box
@@ -2164,7 +2171,10 @@ function AddressList({
             key={item.label}
           >
             <Text className="address-text" mono overflow="truncate">
-              {item.label}: {shortAddress(item.address)}
+              {item.label}:{" "}
+              <ExplorerLink network={item.network} value={item.address} type="address">
+                {shortAddress(item.address)}
+              </ExplorerLink>
             </Text>
             <Button
               accessibilityLabel={`Copy ${item.label} address`}
@@ -3233,12 +3243,26 @@ function ActivityDetails({
     ["Network", networkDisplayName(item.network ?? "N/A")],
     ["Timestamp", new Date(item.timestamp).toLocaleString()],
   ];
-  const copyableDetails = [
-    ["Transaction hash", item.hash],
-    ["From", item.from],
-    ["To", item.to],
-    ["Payload hash", item.payload_hash],
-    ["Signature", item.signature],
+  const sourceNetwork =
+    item.kind === "cctp"
+      ? (item.asset?.network ?? "")
+      : (item.asset?.network ?? item.network ?? "");
+  const destinationNetwork =
+    item.kind === "cctp" ? (item.counter_asset?.network ?? "") : sourceNetwork;
+  const copyableDetails: {
+    label: string;
+    value?: string | null;
+    explorer?: { network: string; type: "tx" | "address" };
+  }[] = [
+    {
+      label: "Transaction hash",
+      value: item.hash,
+      explorer: { network: item.network ?? "", type: "tx" },
+    },
+    { label: "From", value: item.from, explorer: { network: sourceNetwork, type: "address" } },
+    { label: "To", value: item.to, explorer: { network: destinationNetwork, type: "address" } },
+    { label: "Payload hash", value: item.payload_hash },
+    { label: "Signature", value: item.signature },
   ];
   return (
     <ContentCard alignSelf="start" background="bgElevation1" borderRadius={400} gap={2} padding={3}>
@@ -3251,22 +3275,31 @@ function ActivityDetails({
       {details.map(([label, value]) => (
         <Detail key={label} label={label} value={value} />
       ))}
-      {copyableDetails
-        .filter((entry): entry is [string, string] => Boolean(entry[1]))
-        .map(([label, value]) => (
-          <Detail copyText={copyText} key={label} label={label} mono value={value} />
-        ))}
+      {copyableDetails.map(({ label, value, explorer }) =>
+        value ? (
+          <Detail
+            copyText={copyText}
+            key={label}
+            label={label}
+            mono
+            value={value}
+            explorer={explorer}
+          />
+        ) : null,
+      )}
     </ContentCard>
   );
 }
 
 function Detail({
   copyText,
+  explorer,
   label,
   mono = false,
   value,
 }: {
   copyText?: (value: string, message: string) => Promise<void>;
+  explorer?: { network: string; type: "tx" | "address" };
   label: string;
   mono?: boolean;
   value: string;
@@ -3279,7 +3312,11 @@ function Detail({
             {label}
           </Text>
           <Text mono={mono} overflow="break">
-            {value}
+            {explorer ? (
+              <ExplorerLink network={explorer.network} value={value} type={explorer.type} />
+            ) : (
+              value
+            )}
           </Text>
         </VStack>
         {copyText && (

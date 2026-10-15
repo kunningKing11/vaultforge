@@ -25,6 +25,7 @@ A local-first crypto wallet desktop app built with a React frontend, Coinbase De
 - Create, import, lock, and unlock a wallet session
 - Optional BIP-39 passphrase when creating or importing a wallet
 - Portfolio dashboard with token balances, allocation, weighted 24h change, optional Unicode crypto symbols, and USD, EUR, GBP, or JPY valuation selectable during setup or in settings
+- Activity transaction hashes and sender/recipient addresses link to their chain explorers. Sidebar addresses are clickable while retaining separate copy buttons; the shared EVM address opens on Ethereum's explorer.
 - Portfolio and Assets share a “Group across chains” toggle during the unlocked session. Known registry assets with the same price ID combine into one display card; hovering or keyboard-focusing it shows per-chain balances and fiat values only when at least two chains hold a nonzero balance. Zero-balance chains are omitted. Grouping does not change stored balances or send selections, and unknown token contracts remain separate.
 - Save the wallet name, display currency, auto-lock timeout, and crypto-symbol preference together from settings
 - Sign and review chain-specific transactions before broadcasting them
