@@ -1,4 +1,5 @@
 import type { ThemeVars } from "@coinbase/cds-common/core/theme";
+import { Combobox } from "@coinbase/cds-web/alpha/combobox";
 import { Select } from "@coinbase/cds-web/alpha/select";
 import { Button } from "@coinbase/cds-web/buttons";
 import { ContentCard } from "@coinbase/cds-web/cards/ContentCard";
@@ -2392,6 +2393,7 @@ function SendForm({
         <VStack gap={2}>
           <CdsSelect
             label="Network"
+            searchable
             onChange={(networkId) => {
               const network = availableNetworks.find((candidate) => candidate.id === networkId);
               if (network)
@@ -2413,6 +2415,7 @@ function SendForm({
             <Box minWidth={0} width="100%">
               <CdsSelect
                 label="Asset"
+                searchable
                 disabled={availableAssets.length === 0}
                 onChange={(value) => {
                   const asset = availableAssets.find((candidate) => assetKey(candidate) === value);
@@ -2625,6 +2628,7 @@ function ReceiveView({
         <CdsSelect
           className="receive-select"
           label="Receive network"
+          searchable
           onChange={(value) =>
             setState((current) => ({
               ...current,
@@ -3243,6 +3247,7 @@ function CdsSelect({
   label,
   onChange,
   options,
+  searchable = false,
   style,
   value,
 }: {
@@ -3252,12 +3257,14 @@ function CdsSelect({
   label?: string;
   onChange: (value: string) => void;
   options: ReadonlyArray<{ label: string; value: string; icon?: string }>;
+  searchable?: boolean;
   style?: CSSProperties;
   value: string;
 }) {
   const selectedIcon = options.find((option) => option.value === value)?.icon;
+  const Control = searchable ? Combobox : Select;
   return (
-    <Select
+    <Control
       accessibilityLabel={accessibilityLabel ?? label}
       className={className}
       disabled={disabled}
