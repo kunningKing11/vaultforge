@@ -133,7 +133,7 @@ const NAV_ITEMS: ReadonlyArray<{
   { view: "dashboard", label: "Dashboard", icon: dashboardIcon },
   { view: "send", label: "Send", icon: sendUpIcon },
   { view: "receive", label: "Receive", icon: receiveIcon },
-  { view: "swap", label: "Transfer USDC", icon: swapIcon },
+  { view: "swap", label: "Swap", icon: swapIcon },
   { view: "assets", label: "Assets", icon: assetsIcon },
   { view: "activity", label: "Activity", icon: activityIcon },
   { view: "settings", label: "Settings", icon: settingsIcon },
@@ -2299,7 +2299,7 @@ function DashboardView({
           Receive
         </Button>
         <Button block onClick={() => selectView("swap")} variant="secondary">
-          Transfer USDC
+          Swap
         </Button>
       </ContentCard>
     </Grid>

@@ -7,11 +7,11 @@
     "dev": "bun run check && vite --host 127.0.0.1 --port 1420",
     "prepare-tauri": "bun scripts/prepare-tauri-icons.mts",
     "build": "bun run check && vite build",
-    "lint": "oxlint . && oxfmt --check . && bun run lint:test-order",
+    "lint": "oxlint . && oxfmt --check . && bun run lint:test-order && bun run lint:icon-order",
     "lint:oxlint": "oxlint .",
     "lint:test-order": "bun scripts/lint-test-order.mts --check",
     "lint:test-order:fix": "bun scripts/lint-test-order.mts --fix",
-    "lint:fix": "oxlint --fix . && oxfmt --write . && bun run lint:test-order:fix",
+    "lint:fix": "oxlint --fix . && oxfmt --write . && bun run lint:test-order:fix && bun run lint:icon-order:fix",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "test": "bun test --parallel",
@@ -23,7 +23,9 @@
     "sync-cargo-version": "bun scripts/sync-cargo-version.mts",
     "tauri": "tauri",
     "icons:download": "bun scripts/download-icons.mts",
-    "icons:check": "bun scripts/download-icons.mts --check"
+    "icons:check": "bun scripts/download-icons.mts --check",
+    "lint:icon-order": "bun scripts/lint-icon-order.mts --check",
+    "lint:icon-order:fix": "bun scripts/lint-icon-order.mts --fix && oxfmt --write src/icon-manifest.json"
   },
   "dependencies": {
     "@coinbase/cds-web": "^9.29.0",

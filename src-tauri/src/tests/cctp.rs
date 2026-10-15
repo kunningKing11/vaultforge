@@ -194,7 +194,16 @@ fn rejects_mixed_or_invalid_deployment_configuration() {
                 route.destination.message_transmitter = "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275"
             }
             4 => route.attestation_host = "https://iris-api-sandbox.circle.com",
-            5 => route.source.network.tokens[0].decimals = 18,
+            5 => {
+                route
+                    .source
+                    .network
+                    .tokens
+                    .iter_mut()
+                    .find(|token| token.symbol == "USDC")
+                    .unwrap()
+                    .decimals = 18
+            }
             6 => route.source.network.rpc_url = Some("http://example.com".into()),
             7 => route.destination.network.transaction_status_provider = None,
             _ => route.protocol_version = 1,

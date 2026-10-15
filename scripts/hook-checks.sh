@@ -33,6 +33,7 @@ commit)
   run_check "Oxlint" bun run lint:oxlint
   run_check "Oxfmt" bun run format:check
   run_check "Test order" bun run lint:test-order
+  run_check "Icon order" bun run lint:icon-order
   run_check "TypeScript" bun run typecheck
   run_check "TypeScript tests" bun test --parallel
   run_check "Cargo fmt" cargo fmt --all --manifest-path src-tauri/Cargo.toml --check

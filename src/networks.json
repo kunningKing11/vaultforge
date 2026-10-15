@@ -78,6 +78,30 @@
       "tokens": [
         {
           "standard": "erc20",
+          "symbol": "AAVE",
+          "name": "Aave",
+          "decimals": 18,
+          "tokenAddress": "0xba5DdD1f9d7F570dc94a51479a000E3BCE967196",
+          "coinGeckoId": "aave"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "LINK",
+          "name": "Chainlink",
+          "decimals": 18,
+          "tokenAddress": "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4",
+          "coinGeckoId": "chainlink"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "UNI",
+          "name": "Uniswap",
+          "decimals": 18,
+          "tokenAddress": "0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0",
+          "coinGeckoId": "uniswap"
+        },
+        {
+          "standard": "erc20",
           "symbol": "USDC",
           "name": "USD Coin",
           "decimals": 6,
@@ -102,6 +126,30 @@
         "coinGeckoId": "avalanche-2"
       },
       "tokens": [
+        {
+          "standard": "erc20",
+          "symbol": "AAVE",
+          "name": "Aave",
+          "decimals": 18,
+          "tokenAddress": "0x63a72806098Bd3D9520cC43356dD78afe5D386D9",
+          "coinGeckoId": "aave"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "LINK",
+          "name": "Chainlink",
+          "decimals": 18,
+          "tokenAddress": "0x5947BB275c521040051D82396192181b413227A3",
+          "coinGeckoId": "chainlink"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "UNI.e",
+          "name": "Uniswap (Avalanche Bridge)",
+          "decimals": 18,
+          "tokenAddress": "0x8eBAf22B6F053dFFeaf46f4Dd9eFA95D89ba8580",
+          "coinGeckoId": "uniswap"
+        },
         {
           "standard": "erc20",
           "symbol": "USDC",
@@ -140,6 +188,30 @@
       "tokens": [
         {
           "standard": "erc20",
+          "symbol": "AAVE",
+          "name": "Aave",
+          "decimals": 18,
+          "tokenAddress": "0x63706e401c06ac8513145b7687A14804d17f814b",
+          "coinGeckoId": "aave"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "LINK",
+          "name": "Chainlink",
+          "decimals": 18,
+          "tokenAddress": "0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196",
+          "coinGeckoId": "chainlink"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "UNI",
+          "name": "Uniswap",
+          "decimals": 18,
+          "tokenAddress": "0xc3De830EA07524a0761646a6a4e4be0e114a3C83",
+          "coinGeckoId": "uniswap"
+        },
+        {
+          "standard": "erc20",
           "symbol": "USDC",
           "name": "USD Coin",
           "decimals": 6,
@@ -162,7 +234,49 @@
         "name": "BNB",
         "decimals": 18,
         "coinGeckoId": "binancecoin"
-      }
+      },
+      "tokens": [
+        {
+          "standard": "erc20",
+          "symbol": "AAVE",
+          "name": "Aave",
+          "decimals": 18,
+          "tokenAddress": "0xfb6115445Bff7b52FeB98650C87f44907E58f802",
+          "coinGeckoId": "aave"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "LINK",
+          "name": "Chainlink (ERC-677)",
+          "decimals": 18,
+          "tokenAddress": "0x404460C6A5EdE2D891e8297795264fDe62ADBB75",
+          "coinGeckoId": "chainlink"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "LINK",
+          "name": "Chainlink",
+          "decimals": 18,
+          "tokenAddress": "0xF8A0BF9cF54Bb92F17374d9e9A321E6a111a51bD",
+          "coinGeckoId": "chainlink"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "UNI",
+          "name": "Uniswap (CCIP)",
+          "decimals": 18,
+          "tokenAddress": "0x06e8bdE95BE4ce5cB1134BD47aD18a79fFB35822",
+          "coinGeckoId": "uniswap"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "UNI",
+          "name": "Uniswap",
+          "decimals": 18,
+          "tokenAddress": "0xBf5140A22578168FD562DCcF235E5D43A02ce9B1",
+          "coinGeckoId": "uniswap"
+        }
+      ]
     },
     {
       "kind": "evm",
@@ -180,6 +294,30 @@
         "coinGeckoId": "ethereum"
       },
       "tokens": [
+        {
+          "standard": "erc20",
+          "symbol": "AAVE",
+          "name": "Aave",
+          "decimals": 18,
+          "tokenAddress": "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9",
+          "coinGeckoId": "aave"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "LINK",
+          "name": "Chainlink",
+          "decimals": 18,
+          "tokenAddress": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+          "coinGeckoId": "chainlink"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "UNI",
+          "name": "Uniswap",
+          "decimals": 18,
+          "tokenAddress": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+          "coinGeckoId": "uniswap"
+        },
         {
           "standard": "erc20",
           "symbol": "USDC",
@@ -216,6 +354,14 @@
       "tokens": [
         {
           "standard": "erc20",
+          "symbol": "LINK",
+          "name": "Chainlink",
+          "decimals": 18,
+          "tokenAddress": "0x76f257B1DDA5cC71bee4eF637Fbdde4C801310A9",
+          "coinGeckoId": "chainlink"
+        },
+        {
+          "standard": "erc20",
           "symbol": "USDC",
           "name": "USD Coin",
           "decimals": 6,
@@ -243,6 +389,30 @@
       "tokens": [
         {
           "standard": "erc20",
+          "symbol": "AAVE",
+          "name": "Aave",
+          "decimals": 18,
+          "tokenAddress": "0x76FB31fb4af56892A25e32cFC43De717950c9278",
+          "coinGeckoId": "aave"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "LINK",
+          "name": "Chainlink",
+          "decimals": 18,
+          "tokenAddress": "0x350a791Bfc2C21F9Ed5d10980Dad2e2638ffa7f6",
+          "coinGeckoId": "chainlink"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "UNI",
+          "name": "Uniswap",
+          "decimals": 18,
+          "tokenAddress": "0x6fd9d7AD17242c41f7131d257212c54A0e816691",
+          "coinGeckoId": "uniswap"
+        },
+        {
+          "standard": "erc20",
           "symbol": "USDC",
           "name": "USD Coin",
           "decimals": 6,
@@ -267,6 +437,46 @@
         "coinGeckoId": "polygon-ecosystem-token"
       },
       "tokens": [
+        {
+          "standard": "erc20",
+          "symbol": "AAVE",
+          "name": "Aave",
+          "decimals": 18,
+          "tokenAddress": "0xD6DF932A45C0f255f85145f286eA0b292B21C90B",
+          "coinGeckoId": "aave"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "LINK",
+          "name": "Chainlink",
+          "decimals": 18,
+          "tokenAddress": "0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39",
+          "coinGeckoId": "chainlink"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "LINK",
+          "name": "Chainlink (ERC-677)",
+          "decimals": 18,
+          "tokenAddress": "0xb0897686c545045aFc77CF20eC7A532E3120E0F1",
+          "coinGeckoId": "chainlink"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "UNI",
+          "name": "Uniswap (CCIP)",
+          "decimals": 18,
+          "tokenAddress": "0x06e8bdE95BE4ce5cB1134BD47aD18a79fFB35822",
+          "coinGeckoId": "uniswap"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "UNI",
+          "name": "Uniswap",
+          "decimals": 18,
+          "tokenAddress": "0xb33EaAd8d922B1083446DC23f610c2567fB5180f",
+          "coinGeckoId": "uniswap"
+        },
         {
           "standard": "erc20",
           "symbol": "USDC",
@@ -337,6 +547,38 @@
         "coinGeckoId": "solana"
       },
       "tokens": [
+        {
+          "standard": "spl",
+          "symbol": "AAVE",
+          "name": "Aave (Wormhole)",
+          "decimals": 8,
+          "tokenAddress": "3vAs4D1WE6Na4tCgt4BApgFfENbm8WY7q4cSPD1yM4Cg",
+          "coinGeckoId": "aave"
+        },
+        {
+          "standard": "spl",
+          "symbol": "LINK",
+          "name": "Chainlink (Wormhole)",
+          "decimals": 8,
+          "tokenAddress": "2wpTofQ8SkACrkZWrZDjXPitYa8AwWgX8AfxdeBRRVLX",
+          "coinGeckoId": "chainlink"
+        },
+        {
+          "standard": "spl",
+          "symbol": "LINK",
+          "name": "Chainlink",
+          "decimals": 9,
+          "tokenAddress": "LinkhB3afbBKb2EQQu7s7umdZceV3wcvAUJhQAfQ23L",
+          "coinGeckoId": "chainlink"
+        },
+        {
+          "standard": "spl",
+          "symbol": "UNI",
+          "name": "Uniswap (Wormhole)",
+          "decimals": 8,
+          "tokenAddress": "8FU95xFJhUUkyyCLU13HSzDLs7oC4QZdXQHL6SCeab36",
+          "coinGeckoId": "uniswap"
+        },
         {
           "standard": "spl",
           "symbol": "USDC",

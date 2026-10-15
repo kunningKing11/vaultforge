@@ -58,6 +58,8 @@ For a full list of upcoming features (there are quite a few!), click [here](http
 - Tron Mainnet (TRX; native transfers only)
 - XRP Ledger Mainnet (XRP; native transfers only)
 
+The token registry includes AAVE, UNI, and LINK on Ethereum, Arbitrum, Avalanche, Base, BNB Chain, Optimism, Polygon, and Solana, plus LINK on Monad. It retains distinct bridged/CCIP/ERC-677 contracts rather than merging assets by ticker. Contract sources are the [Uniswap token list](https://tokens.uniswap.org), [UNI documentation](https://developers.uniswap.org/docs/ecosystem/governance/uni), [Chainlink documentation](https://docs.chain.link/resources/link-token-contracts), [Avalanche bridge registry](https://github.com/ava-labs/avalanche-bridge-resources/blob/main/avalanche_contract_address.json), and [Wormhole token registry](https://github.com/wormhole-foundation/wormhole-token-list/blob/main/content/by_dest.csv). Solana Wormhole mints use eight decimals; the separate Chainlink LINK mint uses nine.
+
 ### Supported features
 
 The table distinguishes implemented backend paths from network entries that are currently address or validation scaffolding. “No” means the feature is not implemented; it does not imply that the underlying chain lacks it.
@@ -87,6 +89,8 @@ The table distinguishes implemented backend paths from network entries that are 
 `src/icon-manifest.json` curates official project artwork, source pages, local filenames, SHA-256 checksums, chain mappings, and token mappings by network and contract/mint. Only SVG vector artwork is bundled in `public/icons/` for offline display; raster images and embedded raster content are rejected. Some chain assets are official website icons or wordmarks rather than standalone symbols; project branding terms still apply.
 
 Run `bun run icons:download` to download the pinned assets (Bun and `unzip` are required for Circle's USDC archive), or `bun run icons:check` to verify existing files without network access. Changed upstream files fail checksum validation; review them before updating the manifest. The downloader rejects active SVG content; USDT uses Tether’s official green SVG logo mark. Explicit manifest transforms extract the original Bitcoin and BNB symbol paths from wordmarks and normalize Injective’s inline SVG attributes, apply its official `#4D3DFF` brand purple, and remove the OP token preview background and padding. Original symbol geometry is preserved.
+
+Pre-commit and `bun run lint` enforce alphabetical icon IDs and network-map keys. Token mappings are grouped by icon, then sorted by network ID and contract. Run `bun run lint:icon-order:fix` to sort the manifest.
 
 Use `assetIconPath(asset)` and `chainIconPath(network)` from `src/assetIcons.ts` in image elements. Unknown identities return the bundled question-mark icon. Native ETH on Base, Optimism, and Arbitrum uses the ETH coin icon while the chain helper returns the corresponding chain badge. Dashboard and Assets share one `AssetCard` that uses these helpers for a coin icon and a small chain badge; missing or failed images use the question-mark fallback. Adding an icon does not declare transaction support. The question-mark artwork comes from Feather under the MIT license, included at `public/icons/fallback/LICENSE.txt`.
 
