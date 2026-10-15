@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { chainIconPath } from "../assetIcons";
 import { formatWei, toWei } from "../format";
-import { explorerTxUrl, networkById, networkDisplayName } from "../networks";
+import { explorerUrl, networkById, networkDisplayName } from "../networks";
 import type { CctpPreparedStep, CctpState, WalletSession } from "../types";
 import { walletApi } from "../walletApi";
 import { SelectionIcon } from "./SelectionIcon";
@@ -408,8 +408,11 @@ export function BridgeView({
       : (focused?.source ?? "");
   const attemptUrl =
     focused?.attempt_hash && attemptNetwork
-      ? explorerTxUrl(attemptNetwork, focused.attempt_hash)
+      ? explorerUrl(attemptNetwork, focused.attempt_hash, "tx")
       : null;
+  const recipientUrl = focused
+    ? explorerUrl(focused.destination, focused.recipient, "address")
+    : null;
   return (
     <VStack gap={3}>
       <ContentCard background="bgElevation1" borderRadius={400} gap={3} padding={4}>
@@ -514,7 +517,23 @@ export function BridgeView({
               {done
                 ? `Transfer complete. The USDC is now on ${name(focused.destination)}.`
                 : `This transfer was cancelled. Funds are still on ${name(focused.source)}.`}{" "}
-              Recipient: {focused.recipient}
+            </Text>
+            <Text>
+              Recipient:{" "}
+              {recipientUrl ? (
+                <Link
+                  href={recipientUrl}
+                  openInNewWindow
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void openUrl(recipientUrl);
+                  }}
+                >
+                  {focused.recipient}
+                </Link>
+              ) : (
+                focused.recipient
+              )}
             </Text>
             <Button
               disabled={busy}

@@ -196,22 +196,23 @@ export function networkDisplayName(networkOrId: Network | string) {
 
 // Well-known block explorers only; unknown networks return null so callers
 // render plain text instead of linking somewhere wrong.
-const explorerTxBaseUrl: Record<string, string> = {
-  arbitrum_one: "https://arbiscan.io/tx/",
-  arbitrum_sepolia: "https://sepolia.arbiscan.io/tx/",
-  avalanche_c: "https://snowtrace.io/tx/",
-  base: "https://basescan.org/tx/",
-  ethereum: "https://etherscan.io/tx/",
-  ethereum_sepolia: "https://sepolia.etherscan.io/tx/",
-  optimism: "https://optimistic.etherscan.io/tx/",
-  polygon: "https://polygonscan.com/tx/",
-  solana: "https://solscan.io/tx/",
+const explorerBaseUrl: Record<string, string> = {
+  arbitrum_one: "https://arbiscan.io/",
+  arbitrum_sepolia: "https://sepolia.arbiscan.io/",
+  avalanche_c: "https://snowtrace.io/",
+  base: "https://basescan.org/",
+  ethereum: "https://etherscan.io/",
+  ethereum_sepolia: "https://sepolia.etherscan.io/",
+  optimism: "https://optimistic.etherscan.io/",
+  polygon: "https://polygonscan.com/",
+  solana: "https://solscan.io/",
 };
 
-export function explorerTxUrl(networkId: string, hash: string) {
-  const base = explorerTxBaseUrl[networkId];
-  if (!base || !hash) return null;
-  return `${base}${hash}`;
+export function explorerUrl(networkId: string, value: string, type: "tx" | "address") {
+  const base = explorerBaseUrl[networkId];
+  if (!base || !value) return null;
+  const path = networkId === "solana" && type === "address" ? "account" : type;
+  return `${base}${path}/${value}`;
 }
 
 export function evmNetworks(): EvmNetwork[] {
