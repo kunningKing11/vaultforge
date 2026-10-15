@@ -80,6 +80,7 @@ import type {
 import { appVersion } from "../version";
 import { walletApi } from "../walletApi";
 import { walletPasswordStrength } from "../walletPassword";
+import { type AssetGroup, assetGroupChains, assetGroups } from "./assetGroups";
 import { BridgeView, type CctpRunner } from "./BridgeView";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./disclaimer";
 import {
@@ -99,7 +100,6 @@ import {
   selectedActivity,
   sendAddressPlaceholder,
   sendDraftForNetwork,
-  sortAssetsByValue,
   sortAssetsForSelection,
   sortNetworksForSelection,
   transactionInclusionChanged,
@@ -1461,6 +1461,7 @@ function WalletView({
   toast: ToastFn;
   wallet: Extract<WalletState, { status: "unlocked" }>;
 }) {
+  const [collapseAssets, setCollapseAssets] = useState(false);
   if (state.navigation.currentView === "send") {
     return (
       <SendView
@@ -1487,7 +1488,8 @@ function WalletView({
   }
   if (state.navigation.currentView === "swap")
     return <BridgeView busy={state.operation.busy} run={runCctp} onSession={onCctpSession} />;
-  if (state.navigation.currentView === "assets") return <AssetsView wallet={wallet} />;
+  if (state.navigation.currentView === "assets")
+    return <AssetsView wallet={wallet} collapse={collapseAssets} onCollapse={setCollapseAssets} />;
   if (state.navigation.currentView === "activity")
     return <ActivityView copyText={copyText} setState={setState} state={state} wallet={wallet} />;
   if (state.navigation.currentView === "settings") {
@@ -1503,7 +1505,14 @@ function WalletView({
       />
     );
   }
-  return <DashboardView selectView={selectView} wallet={wallet} />;
+  return (
+    <DashboardView
+      selectView={selectView}
+      wallet={wallet}
+      collapse={collapseAssets}
+      onCollapse={setCollapseAssets}
+    />
+  );
 }
 
 function LoadingBar() {
@@ -2198,14 +2207,18 @@ function HiddenAssetsNote({ cutoff }: { cutoff: number }) {
 }
 
 function DashboardView({
+  collapse,
+  onCollapse,
   selectView,
   wallet,
 }: {
   selectView: (view: View) => void;
+  collapse: boolean;
+  onCollapse: (value: boolean) => void;
   wallet: Extract<WalletState, { status: "unlocked" }>;
 }) {
-  const assets = visibleAssets(wallet);
-  const totalUsd = assets.reduce((sum, asset) => sum + assetValueUsd(asset), 0);
+  const assets = assetGroups(wallet.assets, collapse, wallet.hideBelowUsd);
+  const totalUsd = assets.reduce((sum, group) => sum + group.valueUsd, 0);
   const change = portfolioChange(wallet.assets);
   return (
     <Grid className="dashboard-grid" gap={3}>
@@ -2228,13 +2241,16 @@ function DashboardView({
               </Text>
             </VStack>
           </HStack>
+          <Switch checked={collapse} onChange={(event) => onCollapse(event.target.checked)}>
+            Group across chains
+          </Switch>
           <HiddenAssetsNote cutoff={wallet.hideBelowUsd} />
           {assets.length > 0 ? (
             <>
               <div className="asset-scroll" data-horizontal-scroll>
                 <HStack gap={2}>
                   {assets.map((asset) => (
-                    <AssetCard asset={asset} key={assetKey(asset)} wallet={wallet} />
+                    <AssetCard group={asset} key={asset.id} wallet={wallet} />
                   ))}
                 </HStack>
               </div>
@@ -2716,8 +2732,16 @@ function ReceiveView({
   );
 }
 
-function AssetsView({ wallet }: { wallet: Extract<WalletState, { status: "unlocked" }> }) {
-  const assets = visibleAssets(wallet);
+function AssetsView({
+  wallet,
+  collapse,
+  onCollapse,
+}: {
+  wallet: Extract<WalletState, { status: "unlocked" }>;
+  collapse: boolean;
+  onCollapse: (value: boolean) => void;
+}) {
+  const assets = assetGroups(wallet.assets, collapse, wallet.hideBelowUsd);
   return (
     <ContentCard background="bgElevation1" borderRadius={400} gap={3} padding={4}>
       <HStack justifyContent="space-between">
@@ -2728,10 +2752,13 @@ function AssetsView({ wallet }: { wallet: Extract<WalletState, { status: "unlock
           {assets.length} tracked
         </Text>
       </HStack>
+      <Switch checked={collapse} onChange={(event) => onCollapse(event.target.checked)}>
+        Group across chains
+      </Switch>
       <HiddenAssetsNote cutoff={wallet.hideBelowUsd} />
       <Grid className="assets-grid" columnMin="280px" gap={2}>
         {assets.map((asset) => (
-          <AssetCard asset={asset} key={assetKey(asset)} wallet={wallet} />
+          <AssetCard group={asset} key={asset.id} wallet={wallet} />
         ))}
         {assets.length === 0 && (
           <EmptyState
@@ -3012,19 +3039,23 @@ function DeleteWalletDialog({
 }
 
 function AssetCard({
-  asset,
+  group,
   wallet,
 }: {
-  asset: Asset;
+  group: AssetGroup;
   wallet: Extract<WalletState, { status: "unlocked" }>;
 }) {
-  const valueUsd = assetValueUsd(asset);
+  const asset = group.asset;
+  const chains = assetGroupChains(group);
+  const grouped = chains.length > 1;
+  const valueUsd = group.valueUsd;
   const totalUsd = wallet.assets.reduce((sum, item) => sum + assetValueUsd(item), 0);
   const allocation = totalUsd ? (valueUsd / totalUsd) * 100 : 0;
-  return (
+  const card = (
     <ContentCard
       background="bgSecondary"
       borderRadius={300}
+      tabIndex={grouped ? 0 : undefined}
       className="asset-card"
       gap={2}
       minWidth="0"
@@ -3043,16 +3074,18 @@ function AssetCard({
                   image.src = UNKNOWN_ASSET_ICON;
               }}
             />
-            <img
-              alt=""
-              className="asset-card-chain-icon"
-              src={chainIconPath(asset.network)}
-              onError={(event) => {
-                const image = event.currentTarget;
-                if (image.getAttribute("src") !== UNKNOWN_ASSET_ICON)
-                  image.src = UNKNOWN_ASSET_ICON;
-              }}
-            />
+            {!grouped && (
+              <img
+                alt=""
+                className="asset-card-chain-icon"
+                src={chainIconPath(asset.network)}
+                onError={(event) => {
+                  const image = event.currentTarget;
+                  if (image.getAttribute("src") !== UNKNOWN_ASSET_ICON)
+                    image.src = UNKNOWN_ASSET_ICON;
+                }}
+              />
+            )}
           </span>
           <Text font="title3" overflow="truncate" style={{ minWidth: 0 }}>
             {displayAssetSymbol(asset, wallet)}
@@ -3068,7 +3101,10 @@ function AssetCard({
         </Text>
       </HStack>
       <Text color="fgMuted" font="body" overflow="truncate" style={{ width: "100%" }}>
-        {asset.name} on {networkDisplayName(asset.network)}
+        {asset.name} on{" "}
+        {grouped
+          ? `${chains.length} ${chains.length === 1 ? "chain" : "chains"}`
+          : networkDisplayName(asset.network)}
       </Text>
       <Text font="title2">
         {money(usdToFiat(valueUsd, wallet.usdExchangeRate), wallet.fiatCurrency)}
@@ -3095,6 +3131,45 @@ function AssetCard({
         </Box>
       </VStack>
     </ContentCard>
+  );
+  return (
+    <div className="asset-card-slot">
+      {grouped ? (
+        <Tooltip
+          invertColorScheme={false}
+          content={
+            <VStack gap={1} style={{ maxHeight: "320px", overflowY: "auto", minWidth: "220px" }}>
+              {chains.map((chain) => (
+                <ContentCard key={chain.id} background="bgSecondary" borderRadius={200} padding={2}>
+                  <HStack alignItems="center" gap={2}>
+                    <VStack gap={0.25}>
+                      <HStack alignItems="center" gap={1}>
+                        <SelectionIcon src={chainIconPath(chain.asset.network)} />
+                        <Text font="label2">{networkDisplayName(chain.asset.network)}</Text>
+                      </HStack>
+                      <Text font="body">
+                        {formatWei(chain.asset.balance, chain.asset.decimals)}{" "}
+                        {displayAssetSymbol(chain.asset, wallet)}
+                      </Text>
+                      <Text font="title3">
+                        {money(
+                          usdToFiat(chain.valueUsd, wallet.usdExchangeRate),
+                          wallet.fiatCurrency,
+                        )}
+                      </Text>
+                    </VStack>
+                  </HStack>
+                </ContentCard>
+              ))}
+            </VStack>
+          }
+        >
+          {card}
+        </Tooltip>
+      ) : (
+        card
+      )}
+    </div>
   );
 }
 
@@ -3309,14 +3384,6 @@ function useQrSvg(payload: string, resilience: QrResilience, toast: ToastFn): st
     };
   }, [payload, resilience, toast]);
   return svg;
-}
-
-function visibleAssets(wallet: Extract<WalletState, { status: "unlocked" }>) {
-  return sortAssetsByValue(
-    wallet.assets.filter(
-      (asset) => asset.price_usd <= 0 || assetValueUsd(asset) >= wallet.hideBelowUsd,
-    ),
-  );
 }
 
 function assetValueUsd(asset: Asset) {

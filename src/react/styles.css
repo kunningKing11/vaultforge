@@ -310,7 +310,7 @@ textarea {
   background: #fff;
 }
 
-.asset-card {
+.asset-card-slot {
   flex: 0 0 270px;
   min-width: 0;
   max-width: none;
@@ -558,7 +558,7 @@ textarea {
 }
 
 @media (max-width: 360px) {
-  .asset-card {
+  .asset-card-slot {
     flex-basis: 100%;
   }
 
@@ -658,4 +658,10 @@ textarea {
 .selection-icon[src="/icons/chains/ethereum.svg"],
 .selection-icon[src="/icons/fallback/unknown.svg"] {
   background: #fff;
+}
+
+.asset-card-slot > div,
+.asset-card-slot .asset-card {
+  width: 100%;
+  box-sizing: border-box;
 }
