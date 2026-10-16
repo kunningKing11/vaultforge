@@ -2489,21 +2489,23 @@ function SendForm({
             required
             value={draft.to}
           />
-          <TextInput
-            label="Destination tag (XRP only)"
-            max="4294967295"
-            min="0"
-            onChange={(event) =>
-              updateDraft((current) => ({
-                ...current,
-                destinationTag: event.target.value === "" ? null : Number(event.target.value),
-              }))
-            }
-            placeholder="Required by some exchanges"
-            step="1"
-            type="number"
-            value={draft.destinationTag ?? ""}
-          />
+          {draft.network === "xrpl" && (
+            <TextInput
+              label="Destination tag"
+              max="4294967295"
+              min="0"
+              onChange={(event) =>
+                updateDraft((current) => ({
+                  ...current,
+                  destinationTag: event.target.value === "" ? null : Number(event.target.value),
+                }))
+              }
+              placeholder="Required by some exchanges"
+              step="1"
+              type="number"
+              value={draft.destinationTag ?? ""}
+            />
+          )}
           <TextInput
             label="Note"
             onChange={(event) =>
