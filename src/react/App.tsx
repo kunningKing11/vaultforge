@@ -108,6 +108,7 @@ import {
 } from "./model";
 import { PasswordInput } from "./PasswordInput";
 import { SelectionIcon } from "./SelectionIcon";
+import { SidebarAddress } from "./SidebarAddress";
 import { vaultForgeTheme } from "./theme";
 
 const MINIMUM_SPLASH_DURATION_MS = 650;
@@ -2170,10 +2171,10 @@ function AddressList({
             justifyContent="space-between"
             key={item.label}
           >
-            <Text className="address-text" mono overflow="truncate">
-              {item.label}:{" "}
+            <Text className="address-text" mono>
+              <span className="address-label">{item.label}:</span>
               <ExplorerLink network={item.network} value={item.address} type="address">
-                {shortAddress(item.address)}
+                <SidebarAddress address={item.address} />
               </ExplorerLink>
             </Text>
             <Button

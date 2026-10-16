@@ -328,6 +328,27 @@ textarea {
 
 .address-text {
   flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+.address-label {
+  flex-shrink: 0;
+}
+
+.address-text > a,
+.address-text > a > span {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.sidebar-address-value {
+  display: block;
+  width: 100%;
+  min-width: 0;
 }
 
 .receive-grid {
