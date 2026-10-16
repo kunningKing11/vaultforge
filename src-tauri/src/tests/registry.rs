@@ -81,6 +81,7 @@ fn supported_rpc_providers_use_expected_hosts() {
             continue;
         };
         match network.id.as_str() {
+            "base" => assert_eq!(rpc_url, "https://mainnet.base.org"),
             "monad" => assert_eq!(rpc_url, "https://rpc.monad.xyz"),
             "solana" => assert_eq!(rpc_url, "https://api.mainnet.solana.com"),
             "xrpl" => assert_eq!(rpc_url, "https://xrplcluster.com/"),
