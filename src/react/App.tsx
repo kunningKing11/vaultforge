@@ -2920,15 +2920,26 @@ function SettingsView({
           </Button>
         </VStack>
       </form>
-      <Box borderedTop paddingTop={3}>
-        <HStack alignItems="center" flexWrap="wrap" gap={2} justifyContent="space-between">
+      <Box borderedTop paddingTop={3} width="100%">
+        <HStack
+          alignItems="center"
+          flexWrap="wrap"
+          gap={2}
+          justifyContent="space-between"
+          width="100%"
+        >
           <VStack gap={0.5}>
             <Text font="label1">Application updates</Text>
             <Text color="fgMuted" font="body">
               Check GitHub Releases for newer VaultForge version.
             </Text>
           </VStack>
-          <Button onClick={() => void checkForUpdates()} size="s" variant="secondary">
+          <Button
+            onClick={() => void checkForUpdates()}
+            size="s"
+            style={{ marginLeft: "auto" }}
+            variant="secondary"
+          >
             Check for updates
           </Button>
         </HStack>
