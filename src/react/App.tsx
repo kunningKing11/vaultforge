@@ -2958,6 +2958,10 @@ function DeleteWalletDialog({
   state: AppState;
 }) {
   const dialog = state.dialogs.deleteWallet;
+  const [backupConfirmed, setBackupConfirmed] = useState(false);
+  useEffect(() => {
+    if (dialog.step !== "confirm") setBackupConfirmed(false);
+  }, [dialog.step]);
   if (dialog.step === "idle") return null;
   const cancel = () =>
     setState((current) => ({
@@ -3024,26 +3028,35 @@ function DeleteWalletDialog({
           Delete stored wallet?
         </Text>
         <Text color="fgMuted" font="body">
-          You can lose funds if recovery phrase is not backed up and usable.
+          You can lose all funds if your recovery phrase is not backed up and stored in a safe
+          location.
         </Text>
+        <Checkbox
+          checked={backupConfirmed}
+          onChange={(event) => setBackupConfirmed(event.target.checked)}
+        >
+          I have backed up my recovery phrase
+        </Checkbox>
         <HStack gap={2}>
           <Button block onClick={cancel} variant="secondary">
             Cancel
           </Button>
           <Button
             block
-            onClick={() =>
+            disabled={!backupConfirmed}
+            onClick={() => {
+              if (!backupConfirmed) return;
               setState((current) => ({
                 ...current,
                 dialogs: {
                   ...current.dialogs,
                   deleteWallet: { step: "countdown", secondsRemaining: 10 },
                 },
-              }))
-            }
+              }));
+            }}
             variant="negative"
           >
-            I backed up recovery phrase
+            Continue
           </Button>
         </HStack>
       </VStack>
