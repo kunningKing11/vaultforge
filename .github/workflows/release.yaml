@@ -185,29 +185,6 @@ jobs:
         with:
           path: artifacts
 
-      - name: Collect release assets
-        run: |
-          python3 - <<'PY'
-          import shutil
-          from pathlib import Path
-
-          dist = Path("release-assets")
-          dist.mkdir(exist_ok=True)
-
-          release_extensions = {".deb", ".rpm", ".dmg", ".exe"}
-          for source in Path("artifacts").rglob("*"):
-              if not source.is_file() or source.suffix.lower() not in release_extensions:
-                  continue
-
-              target = dist / source.name
-              if target.exists():
-                  target = dist / f"{source.parent.name}-{source.name}"
-              shutil.copy2(source, target)
-
-          if not any(dist.iterdir()):
-              raise SystemExit("no release assets collected")
-          PY
-
       - name: Generate release banner
         run: |
           set -euo pipefail
@@ -225,6 +202,7 @@ jobs:
             --height 1024 \
             --output src-tauri/icons/banner.png \
             src-tauri/icons/banner.svg
+          mkdir -p release-assets
           cp src-tauri/icons/banner.png release-assets/vaultforge-banner.png
 
       - name: Generate release notes
@@ -289,6 +267,16 @@ jobs:
                 "${GITHUB_SERVER_URL}" "${GITHUB_REPOSITORY}" "${previous_tag}" "${RELEASE_TAG}"
             fi
           } > release-notes.md
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Prepare release assets and updater manifest
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: bun scripts/prepare-release-assets.mts artifacts release-assets "${GITHUB_REPOSITORY}" "${RELEASE_TAG}" release-notes.md
 
       - name: Create GitHub release
         env:

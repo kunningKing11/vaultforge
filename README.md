@@ -133,6 +133,8 @@ bunx tauri build
 
 `prepare-tauri` records SHA-256 hashes for `src-tauri/icons/icon.svg` and every generated desktop, Android, and iOS icon in the ignored local `src-tauri/icons/icon-hashes.json` cache. It skips `tauri icon` when the source, manifest, and all generated products still match, and regenerates the complete set when any file is missing or changed.
 
+The manually dispatched Release workflow builds signed updater packages using the existing `TAURI_SIGNING_PRIVATE_KEY` and optional password secrets. `scripts/prepare-release-assets.mts` collects all six architecture builds, retains updater signatures, and generates `latest.json` with package URLs and signature contents. Linux DEB/RPM/AppImage installs have separate entries; macOS uses `.app.tar.gz` archives and Windows uses NSIS installers. Missing or ambiguous updater packages and missing/empty signatures block publication. The Settings updater endpoint becomes usable once a release containing these files is published; local workflow changes do not repair existing GitHub releases.
+
 **Check and fix frontend quality:**
 
 ```bash
