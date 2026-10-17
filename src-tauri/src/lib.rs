@@ -20,6 +20,7 @@ mod storage;
 #[cfg(test)]
 mod tests;
 mod tx;
+mod uniswap_config;
 mod validation;
 mod webview;
 

@@ -81,7 +81,7 @@ import { appVersion } from "../version";
 import { walletApi } from "../walletApi";
 import { walletPasswordStrength } from "../walletPassword";
 import { type AssetGroup, assetGroupChains, assetGroups } from "./assetGroups";
-import { BridgeView, type CctpRunner } from "./BridgeView";
+import { type CctpRunner } from "./BridgeView";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./disclaimer";
 import { ExplorerLink } from "./ExplorerLink";
 import {
@@ -109,6 +109,7 @@ import {
 import { PasswordInput } from "./PasswordInput";
 import { SelectionIcon } from "./SelectionIcon";
 import { SidebarAddress } from "./SidebarAddress";
+import { SwapView } from "./SwapView";
 import { vaultForgeTheme } from "./theme";
 
 const MINIMUM_SPLASH_DURATION_MS = 650;
@@ -1489,7 +1490,7 @@ function WalletView({
     );
   }
   if (state.navigation.currentView === "swap")
-    return <BridgeView busy={state.operation.busy} run={runCctp} onSession={onCctpSession} />;
+    return <SwapView busy={state.operation.busy} run={runCctp} onSession={onCctpSession} />;
   if (state.navigation.currentView === "assets")
     return <AssetsView wallet={wallet} collapse={collapseAssets} onCollapse={setCollapseAssets} />;
   if (state.navigation.currentView === "activity")
