@@ -9,6 +9,9 @@ import type {
   NetworkId,
   SignedTransaction,
   TxStatus,
+  UniswapComparison,
+  UniswapPreparedStep,
+  UniswapState,
   WalletRefreshResult,
   WalletSession,
 } from "./types";
@@ -64,6 +67,26 @@ export const walletApi = {
     invoke<WalletSession>("send_transaction", args),
   swapTokens: (args: { fromAsset: AssetIdentity; toAsset: AssetIdentity; amount: string }) =>
     invoke<WalletSession>("swap_tokens", args),
+  getUniswapState: () => invoke<UniswapState>("get_uniswap_state"),
+  quoteUniswapSwap: (args: {
+    network: NetworkId;
+    destinationNetwork?: NetworkId;
+    tokenIn: string;
+    tokenOut: string;
+    amountBaseUnits: string;
+    slippageBps: number;
+    maxAmount?: boolean;
+  }) => invoke<UniswapComparison>("quote_uniswap_swap", args),
+  createUniswapSwap: (args: { quoteId: string }) =>
+    invoke<{ operation_id: string; session: WalletSession }>("create_uniswap_swap", args),
+  prepareUniswapSwap: (args: { operationId: string }) =>
+    invoke<UniswapPreparedStep>("prepare_uniswap_swap", args),
+  submitUniswapSwap: (args: { operationId: string; expectedHash: string }) =>
+    invoke<WalletSession>("submit_uniswap_swap", args),
+  syncUniswapSwap: (args: { operationId: string }) =>
+    invoke<WalletSession>("sync_uniswap_swap", args),
+  cancelUniswapSwap: (args: { operationId: string }) =>
+    invoke<WalletSession>("cancel_uniswap_swap", args),
   getCctpState: () => invoke<CctpState>("get_cctp_state"),
   createCctpTransfer: (args: {
     sourceNetwork: string;

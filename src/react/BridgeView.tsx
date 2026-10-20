@@ -1,4 +1,3 @@
-import { Combobox } from "@coinbase/cds-web/alpha/combobox";
 import { Button } from "@coinbase/cds-web/buttons";
 import { ContentCard } from "@coinbase/cds-web/cards/ContentCard";
 import { TextInput } from "@coinbase/cds-web/controls";
@@ -8,15 +7,20 @@ import type { StepperProgressProps } from "@coinbase/cds-web/stepper";
 import { Text } from "@coinbase/cds-web/typography";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { chainIconPath } from "../assetIcons";
+import { assetIconPath, chainIconPath } from "../assetIcons";
 import { formatWei, toWei } from "../format";
 import { networkById, networkDisplayName } from "../networks";
-import type { CctpPreparedStep, CctpState, WalletSession } from "../types";
+import type { Asset, CctpPreparedStep, CctpState, NetworkId, WalletSession } from "../types";
 import { walletApi } from "../walletApi";
+import { bridgeSelection } from "./bridgeSelection";
+import { CdsSelect } from "./CdsSelect";
 import { ExplorerLink } from "./ExplorerLink";
-import { SelectionIcon } from "./SelectionIcon";
+import { assetKey } from "./model";
 
-export type CctpRunner = <T>(action: () => Promise<T>) => Promise<T | null>;
+export type CctpRunner = <T>(
+  action: () => Promise<T>,
+  options?: { silent?: boolean },
+) => Promise<T | null>;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 // Finished steps read green; the in-progress step keeps the primary blue.
 const CctpStepProgress = (props: StepperProgressProps) => (
@@ -64,7 +68,6 @@ const operationStage = (operation: CctpOperation): Stage => {
 };
 // const routeKey = (route: CctpState["routes"][number]) => `${route.source}:${route.destination}`;
 const name = (network: string) => networkDisplayName(network).replaceAll("_", " ");
-const isEvmNetwork = (network: string) => networkById(network)?.kind === "evm";
 const attemptStatusText = (status: string | null) => {
   switch (status) {
     case "Signed":
@@ -88,14 +91,18 @@ export function BridgeView({
   busy,
   run,
   onSession,
+  assets = [],
+  enabledNetworks,
 }: {
+  assets?: readonly Asset[];
+  enabledNetworks?: readonly NetworkId[];
   busy: boolean;
   run: CctpRunner;
   onSession: (session: WalletSession) => void;
 }) {
   const [data, setData] = useState<CctpState>({ routes: [], operations: [] });
-  const [selectedSource, setSelectedSource] = useState("ethereum_sepolia");
-  const [selectedDestination, setSelectedDestination] = useState("arbitrum_sepolia");
+  const [sourceChoice, setSelectedSource] = useState("");
+  const [destinationChoice, setSelectedDestination] = useState("");
   const [amount, setAmount] = useState("");
   const [recipient, setRecipient] = useState("");
   const [review, setReview] = useState<CctpPreparedStep | null>(null);
@@ -167,31 +174,35 @@ export function BridgeView({
   useEffect(() => {
     busyRef.current = busy;
   }, [busy]);
-  const route = data.routes.find(
-    (route) => route.source === selectedSource && route.destination === selectedDestination,
-  );
-  const sourceNetworks = [
-    ...new Set(
-      data.routes.filter((route) => isEvmNetwork(route.source)).map((route) => route.source),
-    ),
-  ].sort((a, b) => name(a).localeCompare(name(b)));
-  const destinationNetworks = [
-    ...new Set(
-      data.routes
-        .filter((route) => route.source === selectedSource && isEvmNetwork(route.destination))
-        .map((route) => route.destination),
-    ),
-  ].sort((a, b) => name(a).localeCompare(name(b)));
+  const {
+    source: selectedSource,
+    destination: selectedDestination,
+    sourceNetworks,
+    destinationNetworks,
+    route,
+  } = bridgeSelection(data.routes, assets, enabledNetworks, sourceChoice, destinationChoice);
+  useEffect(() => {
+    if (selectedSource && selectedSource !== sourceChoice) setSelectedSource(selectedSource);
+    if (selectedDestination && selectedDestination !== destinationChoice)
+      setSelectedDestination(selectedDestination);
+  }, [destinationChoice, selectedDestination, selectedSource, sourceChoice]);
   const sourceOptions = sourceNetworks.map((network) => ({
     label: name(network),
     value: network,
-    media: <SelectionIcon src={chainIconPath(network)} />,
+    icon: chainIconPath(network),
   }));
   const destinationOptions = destinationNetworks.map((network) => ({
     label: name(network),
-    media: <SelectionIcon src={chainIconPath(network)} />,
     value: network,
+    icon: chainIconPath(network),
   }));
+  const sourceAsset = route ? { network: route.source, token_address: route.source_usdc } : null;
+  const destinationAsset = route
+    ? { network: route.destination, token_address: route.destination_usdc }
+    : null;
+  const sourceBalance = sourceAsset
+    ? assets.find((asset) => assetKey(asset) === assetKey(sourceAsset))
+    : undefined;
   const active = data.operations.find((operation) => !TERMINAL_STEPS.includes(operation.step));
   const focused = active ?? data.operations[data.operations.length - 1] ?? null;
   const focusedId = focused?.id ?? null;
@@ -425,44 +436,80 @@ export function BridgeView({
         />
         {!active && (!focused || showNewForm) && (
           <VStack gap={2}>
-            <Combobox
-              accessibilityLabel="Source chain"
-              label="From"
-              value={
-                sourceNetworks.includes(selectedSource)
-                  ? selectedSource
-                  : (sourceOptions[0]?.value ?? "")
-              }
+            <CdsSelect
+              label="From network"
+              searchable
+              value={selectedSource}
               options={sourceOptions}
-              startNode={<SelectionIcon src={chainIconPath(selectedSource)} />}
               disabled={busy || sourceOptions.length === 0}
               onChange={(value) => {
-                if (value === null) return;
                 setSelectedSource(value);
-                const nextDestination = data.routes.find(
-                  (candidate) => candidate.source === value && isEvmNetwork(candidate.destination),
-                )?.destination;
-                if (nextDestination) setSelectedDestination(nextDestination);
+                setSelectedDestination("");
                 setRecipient("");
+                setAmount("");
               }}
             />
-            <Combobox
-              accessibilityLabel="Destination chain"
-              label="To"
-              value={
-                destinationNetworks.includes(selectedDestination)
-                  ? selectedDestination
-                  : (destinationOptions[0]?.value ?? "")
+            <CdsSelect
+              label="From asset"
+              searchable
+              value={sourceAsset ? assetKey(sourceAsset) : ""}
+              options={
+                sourceAsset
+                  ? [
+                      {
+                        value: assetKey(sourceAsset),
+                        label: "USDC - USD Coin",
+                        icon: assetIconPath(sourceAsset),
+                      },
+                    ]
+                  : []
               }
+              disabled={busy || !sourceAsset}
+              onChange={() => undefined}
+            />
+            {sourceBalance && (
+              <Text color="fgMuted" font="caption">
+                Cached balance: {formatWei(sourceBalance.balance, sourceBalance.decimals)} USDC.
+              </Text>
+            )}
+            <CdsSelect
+              label="To network"
+              searchable
+              value={selectedDestination}
               options={destinationOptions}
-              startNode={<SelectionIcon src={chainIconPath(selectedDestination)} />}
               disabled={busy || destinationOptions.length === 0}
               onChange={(value) => {
-                if (value === null) return;
                 setSelectedDestination(value);
                 setRecipient("");
               }}
             />
+            <CdsSelect
+              label="To asset"
+              searchable
+              value={destinationAsset ? assetKey(destinationAsset) : ""}
+              options={
+                destinationAsset
+                  ? [
+                      {
+                        value: assetKey(destinationAsset),
+                        label: "USDC - USD Coin",
+                        icon: assetIconPath(destinationAsset),
+                      },
+                    ]
+                  : []
+              }
+              disabled={busy || !destinationAsset}
+              onChange={() => undefined}
+            />
+            <Text color="fgMuted" font="caption">
+              Cross-chain transfers currently support Circle-native USDC on these routes. Bridged
+              USDC and other tokens are not interchangeable with it.
+            </Text>
+            {sourceOptions.length === 0 && (
+              <Text font="body">
+                No executable cross-chain route is available between your enabled networks.
+              </Text>
+            )}
             <TextInput
               label="USDC amount"
               inputMode="decimal"

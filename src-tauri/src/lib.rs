@@ -20,6 +20,7 @@ mod storage;
 #[cfg(test)]
 mod tests;
 mod tx;
+mod uniswap;
 mod uniswap_config;
 mod validation;
 mod webview;
@@ -77,6 +78,13 @@ pub fn run() {
             commands::tx::send_transaction,
             commands::tx::cancel_signed_transaction,
             commands::tx::swap_tokens,
+            commands::swap::get_uniswap_state,
+            commands::swap::quote_uniswap_swap,
+            commands::swap::create_uniswap_swap,
+            commands::swap::prepare_uniswap_swap,
+            commands::swap::submit_uniswap_swap,
+            commands::swap::sync_uniswap_swap,
+            commands::swap::cancel_uniswap_swap,
             commands::tx::check_transaction_status,
             commands::cctp::poll_cctp_attestation,
             commands::cctp::refresh_cctp_attestation,

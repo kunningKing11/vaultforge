@@ -17,6 +17,7 @@ pub(crate) enum OperationKind {
     #[default]
     Cctp,
     Send,
+    Swap,
 }
 
 /// A transfer workflow retained in encrypted storage for restart recovery.
@@ -45,10 +46,59 @@ pub(crate) struct Operation {
     pub(crate) cctp: Option<CctpData>,
     #[serde(default)]
     pub(crate) deployment: Option<CctpDeploymentIdentity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) swap: Option<SwapData>,
     pub(crate) created_at: String,
     pub(crate) updated_at: String,
     #[serde(default)]
     pub(crate) last_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct RouteNode {
+    pub(crate) network: String,
+    pub(crate) token_address: Option<String>,
+    pub(crate) symbol: String,
+    /// Hundredths of a basis point, as in Uniswap V3's fee tier. None means undisclosed.
+    pub(crate) pool_fee: Option<u32>,
+    pub(crate) via: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct RelayData {
+    pub(crate) destination_network: String,
+    pub(crate) request_id: String,
+    pub(crate) order_id: String,
+    pub(crate) order: serde_json::Value,
+    pub(crate) route: Vec<RouteNode>,
+    #[serde(default)]
+    pub(crate) destination_hash: Option<String>,
+    #[serde(default)]
+    pub(crate) destination_status: Option<crate::tx::tx_status::TxStatus>,
+    #[serde(default)]
+    pub(crate) status: Option<String>,
+}
+
+/// Encrypted, agreed swap terms. Signed attempts keep the exact execution bytes.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct SwapData {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) relay: Option<RelayData>,
+    pub(crate) quote_id: String,
+    pub(crate) chain_id: u64,
+    pub(crate) router: String,
+    pub(crate) quoter: String,
+    pub(crate) pool_fee: Option<u32>,
+    pub(crate) quoted_output: String,
+    pub(crate) minimum_received: String,
+    pub(crate) slippage_bps: u16,
+    pub(crate) deadline: u64,
+    pub(crate) approval_fee_budget: Option<String>,
+    pub(crate) swap_fee_budget: Option<String>,
+    pub(crate) input_symbol: String,
+    pub(crate) output_symbol: String,
+    pub(crate) input_decimals: u32,
+    pub(crate) output_decimals: u32,
 }
 
 /// A transaction snapshot; the same hash may appear again as submission progresses.
@@ -252,6 +302,7 @@ pub(crate) fn create_operation(
         attempts: Vec::new(),
         cctp: None,
         deployment: Some(transfer.route.identity()?),
+        swap: None,
         created_at: now.clone(),
         updated_at: now,
         last_error: None,
@@ -287,6 +338,7 @@ pub(crate) fn create_send_operation(
         attempts: Vec::new(),
         cctp: None,
         deployment: None,
+        swap: None,
         created_at: now.clone(),
         updated_at: now,
         last_error: None,
@@ -538,6 +590,9 @@ pub(crate) fn record_operation_error(operation: &mut Operation, error: String) {
 }
 
 pub(crate) fn cancel_operation(operation: &mut Operation) -> Result<(), String> {
+    if operation.kind == OperationKind::Swap {
+        return crate::uniswap::cancel_swap(operation);
+    }
     if matches!(
         operation.step,
         OperationStep::Completed | OperationStep::Cancelled
@@ -724,6 +779,9 @@ where
             }
         }
     }
+    if operation.kind == OperationKind::Swap {
+        crate::uniswap::update_progress(operation);
+    }
     if changed {
         operation.updated_at = Utc::now().to_rfc3339();
     }
@@ -733,6 +791,9 @@ where
 pub(crate) fn operation_activity(operation: &Operation) -> Result<Activity, String> {
     if operation.kind == OperationKind::Send {
         return Ok(send_operation_activity(operation));
+    }
+    if operation.kind == OperationKind::Swap {
+        return crate::uniswap::swap_activity(operation);
     }
     let title = match operation.step {
         OperationStep::Approval

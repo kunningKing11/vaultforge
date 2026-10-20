@@ -20,7 +20,7 @@ enum ReservationStatus {
 }
 
 impl EvmNonceManager {
-    /// Rebuild only durable CCTP operation protection, preserving ordinary-send
+    /// Rebuild durable contract-operation protection, preserving ordinary-send
     /// queues. Ordinary EVM sends are restored per nonce by `restore_send_operations`.
     pub(crate) fn restore_operations(
         &mut self,
@@ -28,8 +28,14 @@ impl EvmNonceManager {
     ) -> Result<(), String> {
         let mut durable = HashSet::new();
         for operation in operations {
-            if operation.kind != crate::operations::OperationKind::Cctp {
+            if !matches!(
+                operation.kind,
+                crate::operations::OperationKind::Cctp | crate::operations::OperationKind::Swap
+            ) {
                 continue;
+            }
+            if operation.kind == crate::operations::OperationKind::Swap {
+                crate::uniswap::validate_operation(operation)?;
             }
             for attempt in &operation.attempts {
                 if attempt.raw_tx.is_none()
@@ -48,28 +54,30 @@ impl EvmNonceManager {
                     continue;
                 }
                 if let Some(context) = &attempt.evm_context {
-                    let transfer = operation.cctp_transfer()?;
-                    let expected_chain = if matches!(
-                        attempt.step,
-                        crate::operations::TransactionStep::Mint
-                            | crate::operations::TransactionStep::DestinationSetup
-                    ) {
-                        transfer.route.destination.network.chain_id()?
-                    } else {
-                        transfer.route.source.network.chain_id()?
-                    };
-                    if context.chain_id != expected_chain
-                        || !context.from.eq_ignore_ascii_case(
+                    let (expected_chain, expected_sender) =
+                        if operation.kind == crate::operations::OperationKind::Swap {
+                            let (intent, data) = crate::uniswap::validate_operation(operation)?;
+                            (data.chain_id, intent.sender)
+                        } else {
+                            let transfer = operation.cctp_transfer()?;
                             if matches!(
                                 attempt.step,
                                 crate::operations::TransactionStep::Mint
                                     | crate::operations::TransactionStep::DestinationSetup
                             ) {
-                                transfer.destination_fee_payer()?
+                                (
+                                    transfer.route.destination.network.chain_id()?,
+                                    transfer.destination_fee_payer()?.to_string(),
+                                )
                             } else {
-                                &operation.sender
-                            },
-                        )
+                                (
+                                    transfer.route.source.network.chain_id()?,
+                                    operation.sender.clone(),
+                                )
+                            }
+                        };
+                    if context.chain_id != expected_chain
+                        || !context.from.eq_ignore_ascii_case(&expected_sender)
                     {
                         return Err("Persisted EVM nonce context does not match operation".into());
                     }

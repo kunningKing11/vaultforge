@@ -4,30 +4,30 @@ import { HStack, VStack } from "@coinbase/cds-web/layout";
 import { Text } from "@coinbase/cds-web/typography";
 import { useState } from "react";
 
-import type { WalletSession } from "../types";
+import type { Asset, FiatCurrency, NetworkId, WalletSession } from "../types";
 import { BridgeView, type CctpRunner } from "./BridgeView";
+import { UniswapView } from "./UniswapView";
+import type { UniswapController } from "./useUniswap";
 
 type SwapMode = "uniswap" | "cctp" | null;
-
-function UniswapView() {
-  return (
-    <ContentCard background="bgElevation1" borderRadius={400} gap={3} padding={4}>
-      <Text as="h2" font="title1">
-        Swap tokens
-      </Text>
-      <Text font="body">
-        Token swaps via Uniswap are not implemented yet. No funds will move. Swaps will exchange
-        tokens on a single chain with a quote, slippage limit, and signed execution.
-      </Text>
-    </ContentCard>
-  );
-}
 
 export function SwapView({
   busy,
   run,
   onSession,
+  assets,
+  uniswap,
+  enabledNetworks,
+  useCryptoSymbols,
+  fiatCurrency,
+  usdExchangeRate,
 }: {
+  assets: Asset[];
+  fiatCurrency: FiatCurrency;
+  usdExchangeRate: number;
+  enabledNetworks: NetworkId[];
+  useCryptoSymbols: boolean;
+  uniswap: UniswapController;
   busy: boolean;
   run: CctpRunner;
   onSession: (session: WalletSession) => void;
@@ -42,30 +42,61 @@ export function SwapView({
               Swap tokens
             </Text>
             <Text color="fgMuted" font="body">
-              Uniswap: exchange tokens on one chain.
+              Swap tokens on the same chain or across chains.
             </Text>
-            <Button onClick={() => setMode("uniswap")}>Swap tokens</Button>
+            <Button
+              onClick={() => {
+                setMode("uniswap");
+                void uniswap.load();
+              }}
+            >
+              Swap tokens
+            </Button>
           </ContentCard>
           <ContentCard background="bgElevation1" borderRadius={400} gap={2} padding={4}>
             <Text as="h2" font="title1">
-              Transfer USDC
+              Cross-chain transfer
             </Text>
             <Text color="fgMuted" font="body">
-              Circle CCTP: move USDC between chains.
+              Move USDC between your supported networks with Circle CCTP.
             </Text>
-            <Button onClick={() => setMode("cctp")}>Transfer USDC</Button>
+            <Button onClick={() => setMode("cctp")}>Across chains</Button>
           </ContentCard>
         </HStack>
       )}
       {mode !== null && (
         <HStack>
-          <Button variant="secondary" onClick={() => setMode(null)}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              uniswap.stop();
+              setMode(null);
+            }}
+          >
             Back
           </Button>
         </HStack>
       )}
-      {mode === "uniswap" && <UniswapView />}
-      {mode === "cctp" && <BridgeView busy={busy} run={run} onSession={onSession} />}
+      {mode === "uniswap" && (
+        <UniswapView
+          assets={assets}
+          enabledNetworks={enabledNetworks}
+          useCryptoSymbols={useCryptoSymbols}
+          busy={busy}
+          controller={uniswap}
+          fiatCurrency={fiatCurrency}
+          usdExchangeRate={usdExchangeRate}
+        />
+      )}
+      {mode === "cctp" && (
+        <BridgeView
+          assets={assets}
+          enabledNetworks={enabledNetworks}
+          busy={busy}
+          run={run}
+          onSession={onSession}
+        />
+      )}
     </VStack>
   );
 }

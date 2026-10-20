@@ -1,6 +1,4 @@
 import type { ThemeVars } from "@coinbase/cds-common/core/theme";
-import { Combobox } from "@coinbase/cds-web/alpha/combobox";
-import { Select } from "@coinbase/cds-web/alpha/select";
 import { Button } from "@coinbase/cds-web/buttons";
 import { ContentCard } from "@coinbase/cds-web/cards/ContentCard";
 import { Checkbox, NativeTextArea, Switch, TextInput } from "@coinbase/cds-web/controls";
@@ -19,7 +17,6 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
 import QRCode from "qrcode";
 import {
-  type CSSProperties,
   type SubmitEventHandler,
   useCallback,
   useEffect,
@@ -82,6 +79,7 @@ import { walletApi } from "../walletApi";
 import { walletPasswordStrength } from "../walletPassword";
 import { type AssetGroup, assetGroupChains, assetGroups } from "./assetGroups";
 import { type CctpRunner } from "./BridgeView";
+import { CdsSelect } from "./CdsSelect";
 import { acceptDisclaimer, hasAcceptedDisclaimer } from "./disclaimer";
 import { ExplorerLink } from "./ExplorerLink";
 import {
@@ -111,6 +109,7 @@ import { SelectionIcon } from "./SelectionIcon";
 import { SidebarAddress } from "./SidebarAddress";
 import { SwapView } from "./SwapView";
 import { vaultForgeTheme } from "./theme";
+import { type UniswapController, useUniswap } from "./useUniswap";
 
 const MINIMUM_SPLASH_DURATION_MS = 650;
 const AUTO_LOCK_OPTIONS = [
@@ -562,13 +561,13 @@ function WalletApplication({
   }, [beginOperation, endOperation, toast]);
 
   const runCctp = useCallback(
-    async <T,>(action: () => Promise<T>): Promise<T | null> => {
+    async <T,>(action: () => Promise<T>, options?: { silent?: boolean }): Promise<T | null> => {
       if (stateRef.current.wallet.status !== "unlocked" || !beginOperation()) return null;
       try {
         const result = await action();
         return lockRequestedRef.current ? null : result;
       } catch (error) {
-        toast(formatError(error), "error");
+        if (!options?.silent) toast(formatError(error), "error");
         return null;
       } finally {
         endOperation();
@@ -576,6 +575,16 @@ function WalletApplication({
     },
     [beginOperation, endOperation, toast],
   );
+
+  const uniswap = useUniswap({
+    active: state.wallet.status === "unlocked" && state.navigation.currentView === "swap",
+    walletKey:
+      state.wallet.status === "unlocked"
+        ? `${state.wallet.name}:${state.wallet.addresses.evm}`
+        : state.wallet.status,
+    run: runCctp,
+    onSession: commitSession,
+  });
 
   const saveWalletSettings = useCallback(
     async (settings: Parameters<typeof walletApi.updateWalletSettings>[0]) => {
@@ -767,6 +776,7 @@ function WalletApplication({
           onSaveSettings={saveWalletSettings}
           runCctp={runCctp}
           onCctpSession={commitSession}
+          uniswap={uniswap}
           selectView={selectView}
           setColorScheme={setColorScheme}
           setState={setState}
@@ -1292,6 +1302,7 @@ function WalletShell({
   onSaveSettings,
   runCctp,
   onCctpSession,
+  uniswap,
   selectView,
   setColorScheme,
   setState,
@@ -1313,6 +1324,7 @@ function WalletShell({
   ) => Promise<boolean>;
   runCctp: CctpRunner;
   onCctpSession: (session: WalletSession) => void;
+  uniswap: UniswapController;
   selectView: (view: View) => void;
   setColorScheme: (scheme: ColorScheme) => void;
   setState: React.Dispatch<React.SetStateAction<AppState>>;
@@ -1414,6 +1426,7 @@ function WalletShell({
             onSaveSettings={onSaveSettings}
             runCctp={runCctp}
             onCctpSession={onCctpSession}
+            uniswap={uniswap}
             selectView={selectView}
             setColorScheme={setColorScheme}
             setState={setState}
@@ -1438,6 +1451,7 @@ function WalletView({
   onSaveSettings,
   runCctp,
   onCctpSession,
+  uniswap,
   selectView,
   setColorScheme,
   setState,
@@ -1457,6 +1471,7 @@ function WalletView({
   ) => Promise<boolean>;
   runCctp: CctpRunner;
   onCctpSession: (session: WalletSession) => void;
+  uniswap: UniswapController;
   selectView: (view: View) => void;
   setColorScheme: (scheme: ColorScheme) => void;
   setState: React.Dispatch<React.SetStateAction<AppState>>;
@@ -1490,7 +1505,19 @@ function WalletView({
     );
   }
   if (state.navigation.currentView === "swap")
-    return <SwapView busy={state.operation.busy} run={runCctp} onSession={onCctpSession} />;
+    return (
+      <SwapView
+        fiatCurrency={wallet.fiatCurrency}
+        usdExchangeRate={wallet.usdExchangeRate}
+        assets={wallet.assets}
+        enabledNetworks={wallet.enabledNetworks}
+        useCryptoSymbols={wallet.useCryptoSymbols}
+        uniswap={uniswap}
+        busy={state.operation.busy}
+        run={runCctp}
+        onSession={onCctpSession}
+      />
+    );
   if (state.navigation.currentView === "assets")
     return <AssetsView wallet={wallet} collapse={collapseAssets} onCollapse={setCollapseAssets} />;
   if (state.navigation.currentView === "activity")
@@ -3377,49 +3404,6 @@ function EmptyState({ body, title }: { body: string; title: string }) {
         </Text>
       </VStack>
     </Box>
-  );
-}
-
-function CdsSelect({
-  accessibilityLabel,
-  className,
-  disabled,
-  label,
-  onChange,
-  options,
-  searchable = false,
-  style,
-  value,
-}: {
-  accessibilityLabel?: string;
-  className?: string;
-  disabled?: boolean;
-  label?: string;
-  onChange: (value: string) => void;
-  options: ReadonlyArray<{ label: string; value: string; icon?: string }>;
-  searchable?: boolean;
-  style?: CSSProperties;
-  value: string;
-}) {
-  const selectedIcon = options.find((option) => option.value === value)?.icon;
-  const Control = searchable ? Combobox : Select;
-  return (
-    <Control
-      accessibilityLabel={accessibilityLabel ?? label}
-      className={className}
-      disabled={disabled}
-      label={label}
-      onChange={(next) => {
-        if (next !== null) onChange(next);
-      }}
-      options={options.map(({ icon, ...option }) => ({
-        ...option,
-        media: icon ? <SelectionIcon src={icon} /> : undefined,
-      }))}
-      startNode={selectedIcon ? <SelectionIcon src={selectedIcon} /> : undefined}
-      style={style}
-      value={value}
-    />
   );
 }
 

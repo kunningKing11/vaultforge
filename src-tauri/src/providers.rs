@@ -71,6 +71,7 @@ pub(crate) mod http;
 pub(crate) mod prices;
 pub(crate) mod solana;
 pub(crate) mod tron;
+pub(crate) mod uniswap;
 pub(crate) mod xrpl;
 
 const NETWORK_CONCURRENCY: usize = 4;
@@ -463,3 +464,5 @@ pub(crate) fn get_provider(symbol: &str) -> Option<Box<dyn ChainProvider>> {
 #[cfg(test)]
 #[path = "tests/providers.rs"]
 mod tests;
+
+pub(crate) mod relay;

@@ -1,0 +1,192 @@
+{
+  "steps": [
+    {
+      "id": "approve",
+      "action": "Confirm transaction in your wallet",
+      "description": "Sign an approval for USDC",
+      "kind": "transaction",
+      "items": [
+        {
+          "status": "incomplete",
+          "data": {
+            "from": "0x1111111111111111111111111111111111111111",
+            "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+            "data": "0x095ea7b30000000000000000000000004cd00e387622c35bddb9b4c962c136462338bc310000000000000000000000000000000000000000000000000000000000989680",
+            "value": "0",
+            "chainId": 8453,
+            "gas": "73112",
+            "maxFeePerGas": "6500000",
+            "maxPriorityFeePerGas": "1000000"
+          }
+        }
+      ],
+      "requestId": "0x179233735674a855460d829f2032d8da15fa4f4041eb295b2834337f7828aac2"
+    },
+    {
+      "id": "deposit",
+      "action": "Confirm transaction in your wallet",
+      "description": "Depositing funds to the relayer to execute the swap for UNI",
+      "kind": "transaction",
+      "items": [
+        {
+          "status": "incomplete",
+          "data": {
+            "from": "0x1111111111111111111111111111111111111111",
+            "to": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+            "data": "0xe80179520000000000000000000000001111111111111111111111111111111111111111000000000000000000000000833589fcd6edb6e08f4c7c32d4f71b54bda029130000000000000000000000000000000000000000000000000000000000989680fb3f3965d493fab7000978fe9902509d24c722ea49fc875bf548430a03179126",
+            "value": "0",
+            "chainId": 8453,
+            "gas": "76194",
+            "maxFeePerGas": "6500000",
+            "maxPriorityFeePerGas": "1000000"
+          },
+          "check": {
+            "endpoint": "/intents/status/v3?requestId=0x179233735674a855460d829f2032d8da15fa4f4041eb295b2834337f7828aac2",
+            "method": "GET"
+          }
+        }
+      ],
+      "requestId": "0x179233735674a855460d829f2032d8da15fa4f4041eb295b2834337f7828aac2",
+      "depositAddress": ""
+    }
+  ],
+  "details": {
+    "route": {
+      "origin": {
+        "inputCurrency": {
+          "currency": {
+            "chainId": 8453,
+            "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "decimals": 6,
+            "metadata": {
+              "logoURI": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+              "verified": true
+            }
+          },
+          "amount": "10000000",
+          "amountFormatted": "10.0",
+          "amountUsd": "9.998710",
+          "minimumAmount": "10000000"
+        },
+        "outputCurrency": {
+          "currency": {
+            "chainId": 8453,
+            "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "decimals": 6,
+            "metadata": {
+              "logoURI": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+              "verified": true
+            }
+          },
+          "amount": "10000000",
+          "amountFormatted": "10.0",
+          "amountUsd": "9.998710",
+          "minimumAmount": "10000000"
+        },
+        "router": "relay"
+      },
+      "destination": {
+        "inputCurrency": {
+          "currency": {
+            "chainId": 8453,
+            "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "decimals": 6,
+            "metadata": {
+              "logoURI": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+              "verified": true
+            }
+          },
+          "amount": "9950525",
+          "amountFormatted": "9.950525",
+          "amountUsd": "9.949241",
+          "minimumAmount": "9950525"
+        },
+        "outputCurrency": {
+          "currency": {
+            "chainId": 8453,
+            "address": "0xc3de830ea07524a0761646a6a4e4be0e114a3c83",
+            "symbol": "UNI",
+            "name": "Uniswap",
+            "decimals": 18,
+            "metadata": {
+              "verified": true
+            }
+          },
+          "amount": "1412874075807338596",
+          "amountFormatted": "1.412874075807338596",
+          "amountUsd": "9.987830",
+          "minimumAmount": "1405809705428301903"
+        },
+        "router": "nordstern"
+      }
+    }
+  },
+  "protocol": {
+    "v2": {
+      "orderId": "0xfb3f3965d493fab7000978fe9902509d24c722ea49fc875bf548430a03179126",
+      "hubType": "onchain",
+      "orderData": {
+        "version": "v1",
+        "solverChainId": "base",
+        "solver": "0xf70da97812cb96acdf810712aa562db8dfa3dbef",
+        "salt": "0x1bdcdbb8542aae198dde42706f779ddd15363aa784154afec3300fde04da3a18",
+        "inputs": [
+          {
+            "payment": {
+              "chainId": "base",
+              "currency": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+              "amount": "10000000",
+              "weight": "1"
+            },
+            "refunds": [
+              {
+                "chainId": "base",
+                "recipient": "0x1111111111111111111111111111111111111111",
+                "currency": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                "minimumAmount": "0",
+                "deadline": 1792942156,
+                "extraData": "0x000000000000000000000000b92fe925dc43a0ecde6c8b1a2709c170ec4fff4f"
+              },
+              {
+                "chainId": "base",
+                "recipient": "0x1111111111111111111111111111111111111111",
+                "currency": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                "minimumAmount": "0",
+                "deadline": 1792942156,
+                "extraData": "0x000000000000000000000000b92fe925dc43a0ecde6c8b1a2709c170ec4fff4f"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "chainId": "base",
+          "payments": [
+            {
+              "recipient": "0x1111111111111111111111111111111111111111",
+              "currency": "0xc3de830ea07524a0761646a6a4e4be0e114a3c83",
+              "minimumAmount": "1405809705428301903",
+              "expectedAmount": "1412874075807338596"
+            }
+          ],
+          "calls": [],
+          "deadline": 1792942156,
+          "extraData": "0x000000000000000000000000b92fe925dc43a0ecde6c8b1a2709c170ec4fff4f"
+        },
+        "fees": []
+      },
+      "orderSignature": "0xf85518aa4e1a203318456286dbbaa35521340d185e020f2a82920daf8c76c2406ad58fae68f261fac940f1075a11143d111b3241707f2acb461dd9b649463d201c",
+      "paymentDetails": {
+        "chainId": "base",
+        "depository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+        "currency": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        "amount": "10000000"
+      }
+    }
+  }
+}

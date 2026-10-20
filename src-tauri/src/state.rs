@@ -36,6 +36,7 @@ pub(crate) struct AppState {
     pub(crate) storage_path: PathBuf,
     pub(crate) bitcoin_account: Option<BitcoinAccountSnapshot>,
     pub(crate) evm_nonces: EvmNonceManager,
+    pub(crate) uniswap_quotes: std::collections::HashMap<String, crate::uniswap::UniswapQuote>,
     pub(crate) cctp_actions: std::collections::HashSet<(u64, String)>,
 }
 
@@ -62,6 +63,7 @@ impl AppState {
             storage_path,
             bitcoin_account: None,
             evm_nonces: EvmNonceManager::default(),
+            uniswap_quotes: std::collections::HashMap::new(),
             cctp_actions: std::collections::HashSet::new(),
         }
     }
@@ -69,6 +71,7 @@ impl AppState {
     pub(crate) fn advance_wallet_generation(&mut self) {
         self.wallet_generation = self.wallet_generation.wrapping_add(1);
         self.cctp_actions.clear();
+        self.uniswap_quotes.clear();
     }
 
     pub(crate) fn can_commit_refresh(&self, wallet_generation: u64) -> bool {

@@ -448,7 +448,26 @@ pub(crate) async fn fetch_evm_tx_status(
     Ok(legacy_tx_status(observation))
 }
 
-pub(crate) async fn fetch_evm_tx_observation(
+/// Read canonical inclusion promptly, without waiting on the finalized-head RPC.
+/// This reports receipt success only; it never asserts transaction finality.
+pub(crate) async fn fetch_evm_tx_inclusion(
+    client: &reqwest::Client,
+    config: &EvmNetworkConfig,
+    tx_hash: &str,
+) -> Result<Option<TxStatus>, String> {
+    let Some(observation) = fetch_evm_receipt(client, config, tx_hash).await? else {
+        return Ok(None);
+    };
+    let height = observation
+        .block_height
+        .ok_or("Missing EVM receipt height")?;
+    let body = serde_json::json!({"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":[format!("0x{height:x}"),false],"id":2});
+    let canonical = rpc_post_network(client, &config.id, config.rpc_url()?, &body).await?;
+    let canonical = json_rpc_result(&canonical, "EVM canonical block")?;
+    finalize_evm_observation(observation, canonical, &serde_json::Value::Null)
+}
+
+async fn fetch_evm_receipt(
     client: &reqwest::Client,
     config: &EvmNetworkConfig,
     tx_hash: &str,
@@ -463,7 +482,15 @@ pub(crate) async fn fetch_evm_tx_observation(
 
     let result = json_rpc_result(&json, "EVM transaction status")?;
 
-    let Some(observation) = parse_evm_tx_receipt(result)? else {
+    parse_evm_tx_receipt(result)
+}
+
+pub(crate) async fn fetch_evm_tx_observation(
+    client: &reqwest::Client,
+    config: &EvmNetworkConfig,
+    tx_hash: &str,
+) -> Result<Option<TxStatus>, String> {
+    let Some(observation) = fetch_evm_receipt(client, config, tx_hash).await? else {
         return Ok(None);
     };
     let height = observation

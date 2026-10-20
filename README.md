@@ -41,9 +41,12 @@ A local-first crypto wallet desktop app built with a React frontend, Coinbase De
 - Wallet-password confirmation and strength feedback for encrypted wallet setup
 - One-time risk acknowledgment before wallet setup or unlock, with the full MIT License available in-app
 - Send, receive, swap, assets, activity, and settings screens
-- Swaps are not implemented; submitting the swap form leaves balances, activity, and storage unchanged
+- Same-chain and cross-chain swap routes through Relay on supported EVM networks, with native/ERC-20 inputs and ERC-20 outputs. Routing is not restricted to V3 pools; the aggregator chooses available liquidity. Same-chain ERC-20 pairs also get a direct single-pool Uniswap V3 quote on all eight EVM networks, without a Uniswap API key. Available Relay/Uniswap quotes are ranked by exact token output, with network fees displayed separately; the highest output is selected by default and either route can be chosen. One provider’s failure leaves the other available. Quotes include exact slippage limits, separate approval/swap fee review, and encrypted restart recovery. Native-coin destinations and non-EVM routed execution are unavailable; funded end-to-end validation remains outstanding.
 - Rust-backed Tauri commands for wallet state, validation, transaction signing, encrypted storage, provider-backed reads, broadcast, and status checks
+- Searchable source/destination network and token selection shared by Send and Swap; Max fills the selected token balance at full precision, while native Max uses live route estimates to reserve gas. Approximate values in the wallet's selected currency appear below the spend amount, expected/minimum output, and network fee; unavailable prices are labelled explicitly. The form includes rounded slippage presets and Custom, route icons with chain badges, disclosed fees, automatic 15-second quote refresh, and manual refresh. The separate USDC transfer flow retains Circle CCTP.
 - Responsive React and Coinbase Design System UI with desktop sidebar
+
+Relay's authenticated quote service accepts `VAULTFORGE_RELAY_API_KEY` from the Rust process environment. Set it when launching the app (for development, `VAULTFORGE_RELAY_API_KEY=your-key bun run tauri dev`). The key is never included in frontend state or wallet storage. An authentication error explains when routing needs configuration. Route previews show the stages disclosed by the provider; undisclosed pool fees are labelled unavailable, not guessed. Source finality alone never completes a routed swap: the wallet checks the destination's canonical receipt, ERC-20 transfer amount, recipient, and finality. Relay-reported failures/refunds are labelled as service reports; they do not prove a refund balance.
 
 ### Coming soon
 

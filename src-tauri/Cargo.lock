@@ -6270,6 +6270,7 @@ dependencies = [
  "bs58",
  "chrono",
  "ed25519-dalek",
+ "futures-util",
  "gdk",
  "gtk",
  "hex",

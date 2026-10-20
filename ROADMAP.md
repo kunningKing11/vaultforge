@@ -52,12 +52,13 @@ The below items are the priorities for this project and an item will probably ge
     - [ ] "migrate legacy pool notes" button to migrate to Ironwood
       - [ ] randomized TX submission to avoid inadvertently revealing shielded amount
 - [ ] Slider for network priority fee when sending using priority fee percentiles
-- [ ] Actual cross-chain swaps (non-simulated)
+- [ ] Real token swaps (same-chain and cross-chain)
   - [ ] via NEAR Intents
   - [ ] via major DEXs
     - [ ] Jupiter
     - [ ] Aerodrome
-    - [ ] Uniswap
+    - [x] Relay DEX aggregator on EVM chains
+    - [x] Same-chain single-pool Uniswap V3 routes across all eight EVM networks, compared with Relay by exact output
     - [ ] Raydium
     - [ ] Meteora
   - [ ] gasless/sponsored swaps (using paymaster/ERC-4337 or smart contract deposits)

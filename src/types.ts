@@ -276,3 +276,100 @@ export type CctpState = {
     attempt_hash: string | null;
   }[];
 };
+
+export type SwapRouteNode = {
+  network: NetworkId;
+  token_address: string | null;
+  symbol: string;
+  pool_fee: number | null;
+  via: string | null;
+};
+
+export type RelayTerms = {
+  destination_network: NetworkId;
+  request_id: string;
+  order_id: string;
+  order: unknown;
+  route: SwapRouteNode[];
+  destination_hash: string | null;
+  destination_status: TxStatus | null;
+  status: string | null;
+};
+
+export type UniswapQuote = {
+  destination_network: NetworkId;
+  relay: RelayTerms | null;
+  route: SwapRouteNode[];
+  id: string;
+  network: NetworkId;
+  token_in: string;
+  token_out: string;
+  sender: string;
+  amount_base_units: string;
+  quoted_output: string;
+  minimum_received: string;
+  slippage_bps: number;
+  pool_fee: number | null;
+  deadline: number;
+  approval_required: boolean;
+  approval_max_fee: string | null;
+  swap_max_fee: string | null;
+  input_symbol: string;
+  output_symbol: string;
+  input_decimals: number;
+  output_decimals: number;
+};
+
+export type UniswapComparison = {
+  quotes: UniswapQuote[];
+  unavailable: { provider: string; error: string }[];
+};
+
+export type UniswapPreparedStep = {
+  operation_id: string;
+  step: "approval" | "swap";
+  tx_hash: string;
+  network: NetworkId;
+  max_native_fee: string;
+};
+
+export type UniswapTerms = {
+  relay?: RelayTerms | null;
+  quote_id: string;
+  chain_id: number;
+  router: string;
+  quoter: string;
+  pool_fee: number | null;
+  quoted_output: string;
+  minimum_received: string;
+  slippage_bps: number;
+  deadline: number;
+  approval_fee_budget: string | null;
+  swap_fee_budget: string | null;
+  input_symbol: string;
+  output_symbol: string;
+  input_decimals: number;
+  output_decimals: number;
+};
+
+export type UniswapOperation = {
+  id: string;
+  network: NetworkId;
+  token_in: string;
+  token_out: string;
+  amount_base_units: string;
+  terms: UniswapTerms;
+  progress: Activity;
+  stage: "approve" | "swap" | "receive" | "done";
+  terminal: boolean;
+  needs_sync: boolean;
+  can_cancel: boolean;
+  prepared: UniswapPreparedStep | null;
+  attempt_status: string | null;
+  last_error: string | null;
+};
+
+export type UniswapState = {
+  networks: NetworkId[];
+  operations: UniswapOperation[];
+};

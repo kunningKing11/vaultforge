@@ -75,6 +75,51 @@ fn finalizes_evm_only_with_matching_canonical_block_and_finalized_head() {
 }
 
 #[test]
+fn inclusion_read_reports_success_without_querying_finality() {
+    use crate::providers::cctp::tests::MockRpc;
+    use std::sync::{Arc, Mutex};
+    let methods = Arc::new(Mutex::new(Vec::new()));
+    let recorded = methods.clone();
+    let server = MockRpc::new(move |request| {
+        recorded
+            .lock()
+            .unwrap()
+            .push(request["method"].as_str().unwrap().to_string());
+        let result = match request["method"].as_str().unwrap() {
+            "eth_getTransactionReceipt" => {
+                serde_json::json!({"status":"0x1","blockNumber":"0x2a","blockHash":format!("0x{}","ab".repeat(32))})
+            }
+            "eth_getBlockByNumber" => {
+                assert_eq!(request["params"][0], "0x2a");
+                serde_json::json!({"number":"0x2a","hash":format!("0x{}","ab".repeat(32))})
+            }
+            _ => panic!("Unexpected RPC call"),
+        };
+        serde_json::json!({"jsonrpc":"2.0","id":1,"result":result})
+    });
+    let mut network = evm_config_by_id("base").unwrap().clone();
+    network.rpc_url = Some(server.url.clone());
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let result = runtime
+        .block_on(super::fetch_evm_tx_inclusion(
+            &reqwest::Client::new(),
+            &network,
+            &format!("0x{}", "cd".repeat(32)),
+        ))
+        .unwrap()
+        .unwrap();
+    assert_eq!(result.execution, Execution::Succeeded);
+    assert_eq!(result.finality, Finality::Included);
+    assert_eq!(
+        *methods.lock().unwrap(),
+        vec!["eth_getTransactionReceipt", "eth_getBlockByNumber"]
+    );
+}
+
+#[test]
 fn looks_up_evm_network_configs() {
     let ethereum = evm_config_by_id("ethereum").unwrap();
     assert_eq!(ethereum.name, "Ethereum");
