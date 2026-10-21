@@ -296,7 +296,21 @@ export type RelayTerms = {
   status: string | null;
 };
 
+export type ApiSwap = {
+  provider: "lifi" | "relay";
+  request_id: string;
+  route: SwapRouteNode[];
+  transaction:
+    | { family: "evm"; to: string; data: string; value: string }
+    | {
+        family: "solana";
+        transaction: string;
+        lookups: { address: string; addresses: string[] }[];
+      };
+};
+
 export type UniswapQuote = {
+  api?: ApiSwap | null;
   destination_network: NetworkId;
   relay: RelayTerms | null;
   route: SwapRouteNode[];
@@ -334,9 +348,10 @@ export type UniswapPreparedStep = {
 };
 
 export type UniswapTerms = {
+  api?: ApiSwap | null;
   relay?: RelayTerms | null;
   quote_id: string;
-  chain_id: number;
+  chain_id: number | null;
   router: string;
   quoter: string;
   pool_fee: number | null;
@@ -364,6 +379,7 @@ export type UniswapOperation = {
   terminal: boolean;
   needs_sync: boolean;
   can_cancel: boolean;
+  can_prepare: boolean;
   prepared: UniswapPreparedStep | null;
   attempt_status: string | null;
   last_error: string | null;

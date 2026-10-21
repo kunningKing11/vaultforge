@@ -9,3 +9,6 @@ pub(crate) mod tron;
 pub(crate) mod tx_status;
 pub(crate) mod uniswap;
 pub(crate) mod xrpl;
+
+pub(crate) mod lifi;
+pub(crate) mod swap_solana;

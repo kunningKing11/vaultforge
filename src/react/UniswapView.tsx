@@ -17,7 +17,7 @@ import { SlippagePicker } from "./SlippagePicker";
 import { SwapFiatValue } from "./SwapFiatValue";
 import { SwapRoutePreview } from "./SwapRoutePreview";
 import { SwapStepper } from "./SwapStepper";
-import { quoteProvider } from "./uniswapFlow";
+import { nativeSwapToken, quoteProvider } from "./uniswapFlow";
 import type { UniswapController } from "./useUniswap";
 
 export function UniswapView({
@@ -115,8 +115,8 @@ export function UniswapView({
         const next = await controller.requestQuote({
           network,
           destinationNetwork: destination,
-          tokenIn: "0x0000000000000000000000000000000000000000",
-          tokenOut: to.token_address ?? "0x0000000000000000000000000000000000000000",
+          tokenIn: nativeSwapToken(network),
+          tokenOut: to.token_address ?? nativeSwapToken(destination),
           amountBaseUnits: "0",
           slippageBps: slippageBasisPoints(slippage === "Custom" ? customSlippage : slippage),
           maxAmount: true,
@@ -156,8 +156,8 @@ export function UniswapView({
       void controller.requestQuote({
         network,
         destinationNetwork: destination,
-        tokenIn: from.token_address ?? "0x0000000000000000000000000000000000000000",
-        tokenOut: to.token_address ?? "0x0000000000000000000000000000000000000000",
+        tokenIn: from.token_address ?? nativeSwapToken(network),
+        tokenOut: to.token_address ?? nativeSwapToken(destination),
         amountBaseUnits,
         slippageBps: slippageBasisPoints(slippage === "Custom" ? customSlippage : slippage),
       });
@@ -309,7 +309,8 @@ export function UniswapView({
             />
             {from && !from.token_address && (
               <Text font="caption" color="fgMuted">
-                Max reserves the estimated network fee.
+                Max reserves the estimated network fee
+                {network === "solana" ? " and account rent" : ""}.
               </Text>
             )}
 
@@ -354,15 +355,24 @@ export function UniswapView({
                     </Button>
                     <Text font="caption" color="fgMuted">
                       Maximum {option.approval_required ? "approval" : "swap"} network fee:{" "}
-                      {formatWei(option.approval_max_fee ?? option.swap_max_fee ?? "0", 18, 18)}{" "}
+                      {formatWei(
+                        option.approval_max_fee ?? option.swap_max_fee ?? "0",
+                        networkById(option.network)?.nativeAsset.decimals ?? 18,
+                        networkById(option.network)?.nativeAsset.decimals ?? 18,
+                      )}{" "}
                       {networkById(option.network)?.nativeAsset.symbol}
                       {option.approval_required ? "; swap fee reviewed after approval" : ""}
                     </Text>
                   </VStack>
                 ))}
                 <Text font="caption" color="fgMuted">
-                  Ranked by output tokens. Source network fees are separate.
+                  Ranked by output tokens after provider fees. Source network fees are separate.
                 </Text>
+                {network === "solana" && (
+                  <Text font="caption" color="fgMuted">
+                    SOL fee estimates include rent for any new token accounts.
+                  </Text>
+                )}
               </VStack>
             )}
             {controller.unavailable.map((failure) => (
@@ -398,7 +408,11 @@ export function UniswapView({
                 />
                 <Text font="body">
                   Maximum {quote.approval_required ? "approval" : "swap"} network fee:{" "}
-                  {formatWei(quote.approval_max_fee ?? quote.swap_max_fee ?? "0", 18, 18)}{" "}
+                  {formatWei(
+                    quote.approval_max_fee ?? quote.swap_max_fee ?? "0",
+                    networkById(quote.network)?.nativeAsset.decimals ?? 18,
+                    networkById(quote.network)?.nativeAsset.decimals ?? 18,
+                  )}{" "}
                   {networkById(quote.network)?.nativeAsset.symbol ?? "ETH"}
                 </Text>
                 <SwapFiatValue
@@ -488,7 +502,11 @@ export function UniswapView({
                 currency={fiatCurrency}
                 rate={usdExchangeRate}
               />
-              {operation.terms.relay && <SwapRoutePreview route={operation.terms.relay.route} />}
+              {(operation.terms.relay || operation.terms.api) && (
+                <SwapRoutePreview
+                  route={operation.terms.api?.route ?? operation.terms.relay?.route ?? []}
+                />
+              )}
               {operation.terms.relay?.destination_hash && (
                 <Text font="body">
                   Destination:{" "}
@@ -541,7 +559,7 @@ export function UniswapView({
                   </Button>
                 </VStack>
               )}
-              {!operation.terminal && !operation.needs_sync && !prepared && (
+              {operation.can_prepare && !prepared && (
                 <Button disabled={busy} onClick={() => void controller.prepare(operation.id)}>
                   Prepare next transaction
                 </Button>

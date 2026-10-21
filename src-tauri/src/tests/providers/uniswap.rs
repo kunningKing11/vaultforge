@@ -151,6 +151,7 @@ fn chooses_the_best_supported_on_chain_pool_without_an_api_key() {
     let mut network = network_by_id("base").unwrap().clone();
     network.rpc_url = Some(server.url.clone());
     let intent = SwapIntent {
+        api: None,
         relay: None,
         network,
         token_in: INPUT.into(),
@@ -267,6 +268,7 @@ fn rejects_invalid_quoter_results_and_non_pool_provider_failures() {
     let mut network = network_by_id("base").unwrap().clone();
     network.rpc_url = Some(server.url.clone());
     let intent = SwapIntent {
+        api: None,
         relay: None,
         network,
         token_in: INPUT.into(),

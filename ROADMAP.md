@@ -55,12 +55,23 @@ The below items are the priorities for this project and an item will probably ge
 - [ ] Real token swaps (same-chain and cross-chain)
   - [ ] via NEAR Intents
   - [ ] via major DEXs
+    - [ ] Uniswap
+      - [x] same-chain
+      - [ ] cross-chain
+      - [ ] multiple pools
     - [ ] Jupiter
     - [ ] Aerodrome
-    - [x] Relay DEX aggregator on EVM chains
-    - [x] Same-chain single-pool Uniswap V3 routes across all eight EVM networks, compared with Relay by exact output
     - [ ] Raydium
     - [ ] Meteora
+  - [ ] via major DEX aggregators
+    - [ ] Relay
+      - [x] EVM chains
+      - [x] Solana
+      - [ ] cross-chain
+    - [ ] LI.FI
+      - [x] EVM chains
+      - [x] Solana
+      - [ ] cross-chain
   - [ ] gasless/sponsored swaps (using paymaster/ERC-4337 or smart contract deposits)
 - [x] Public GitHub repository
 - [ ] Live pre-sign balance refresh

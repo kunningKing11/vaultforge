@@ -35,6 +35,10 @@ impl EvmNonceManager {
                 continue;
             }
             if operation.kind == crate::operations::OperationKind::Swap {
+                if crate::swap_routes::is_solana(operation) {
+                    crate::swap_solana::validate_operation(operation)?;
+                    continue;
+                }
                 crate::uniswap::validate_operation(operation)?;
             }
             for attempt in &operation.attempts {
@@ -57,7 +61,10 @@ impl EvmNonceManager {
                     let (expected_chain, expected_sender) =
                         if operation.kind == crate::operations::OperationKind::Swap {
                             let (intent, data) = crate::uniswap::validate_operation(operation)?;
-                            (data.chain_id, intent.sender)
+                            (
+                                data.chain_id.ok_or("EVM swap chain ID missing")?,
+                                intent.sender,
+                            )
                         } else {
                             let transfer = operation.cctp_transfer()?;
                             if matches!(
@@ -81,6 +88,22 @@ impl EvmNonceManager {
                     {
                         return Err("Persisted EVM nonce context does not match operation".into());
                     }
+                    if operation.kind == crate::operations::OperationKind::Swap
+                        && (crate::uniswap::approval_confirmed(attempt)
+                            || (attempt.step == crate::operations::TransactionStep::Send
+                                && crate::uniswap::local_swap_confirmed(operation)
+                                && operation
+                                    .attempts
+                                    .last()
+                                    .is_some_and(|last| last.tx_hash == attempt.tx_hash)))
+                    {
+                        self.restore_included_nonce(
+                            context.chain_id,
+                            &context.from,
+                            context.nonce,
+                        )?;
+                        continue;
+                    }
                     durable.insert((
                         context.chain_id,
                         context.from.to_ascii_lowercase(),
@@ -101,6 +124,22 @@ impl EvmNonceManager {
                         .filter(|network| network.kind == "evm")
                     {
                         let nonce = nonce.parse().map_err(|_| "Invalid persisted EVM nonce")?;
+                        if operation.kind == crate::operations::OperationKind::Swap
+                            && (crate::uniswap::approval_confirmed(attempt)
+                                || (attempt.step == crate::operations::TransactionStep::Send
+                                    && crate::uniswap::local_swap_confirmed(operation)
+                                    && operation
+                                        .attempts
+                                        .last()
+                                        .is_some_and(|last| last.tx_hash == attempt.tx_hash)))
+                        {
+                            self.restore_included_nonce(
+                                config.chain_id()?,
+                                &operation.sender,
+                                nonce,
+                            )?;
+                            continue;
+                        }
                         durable.insert((
                             config.chain_id()?,
                             operation.sender.to_ascii_lowercase(),
@@ -111,6 +150,28 @@ impl EvmNonceManager {
             }
         }
         self.durable = durable;
+        Ok(())
+    }
+
+    /// Keep a consumed transaction nonce protected without blocking the next
+    /// transaction. A stale pending-nonce read must never reuse an included nonce.
+    fn restore_included_nonce(
+        &mut self,
+        chain_id: u64,
+        sender: &str,
+        nonce: u64,
+    ) -> Result<(), String> {
+        let next = nonce
+            .checked_add(1)
+            .ok_or("Included transaction nonce is too large")?;
+        let account = self
+            .accounts
+            .entry((chain_id, sender.to_ascii_lowercase()))
+            .or_default();
+        account
+            .reservations
+            .insert(nonce, ReservationStatus::Broadcast);
+        account.next_nonce = Some(account.next_nonce.unwrap_or(next).max(next));
         Ok(())
     }
 

@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { canSubmitFromQuote, selectComparedQuote } from "../src/react/uniswapFlow";
+import {
+  canSubmitFromQuote,
+  nativeSwapToken,
+  quoteProvider,
+  selectComparedQuote,
+  selectSwapToSync,
+} from "../src/react/uniswapFlow";
 import type { UniswapPreparedStep, UniswapQuote } from "../src/types";
 
 const quote: UniswapQuote = {
@@ -34,6 +40,29 @@ const prepared: UniswapPreparedStep = {
   max_native_fee: "42000",
 };
 
+describe("Additional swap providers", () => {
+  test("labels LI.FI and native Relay quotes and retains their selection", () => {
+    const lifi = {
+      ...quote,
+      id: "lifi",
+      api: { provider: "lifi" } as NonNullable<UniswapQuote["api"]>,
+    };
+    const relay = {
+      ...quote,
+      id: "svm-relay",
+      api: { provider: "relay" } as NonNullable<UniswapQuote["api"]>,
+    };
+    expect(quoteProvider(lifi)).toBe("LI.FI");
+    expect(quoteProvider(relay)).toBe("Relay");
+    expect(selectComparedQuote([relay, lifi], "LI.FI")?.id).toBe("lifi");
+    expect(selectComparedQuote([lifi], "Relay")?.id).toBe("lifi");
+  });
+  test("uses family-specific native asset identifiers", () => {
+    expect(nativeSwapToken("base")).toBe("0x0000000000000000000000000000000000000000");
+    expect(nativeSwapToken("solana")).toBe("11111111111111111111111111111111");
+  });
+});
+
 describe("Swap route selection", () => {
   const relay = { ...quote, id: "relay", relay: {} as NonNullable<UniswapQuote["relay"]> };
   test("defaults to the highest ranked output and handles no routes", () => {
@@ -49,6 +78,24 @@ describe("Swap route selection", () => {
     const refreshed = { ...quote, id: "new quote" };
     expect(selectComparedQuote([relay, refreshed], "Uniswap V3")?.id).toBe("new quote");
     expect(selectComparedQuote([refreshed, relay], "Relay")?.id).toBe("relay");
+  });
+});
+
+describe("Swap status polling", () => {
+  test("continues finality polling for completed swaps without blocking an active swap", () => {
+    const done = { id: "done", terminal: true, needs_sync: true };
+    const active = { id: "active", terminal: false, needs_sync: true };
+    expect(selectSwapToSync([done], 0)).toBe("done");
+    expect(selectSwapToSync([done, active], 0)).toBe("active");
+    expect(selectSwapToSync([done, active], 1)).toBe("active");
+  });
+  test("rotates background receipts and stops after finality", () => {
+    const first = { id: "first", terminal: true, needs_sync: true };
+    const second = { ...first, id: "second" };
+    expect(selectSwapToSync([first, second], 0)).toBe("first");
+    expect(selectSwapToSync([first, second], 1)).toBe("second");
+    expect(selectSwapToSync([{ ...first, needs_sync: false }], 0)).toBeNull();
+    expect(selectSwapToSync([], 0)).toBeNull();
   });
 });
 

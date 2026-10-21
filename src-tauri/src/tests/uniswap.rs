@@ -177,7 +177,7 @@ fn observe(provider: &MockProvider, hash: &str, execution: Execution, finality: 
 }
 
 #[test]
-fn approval_then_swap_requires_finality_and_separate_fee_review() {
+fn approval_confirmation_allows_swap_with_separate_fee_review_before_finality() {
     let directory = temp_dir("swap-approval");
     let state = state(&directory);
     let provider = MockProvider::default();
@@ -204,41 +204,37 @@ fn approval_then_swap_requires_finality_and_separate_fee_review() {
         Execution::Succeeded,
         Finality::Included,
     );
-    assert!(
-        runtime()
-            .block_on(prepare_swap(&state, &provider, &id))
-            .is_err()
-    );
     let reads_before = provider.balance_reads.load(Ordering::SeqCst);
     runtime()
         .block_on(sync_swap(&state, &provider, &id))
         .unwrap();
     assert_eq!(provider.balance_reads.load(Ordering::SeqCst), reads_before);
-    let pending = get_state(&state).unwrap().operations.remove(0);
-    assert_eq!(pending.progress.title, "Approval confirmed");
-    assert!(pending.progress.subtitle.contains("confirmed on-chain"));
-    assert!(pending.needs_sync);
-    assert_eq!(pending.stage, SwapStage::Approve);
-    assert!(pending.prepared.is_none());
-    observe(
-        &provider,
-        &approval.tx_hash,
-        Execution::Succeeded,
-        Finality::Finalized,
-    );
-    runtime()
-        .block_on(sync_swap(&state, &provider, &id))
-        .unwrap();
     let ready = get_state(&state).unwrap().operations.remove(0);
     assert_eq!(ready.progress.title, "Approval complete; prepare swap");
-    assert!(!ready.needs_sync);
+    assert!(ready.needs_sync);
+    assert!(ready.can_prepare);
+    assert_eq!(
+        operation(&state, &id).attempts[0]
+            .tx_status
+            .as_ref()
+            .unwrap()
+            .finality,
+        Finality::Included
+    );
     assert_eq!(ready.stage, SwapStage::Swap);
     assert!(ready.prepared.is_none());
     assert!(ready.progress.subtitle.contains("review its network fee"));
     assert_eq!(operation(&state, &id).attempts.len(), 1);
     assert_eq!(provider.broadcasts.lock().unwrap().len(), 1);
+    // An included receipt does not bypass the live spending-permission check.
+    assert!(
+        runtime()
+            .block_on(prepare_swap(&state, &provider, &id))
+            .is_err()
+    );
+    assert_eq!(operation(&state, &id).attempts.len(), 1);
     provider.allowed.store(true, Ordering::SeqCst);
-    provider.nonce.store(8, Ordering::SeqCst);
+    // A lagging nonce RPC must not cause the consumed approval nonce to be reused.
     let swap = runtime()
         .block_on(prepare_swap(&state, &provider, &id))
         .unwrap();
@@ -247,6 +243,13 @@ fn approval_then_swap_requires_finality_and_separate_fee_review() {
     assert_eq!(op.attempts.len(), 2);
     assert_eq!(op.step, OperationStep::Send);
     assert_eq!(op.attempts[1].nonce_or_sequence.as_deref(), Some("8"));
+    assert!(
+        runtime()
+            .block_on(submit_swap(&state, &provider, &id, &swap.tx_hash))
+            .is_err()
+    );
+    assert_eq!(provider.broadcasts.lock().unwrap().len(), 1);
+    provider.nonce.store(8, Ordering::SeqCst);
     runtime()
         .block_on(submit_swap(&state, &provider, &id, &swap.tx_hash))
         .unwrap();
@@ -260,16 +263,15 @@ fn approval_then_swap_requires_finality_and_separate_fee_review() {
     runtime()
         .block_on(sync_swap(&state, &provider, &id))
         .unwrap();
-    assert!(!terminal(&operation(&state, &id)));
+    assert!(terminal(&operation(&state, &id)));
     assert_eq!(
         provider.balance_reads.load(Ordering::SeqCst),
         balance_reads_before_receipt
     );
     let confirmed = get_state(&state).unwrap().operations.remove(0);
-    assert_eq!(confirmed.progress.title, "Swap confirmed");
-    assert!(confirmed.progress.subtitle.contains("succeeded on-chain"));
+    assert_eq!(confirmed.progress.title, "Swap complete");
     assert!(confirmed.needs_sync);
-    assert_eq!(confirmed.stage, SwapStage::Swap);
+    assert_eq!(confirmed.stage, SwapStage::Done);
     observe(
         &provider,
         &swap.tx_hash,
@@ -288,6 +290,64 @@ fn approval_then_swap_requires_finality_and_separate_fee_review() {
         get_state(&state).unwrap().operations[0].progress.kind,
         "swap"
     );
+}
+
+#[test]
+fn approval_reorganization_or_failed_execution_blocks_the_next_transaction() {
+    for failed in [false, true] {
+        let directory = temp_dir("approval-reorg");
+        let state = state(&directory);
+        let provider = MockProvider::default();
+        provider.allowed.store(false, Ordering::SeqCst);
+        let id = create(&state, &provider);
+        let approval = runtime()
+            .block_on(prepare_swap(&state, &provider, &id))
+            .unwrap();
+        runtime()
+            .block_on(submit_swap(&state, &provider, &id, &approval.tx_hash))
+            .unwrap();
+        observe(
+            &provider,
+            &approval.tx_hash,
+            Execution::Succeeded,
+            Finality::Included,
+        );
+        runtime()
+            .block_on(sync_swap(&state, &provider, &id))
+            .unwrap();
+        assert!(get_state(&state).unwrap().operations[0].can_prepare);
+        if failed {
+            observe(
+                &provider,
+                &approval.tx_hash,
+                Execution::Failed,
+                Finality::Included,
+            );
+        } else {
+            provider
+                .observations
+                .lock()
+                .unwrap()
+                .insert(approval.tx_hash.clone(), Ok(None));
+        }
+        provider.allowed.store(true, Ordering::SeqCst);
+        provider.nonce.store(8, Ordering::SeqCst);
+        assert!(
+            runtime()
+                .block_on(prepare_swap(&state, &provider, &id))
+                .is_err()
+        );
+        let view = get_state(&state).unwrap().operations.remove(0);
+        assert!(!view.can_prepare);
+        assert_eq!(view.stage, SwapStage::Approve);
+        let saved = operation(&state, &id);
+        assert_eq!(saved.attempts.len(), 1);
+        let mut nonces = crate::tx::evm_nonces::EvmNonceManager::default();
+        nonces.restore_operations(&[saved.clone()]).unwrap();
+        assert!(nonces.reserve(8453, &saved.sender, 8).is_err());
+        assert_eq!(provider.broadcasts.lock().unwrap().len(), 1);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 }
 
 #[test]
@@ -318,6 +378,99 @@ fn cancellation_releases_only_definitely_unsent_nonces() {
     let mut manager = crate::tx::evm_nonces::EvmNonceManager::default();
     manager.restore_operations(&[op.clone()]).unwrap();
     assert_eq!(manager.reserve(8453, &op.sender, 7).unwrap(), 7);
+}
+
+#[test]
+fn cancelling_after_included_approval_keeps_its_receipt_and_allows_a_fresh_quote() {
+    let directory = temp_dir("included-approval-cancel");
+    let state = state(&directory);
+    let provider = MockProvider::default();
+    provider.allowed.store(false, Ordering::SeqCst);
+    let id = create(&state, &provider);
+    let approval = runtime()
+        .block_on(prepare_swap(&state, &provider, &id))
+        .unwrap();
+    runtime()
+        .block_on(submit_swap(&state, &provider, &id, &approval.tx_hash))
+        .unwrap();
+    observe(
+        &provider,
+        &approval.tx_hash,
+        Execution::Succeeded,
+        Finality::Included,
+    );
+    runtime()
+        .block_on(sync_swap(&state, &provider, &id))
+        .unwrap();
+    cancel(&state, &id).unwrap();
+    let cancelled = operation(&state, &id);
+    assert_eq!(cancelled.step, OperationStep::Cancelled);
+    assert_eq!(
+        cancelled.attempts[0].tx_status.as_ref().unwrap().finality,
+        Finality::Included
+    );
+    assert_ne!(cancelled.attempts[0].status, TransactionStatus::Superseded);
+    provider.allowed.store(true, Ordering::SeqCst);
+    provider.nonce.store(8, Ordering::SeqCst);
+    let next = create(&state, &provider);
+    let prepared = runtime()
+        .block_on(prepare_swap(&state, &provider, &next))
+        .unwrap();
+    assert_eq!(prepared.step, "swap");
+    assert_eq!(
+        operation(&state, &next).attempts[0]
+            .nonce_or_sequence
+            .as_deref(),
+        Some("8")
+    );
+    assert_eq!(provider.broadcasts.lock().unwrap().len(), 1);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn comparison_includes_lifi_and_preserves_case_sensitive_solana_identity() {
+    let mut relay = comparison_quote();
+    relay.id = "relay".into();
+    let mut lifi = relay.clone();
+    lifi.id = "lifi".into();
+    lifi.quoted_output = "2000001".into();
+    let ranked = collect_provider_quotes(vec![
+        ("Relay", Some(Ok(relay.clone()))),
+        ("Uniswap V3", Some(Err("no pool".into()))),
+        ("LI.FI", Some(Ok(lifi.clone()))),
+    ])
+    .unwrap();
+    assert_eq!(ranked.quotes[0].id, "lifi");
+    assert_eq!(ranked.unavailable[0].provider, "Uniswap V3");
+    assert_eq!(
+        collect_provider_quotes(vec![
+            ("Relay", Some(Err("offline".into()))),
+            ("LI.FI", Some(Ok(lifi.clone()))),
+        ])
+        .unwrap()
+        .quotes[0]
+            .id,
+        "lifi"
+    );
+    for quote in [&mut relay, &mut lifi] {
+        quote.network = "solana".into();
+        quote.destination_network = "solana".into();
+        quote.sender = "CaseSensitiveWallet".into();
+        quote.token_in = "CaseSensitiveMint".into();
+        quote.token_out = "OtherMint".into();
+    }
+    assert!(
+        collect_provider_quotes(vec![
+            ("Relay", Some(Ok(relay.clone()))),
+            ("LI.FI", Some(Ok(lifi.clone())))
+        ])
+        .is_ok()
+    );
+    lifi.token_in = lifi.token_in.to_ascii_lowercase();
+    assert!(
+        collect_provider_quotes(vec![("Relay", Some(Ok(relay))), ("LI.FI", Some(Ok(lifi)))])
+            .is_err()
+    );
 }
 
 #[test]
@@ -440,7 +593,7 @@ fn direct_routes_prepare_the_pinned_deployment_on_each_evm_network() {
         let saved = operation(&state, &created.operation_id);
         let terms = saved.swap.as_ref().unwrap();
         let deployment = deployment_for_network(network).unwrap();
-        assert_eq!(terms.chain_id, deployment.chain_id);
+        assert_eq!(terms.chain_id, Some(deployment.chain_id));
         assert_eq!(terms.router, deployment.router);
         std::fs::remove_dir_all(directory).unwrap();
     }
@@ -467,7 +620,7 @@ fn encrypted_attempt_survives_restart_and_preparation_is_idempotent() {
     let stored = read_stored_wallet(&directory.join("wallet.json"))
         .unwrap()
         .unwrap();
-    assert_eq!(stored.version, 14);
+    assert_eq!(stored.version, 15);
     let decrypted = decrypt_wallet(&stored, password).unwrap();
     assert_eq!(decrypted.wallet().operations[0], op);
     let (wallet, key, salt) = decrypted.into_parts();
@@ -603,6 +756,183 @@ fn legacy_operations_remain_readable_without_swap_fields() {
 }
 
 #[test]
+fn lifi_uses_saved_intent_through_native_evm_signing_and_finality() {
+    let directory = temp_dir("lifi-evm-lifecycle");
+    let state = state(&directory);
+    let provider = MockProvider::default();
+    let mut quote = runtime()
+        .block_on(quote_swap(
+            &state, &provider, "base", INPUT, OUTPUT, "1000000", 50,
+        ))
+        .unwrap();
+    let mut call = crate::tx::lifi::tests::fixture();
+    call.data[4 + 3 * 32..4 + 4 * 32]
+        .copy_from_slice(&crate::tx::evm::evm_address_word(&quote.sender).unwrap());
+    quote.pool_fee = None;
+    quote.api = Some(crate::swap_routes::ApiSwap {
+        provider: crate::swap_routes::RouteProvider::Lifi,
+        request_id: "lifi-quote".into(),
+        route: vec![],
+        transaction: crate::swap_routes::RouteTransaction::Evm {
+            to: call.to.clone(),
+            data: format!("0x{}", hex::encode(&call.data)),
+            value: "0".into(),
+        },
+    });
+    state
+        .lock()
+        .unwrap()
+        .uniswap_quotes
+        .insert(quote.id.clone(), quote.clone());
+    let id = create_swap_operation(&state, &quote.id)
+        .unwrap()
+        .operation_id;
+    let prepared = runtime()
+        .block_on(prepare_swap(&state, &provider, &id))
+        .unwrap();
+    let op = operation(&state, &id);
+    let verified = validate_attempt(&op, &op.attempts[0]).unwrap();
+    assert_eq!(verified.to, call.to);
+    assert_eq!(verified.data, call.data);
+    assert!(provider.broadcasts.lock().unwrap().is_empty());
+    runtime()
+        .block_on(submit_swap(&state, &provider, &id, &prepared.tx_hash))
+        .unwrap();
+    assert_eq!(provider.broadcasts.lock().unwrap().len(), 1);
+    observe(
+        &provider,
+        &prepared.tx_hash,
+        Execution::Succeeded,
+        Finality::Included,
+    );
+    runtime()
+        .block_on(sync_swap(&state, &provider, &id))
+        .unwrap();
+    assert!(terminal(&operation(&state, &id)));
+    observe(
+        &provider,
+        &prepared.tx_hash,
+        Execution::Succeeded,
+        Finality::Finalized,
+    );
+    runtime()
+        .block_on(sync_swap(&state, &provider, &id))
+        .unwrap();
+    assert_eq!(operation(&state, &id).step, OperationStep::Completed);
+    assert_eq!(provider.broadcasts.lock().unwrap().len(), 1);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn local_swap_inclusion_completes_the_view_and_reorg_restores_pending_nonce_protection() {
+    let directory = temp_dir("included-swap-reorg");
+    let state = state(&directory);
+    let provider = MockProvider::default();
+    let id = create(&state, &provider);
+    let prepared = runtime()
+        .block_on(prepare_swap(&state, &provider, &id))
+        .unwrap();
+    runtime()
+        .block_on(submit_swap(&state, &provider, &id, &prepared.tx_hash))
+        .unwrap();
+    observe(
+        &provider,
+        &prepared.tx_hash,
+        Execution::Succeeded,
+        Finality::Included,
+    );
+    runtime()
+        .block_on(sync_swap(&state, &provider, &id))
+        .unwrap();
+    let view = get_state(&state).unwrap().operations.remove(0);
+    assert_eq!(view.stage, SwapStage::Done);
+    assert_eq!(view.progress.title, "Swap complete");
+    assert!(view.terminal && view.needs_sync);
+    assert!(!view.can_prepare);
+    let included = operation(&state, &id);
+    assert_eq!(included.step, OperationStep::Send);
+    assert_eq!(
+        included.attempts[0].tx_status.as_ref().unwrap().finality,
+        Finality::Included
+    );
+    let mut restored = crate::tx::evm_nonces::EvmNonceManager::default();
+    restored.restore_operations(&[included.clone()]).unwrap();
+    assert_eq!(restored.reserve(8453, &included.sender, 7).unwrap(), 8);
+    assert!(
+        runtime()
+            .block_on(prepare_swap(&state, &provider, &id))
+            .is_err()
+    );
+    provider
+        .observations
+        .lock()
+        .unwrap()
+        .insert(prepared.tx_hash.clone(), Ok(None));
+    runtime()
+        .block_on(sync_swap(&state, &provider, &id))
+        .unwrap();
+    let pending = get_state(&state).unwrap().operations.remove(0);
+    assert!(!pending.terminal);
+    assert!(pending.needs_sync);
+    assert_eq!(pending.stage, SwapStage::Swap);
+    let reverted = operation(&state, &id);
+    restored.restore_operations(&[reverted.clone()]).unwrap();
+    assert!(restored.reserve(8453, &reverted.sender, 8).is_err());
+    observe(
+        &provider,
+        &prepared.tx_hash,
+        Execution::Succeeded,
+        Finality::Finalized,
+    );
+    runtime()
+        .block_on(sync_swap(&state, &provider, &id))
+        .unwrap();
+    let final_view = get_state(&state).unwrap().operations.remove(0);
+    assert!(final_view.terminal);
+    assert!(!final_view.needs_sync);
+    assert_eq!(operation(&state, &id).step, OperationStep::Completed);
+    assert_eq!(provider.broadcasts.lock().unwrap().len(), 1);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn local_swap_inclusion_permits_the_next_swap_without_waiting_for_finality() {
+    let directory = temp_dir("included-swap-next");
+    let state = state(&directory);
+    let provider = MockProvider::default();
+    let id = create(&state, &provider);
+    let prepared = runtime()
+        .block_on(prepare_swap(&state, &provider, &id))
+        .unwrap();
+    runtime()
+        .block_on(submit_swap(&state, &provider, &id, &prepared.tx_hash))
+        .unwrap();
+    observe(
+        &provider,
+        &prepared.tx_hash,
+        Execution::Succeeded,
+        Finality::Included,
+    );
+    runtime()
+        .block_on(sync_swap(&state, &provider, &id))
+        .unwrap();
+    let next = create(&state, &provider);
+    assert_ne!(next, id);
+    let next_tx = runtime()
+        .block_on(prepare_swap(&state, &provider, &next))
+        .unwrap();
+    assert_ne!(next_tx.tx_hash, prepared.tx_hash);
+    assert_eq!(
+        operation(&state, &next).attempts[0]
+            .nonce_or_sequence
+            .as_deref(),
+        Some("8")
+    );
+    assert_eq!(provider.broadcasts.lock().unwrap().len(), 1);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn lost_response_is_reconciled_without_automatic_rebroadcast() {
     let directory = temp_dir("swap-lost-response");
     let state = Arc::new(state(&directory));
@@ -629,7 +959,7 @@ fn lost_response_is_reconciled_without_automatic_rebroadcast() {
         assert_eq!(attempt.status, TransactionStatus::SubmissionUnknown);
         assert!(attempt.raw_tx.is_some());
         let stored = read_stored_wallet(&guard.storage_path).unwrap().unwrap();
-        assert_eq!(stored.version, 14);
+        assert_eq!(stored.version, 15);
     }));
     provider.fail_broadcast.store(true, Ordering::SeqCst);
     runtime()

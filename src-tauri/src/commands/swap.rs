@@ -56,6 +56,22 @@ pub(crate) async fn prepare_uniswap_swap(
     clients: State<'_, ProviderClients>,
     operation_id: String,
 ) -> Result<UniswapPreparedStep, String> {
+    let native = {
+        let guard = state.lock().map_err(|_| "State lock failed")?;
+        guard
+            .wallet
+            .as_ref()
+            .and_then(|wallet| {
+                wallet
+                    .operations
+                    .iter()
+                    .find(|operation| operation.id == operation_id)
+            })
+            .is_some_and(crate::swap_routes::is_solana)
+    };
+    if native {
+        return crate::swap_solana::prepare(state.inner(), clients.http(), &operation_id).await;
+    }
     crate::uniswap::prepare_swap(
         state.inner(),
         &LiveSwapProvider {
@@ -73,6 +89,28 @@ pub(crate) async fn submit_uniswap_swap(
     operation_id: String,
     expected_hash: String,
 ) -> Result<WalletSession, String> {
+    let native = {
+        let guard = state.lock().map_err(|_| "State lock failed")?;
+        guard
+            .wallet
+            .as_ref()
+            .and_then(|wallet| {
+                wallet
+                    .operations
+                    .iter()
+                    .find(|operation| operation.id == operation_id)
+            })
+            .is_some_and(crate::swap_routes::is_solana)
+    };
+    if native {
+        return crate::swap_solana::submit(
+            state.inner(),
+            clients.http(),
+            &operation_id,
+            &expected_hash,
+        )
+        .await;
+    }
     crate::uniswap::submit_swap(
         state.inner(),
         &LiveSwapProvider {
@@ -90,6 +128,22 @@ pub(crate) async fn sync_uniswap_swap(
     clients: State<'_, ProviderClients>,
     operation_id: String,
 ) -> Result<WalletSession, String> {
+    let native = {
+        let guard = state.lock().map_err(|_| "State lock failed")?;
+        guard
+            .wallet
+            .as_ref()
+            .and_then(|wallet| {
+                wallet
+                    .operations
+                    .iter()
+                    .find(|operation| operation.id == operation_id)
+            })
+            .is_some_and(crate::swap_routes::is_solana)
+    };
+    if native {
+        return crate::swap_solana::sync(state.inner(), clients.http(), &operation_id).await;
+    }
     crate::uniswap::sync_swap(
         state.inner(),
         &LiveSwapProvider {

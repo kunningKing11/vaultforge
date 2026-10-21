@@ -10,7 +10,12 @@ import type {
 } from "../types";
 import { walletApi } from "../walletApi";
 import type { CctpRunner } from "./BridgeView";
-import { canSubmitFromQuote, quoteProvider, selectComparedQuote } from "./uniswapFlow";
+import {
+  canSubmitFromQuote,
+  quoteProvider,
+  selectComparedQuote,
+  selectSwapToSync,
+} from "./uniswapFlow";
 
 const EMPTY: UniswapState = { networks: [], operations: [] };
 
@@ -35,6 +40,7 @@ export function useUniswap({
   const [error, setError] = useState<string | null>(null);
   const epoch = useRef(0);
   const quoteRequest = useRef(0);
+  const syncCursor = useRef(0);
   const live = useRef(false);
   const currentKey = useRef(walletKey);
   if (currentKey.current !== walletKey) {
@@ -222,7 +228,8 @@ export function useUniswap({
     if (pending.length === 0) return;
     const timer = setInterval(() => {
       // The synchronous App operation gate skips a tick when another action owns it.
-      void sync(pending[0].id);
+      const id = selectSwapToSync(pending, syncCursor.current++);
+      if (id) void sync(id);
     }, 3000);
     return () => clearInterval(timer);
   }, [active, data.operations, sync]);

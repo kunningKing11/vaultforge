@@ -31,6 +31,7 @@ use crate::uniswap_config::deployment_for_network;
 pub(crate) const POOL_FEES: [u32; 4] = [100, 500, 3000, 10_000];
 
 pub(crate) struct SwapIntent {
+    pub(crate) api: Option<crate::swap_routes::ApiSwap>,
     pub(crate) relay: Option<crate::providers::relay::RelayData>,
     pub(crate) network: NetworkConfig,
     pub(crate) token_in: String,
@@ -91,6 +92,7 @@ pub(crate) trait SwapProvider {
 
 #[derive(Clone, Serialize)]
 pub(crate) struct UniswapQuote {
+    pub(crate) api: Option<crate::swap_routes::ApiSwap>,
     pub(crate) destination_network: String,
     pub(crate) relay: Option<crate::providers::relay::RelayData>,
     pub(crate) route: Vec<crate::providers::relay::RouteNode>,
@@ -134,12 +136,12 @@ pub(crate) enum SwapStage {
 
 /// The stepper follows persisted transaction evidence, never display labels.
 fn swap_stage(operation: &Operation) -> SwapStage {
-    if operation.step == OperationStep::Completed {
+    if operation.step == OperationStep::Completed || local_swap_confirmed(operation) {
         return SwapStage::Done;
     }
     match operation.attempts.last() {
         Some(attempt) if attempt.step == TransactionStep::Approval => {
-            if succeeded(attempt) {
+            if approval_confirmed(attempt) {
                 SwapStage::Swap
             } else {
                 SwapStage::Approve
@@ -169,6 +171,7 @@ pub(crate) struct UniswapOperationView {
     pub(crate) terminal: bool,
     pub(crate) needs_sync: bool,
     pub(crate) can_cancel: bool,
+    pub(crate) can_prepare: bool,
     pub(crate) prepared: Option<UniswapPreparedStep>,
     pub(crate) attempt_status: Option<String>,
     pub(crate) last_error: Option<String>,
@@ -210,6 +213,18 @@ fn request(intent: &SwapIntent) -> UniswapQuoteRequest<'_> {
 }
 
 fn swap_call(intent: &SwapIntent, data: &SwapData) -> Result<EvmCall, String> {
+    if let Some(api) = &intent.api {
+        let call = api.evm_call()?;
+        crate::tx::lifi::verify_call(
+            &call,
+            &intent.sender,
+            &intent.token_in,
+            &intent.token_out,
+            intent.amount,
+            amount(&data.minimum_received)?,
+        )?;
+        return Ok(call);
+    }
     if let Some(relay) = &data.relay {
         return crate::providers::relay::deposit_call(
             relay,
@@ -255,6 +270,9 @@ pub(crate) fn validate_operation(operation: &Operation) -> Result<(SwapIntent, &
         return Err("Operation is not a swap".into());
     }
     let data = operation.swap.as_ref().ok_or("Saved swap terms missing")?;
+    if data.api.is_some() {
+        return crate::swap_routes::validate_evm(operation);
+    }
     if data.relay.is_some() {
         return validate_relay_operation(operation, data);
     }
@@ -274,7 +292,7 @@ pub(crate) fn validate_operation(operation: &Operation) -> Result<(SwapIntent, &
     let sender = evm_address_word(&operation.sender)?;
     let input_amount = amount(&operation.amount_base_units)?;
     if operation.destination_asset.network != deployment.network_id
-        || data.chain_id != deployment.chain_id
+        || data.chain_id != Some(deployment.chain_id)
         || !data.router.eq_ignore_ascii_case(deployment.router)
         || !data.quoter.eq_ignore_ascii_case(deployment.quoter_v2)
         || data.input_decimals > 255
@@ -294,6 +312,7 @@ pub(crate) fn validate_operation(operation: &Operation) -> Result<(SwapIntent, &
     }
     Ok((
         SwapIntent {
+            api: None,
             relay: None,
             network: network_by_id(deployment.network_id)
                 .ok_or("Swap network unavailable")?
@@ -322,12 +341,43 @@ fn succeeded(attempt: &TransactionAttempt) -> bool {
             .is_some_and(|status| status.execution == Execution::Succeeded)
 }
 
+/// A canonical successful approval receipt allows the swap to proceed. Full
+/// finality remains tracked independently; preparation rechecks live allowance.
+pub(crate) fn approval_confirmed(attempt: &TransactionAttempt) -> bool {
+    attempt.step == TransactionStep::Approval
+        && attempt.tx_status.as_ref().is_some_and(|status| {
+            status.execution == Execution::Succeeded
+                && status.finality.satisfies(&Finality::Included)
+        })
+}
+
+/// Local execution is complete at successful canonical inclusion. Keep the
+/// durable step and finality observation separate so recovery can detect a reorg.
+/// A solver deposit still needs destination settlement proof.
+pub(crate) fn local_swap_confirmed(operation: &Operation) -> bool {
+    operation.kind == OperationKind::Swap
+        && operation.source_asset.network == operation.destination_asset.network
+        && operation
+            .swap
+            .as_ref()
+            .is_some_and(|terms| terms.relay.is_none())
+        && operation.attempts.last().is_some_and(|attempt| {
+            attempt.step == TransactionStep::Send
+                && attempt.tx_status.as_ref().is_some_and(|status| {
+                    status.execution == Execution::Succeeded
+                        && status.finality.satisfies(&Finality::Included)
+                })
+        })
+}
+
 pub(crate) fn terminal(operation: &Operation) -> bool {
-    operation
-        .swap
-        .as_ref()
-        .and_then(|s| s.relay.as_ref())
-        .is_some_and(|r| matches!(r.status.as_deref(), Some("failure" | "refund")))
+    local_swap_confirmed(operation)
+        || crate::swap_solana::expired(operation)
+        || operation
+            .swap
+            .as_ref()
+            .and_then(|s| s.relay.as_ref())
+            .is_some_and(|r| matches!(r.status.as_deref(), Some("failure" | "refund")))
         || matches!(
             operation.step,
             OperationStep::Completed | OperationStep::Cancelled
@@ -347,7 +397,7 @@ pub(crate) fn update_progress(operation: &mut Operation) {
         return;
     }
     if let Some(attempt) = operation.attempts.last() {
-        if succeeded(attempt) {
+        if succeeded(attempt) || approval_confirmed(attempt) {
             operation.step = if attempt.step == TransactionStep::Send
                 && operation
                     .swap
@@ -388,6 +438,7 @@ pub(crate) fn cancel_swap(operation: &mut Operation) -> Result<(), String> {
     }
     if operation.attempts.iter().any(|attempt| {
         !is_final(attempt)
+            && !approval_confirmed(attempt)
             && matches!(
                 attempt.status,
                 TransactionStatus::Submitted
@@ -414,7 +465,7 @@ pub(crate) fn swap_activity(operation: &Operation) -> Result<Activity, String> {
     let attempt = operation.attempts.last();
     let status = if operation.step == OperationStep::Cancelled {
         "cancelled"
-    } else if operation.step == OperationStep::Completed {
+    } else if operation.step == OperationStep::Completed || local_swap_confirmed(operation) {
         "confirmed"
     } else if terminal(operation) {
         "failed"
@@ -433,19 +484,7 @@ pub(crate) fn swap_activity(operation: &Operation) -> Result<Activity, String> {
         _ if attempt.is_some_and(|a| a.status == TransactionStatus::Signed) => {
             "Swap ready to submit"
         }
-        _ if attempt.is_some_and(|a| a.step == TransactionStep::Approval && succeeded(a)) => {
-            "Approval complete; prepare swap"
-        }
-        _ if attempt.is_some_and(|a| {
-            a.step == TransactionStep::Approval
-                && a.tx_status.as_ref().is_some_and(|status| {
-                    status.execution == Execution::Succeeded
-                        && status.finality == Finality::Included
-                })
-        }) =>
-        {
-            "Approval confirmed"
-        }
+        _ if attempt.is_some_and(|a| approval_confirmed(a)) => "Approval complete; prepare swap",
         _ if attempt.is_some_and(|a| a.step == TransactionStep::Approval) => {
             "Swap approval pending"
         }
@@ -476,8 +515,7 @@ pub(crate) fn swap_activity(operation: &Operation) -> Result<Activity, String> {
         kind: "swap".into(),
         title: title.into(),
         subtitle: match title {
-            "Approval confirmed" => "Approval is confirmed on-chain. Waiting for network finality before preparing the swap. Status is checked automatically; you can also choose Check progress.".into(),
-            "Approval complete; prepare swap" => "Approval is complete. Choose Prepare next transaction to review its network fee, then confirm the swap. The approval alone does not exchange tokens.".into(),
+            "Approval complete; prepare swap" => "Approval is confirmed on-chain. Choose Prepare next transaction to review its network fee, then confirm the swap. The approval alone does not exchange tokens.".into(),
             "Swap approval pending" => "Waiting for the approval transaction receipt. The swap has not been sent.".into(),
             "Swap confirmed" => "The swap transaction succeeded on-chain. Waiting for network finality before marking this operation complete.".into(),
             "Swap deposit confirmed" => "The deposit transaction succeeded on-chain. Waiting for source finality before checking destination settlement; a successful deposit does not yet prove the output tokens arrived.".into(),
@@ -520,6 +558,15 @@ fn prepared_view(
     operation: &Operation,
     attempt: &TransactionAttempt,
 ) -> Result<UniswapPreparedStep, String> {
+    if operation.source_asset.network == "solana" {
+        return Ok(UniswapPreparedStep {
+            operation_id: operation.id.clone(),
+            step: "swap".into(),
+            tx_hash: attempt.tx_hash.clone(),
+            network: "solana".into(),
+            max_native_fee: attempt.fee.clone().ok_or("Native swap fee missing")?,
+        });
+    }
     let context = attempt
         .evm_context
         .as_ref()
@@ -550,7 +597,11 @@ pub(crate) fn get_state(state: &Mutex<AppState>) -> Result<UniswapState, String>
         .iter()
         .filter(|o| o.kind == OperationKind::Swap)
         .map(|operation| {
-            validate_operation(operation)?;
+            if crate::swap_routes::is_solana(operation) {
+                crate::swap_solana::validate_operation(operation)?;
+            } else {
+                validate_operation(operation)?;
+            }
             let mut candidate = operation.clone();
             let attempt = operation.attempts.last();
             Ok(UniswapOperationView {
@@ -560,12 +611,16 @@ pub(crate) fn get_state(state: &Mutex<AppState>) -> Result<UniswapState, String>
                     .source_asset
                     .token_address
                     .clone()
-                    .unwrap_or_else(|| crate::providers::relay::NATIVE.into()),
+                    .unwrap_or_else(|| {
+                        crate::swap_routes::native(&operation.source_asset.network).into()
+                    }),
                 token_out: operation
                     .destination_asset
                     .token_address
                     .clone()
-                    .unwrap_or_else(|| crate::providers::relay::NATIVE.into()),
+                    .unwrap_or_else(|| {
+                        crate::swap_routes::native(&operation.source_asset.network).into()
+                    }),
                 amount_base_units: operation.amount_base_units.clone(),
                 terms: operation.swap.clone().ok_or("Swap terms missing")?,
                 progress: swap_activity(operation)?,
@@ -587,6 +642,7 @@ pub(crate) fn get_state(state: &Mutex<AppState>) -> Result<UniswapState, String>
                             )
                     }),
                 can_cancel: cancel_swap(&mut candidate).is_ok(),
+                can_prepare: !terminal(operation) && attempt.is_none_or(approval_confirmed),
                 prepared: attempt
                     .filter(|a| a.status == TransactionStatus::Signed && a.tx_status.is_none())
                     .map(|a| prepared_view(operation, a))
@@ -603,6 +659,7 @@ pub(crate) fn get_state(state: &Mutex<AppState>) -> Result<UniswapState, String>
         networks: crate::registry::evm_networks()
             .filter(|n| crate::providers::relay::protocol_chain(&n.id).is_ok())
             .map(|n| n.id.clone())
+            .chain(std::iter::once("solana".to_string()))
             .collect(),
         operations,
     })
@@ -640,6 +697,7 @@ pub(crate) async fn quote_swap<P: SwapProvider + Sync>(
             return Err("Choose different tokens and a positive amount".into());
         }
         let intent = SwapIntent {
+            api: None,
             relay: None,
             network: network_by_id(deployment.network_id)
                 .ok_or("Swap network missing")?
@@ -665,9 +723,10 @@ pub(crate) async fn quote_swap<P: SwapProvider + Sync>(
     let deployment = deployment_for_network(network)?;
     let deadline = now().checked_add(1200).ok_or("Swap expiry overflow")?;
     let terms = SwapData {
+        api: None,
         relay: None,
         quote_id: random_hex(16),
-        chain_id: deployment.chain_id,
+        chain_id: Some(deployment.chain_id),
         router: deployment.router.into(),
         quoter: deployment.quoter_v2.into(),
         pool_fee: Some(pool.pool_fee),
@@ -691,6 +750,7 @@ pub(crate) async fn quote_swap<P: SwapProvider + Sync>(
     let balances = provider.balances(&intent).await?;
     ensure_balances(&intent, balances, estimate.max_native_fee)?;
     let quote = UniswapQuote {
+        api: None,
         destination_network: network.into(),
         relay: None,
         route: vec![
@@ -774,11 +834,14 @@ pub(crate) fn create_swap_operation(
     if quote.deadline <= now() {
         return Err("Quote expired; request a fresh quote".into());
     }
-    if !wallet
-        .addresses
-        .get("evm")
-        .is_some_and(|a| a.eq_ignore_ascii_case(&quote.sender))
-    {
+    let source = network_by_id(&quote.network).ok_or("Swap network missing")?;
+    if !wallet.addresses.get(&source.address_key).is_some_and(|a| {
+        if source.kind == "svm" {
+            a == &quote.sender
+        } else {
+            a.eq_ignore_ascii_case(&quote.sender)
+        }
+    }) {
         return Err("Quote belongs to another wallet".into());
     }
     if wallet.operations.iter().any(|o| {
@@ -794,20 +857,36 @@ pub(crate) fn create_swap_operation(
     {
         return Err("Enable both quoted swap networks before continuing".into());
     }
-    let (chain_id, router, quoter) = if quote.relay.is_some() {
+    let (chain_id, router, quoter) = if let Some(api) = &quote.api {
+        match &api.transaction {
+            crate::swap_routes::RouteTransaction::Solana { .. } => (
+                None,
+                crate::tx::swap_solana::JUPITER.to_string(),
+                String::new(),
+            ),
+            crate::swap_routes::RouteTransaction::Evm { to, .. } => {
+                (Some(source.chain_id()?), to.clone(), String::new())
+            }
+        }
+    } else if quote.relay.is_some() {
         (
-            network_by_id(&quote.network)
-                .ok_or("Network missing")?
-                .chain_id()?,
-            crate::providers::relay::DEPOSITORY,
-            "",
+            Some(source.chain_id()?),
+            crate::providers::relay::DEPOSITORY.to_string(),
+            String::new(),
         )
     } else {
-        let d = deployment_for_network(&quote.network)?;
-        (d.chain_id, d.router, d.quoter_v2)
+        let deployment = deployment_for_network(&quote.network)?;
+        (
+            Some(deployment.chain_id),
+            deployment.router.to_string(),
+            deployment.quoter_v2.to_string(),
+        )
     };
     let mut operation = create_send_operation(
-        AssetIdentity::new(&quote.network, token_identity(&quote.token_in)),
+        AssetIdentity::new(
+            &quote.network,
+            crate::swap_routes::token_identity(&quote.network, &quote.token_in),
+        ),
         quote.sender.clone(),
         quote.sender,
         amount(&quote.amount_base_units)?,
@@ -815,10 +894,13 @@ pub(crate) fn create_swap_operation(
         String::new(),
     );
     operation.kind = OperationKind::Swap;
-    operation.destination_asset =
-        AssetIdentity::new(&quote.destination_network, token_identity(&quote.token_out));
+    operation.destination_asset = AssetIdentity::new(
+        &quote.destination_network,
+        crate::swap_routes::token_identity(&quote.destination_network, &quote.token_out),
+    );
     operation.step = OperationStep::Approval;
     operation.swap = Some(SwapData {
+        api: quote.api.clone(),
         relay: quote.relay.clone(),
         quote_id: quote.id,
         chain_id,
@@ -836,7 +918,11 @@ pub(crate) fn create_swap_operation(
         input_decimals: quote.input_decimals,
         output_decimals: quote.output_decimals,
     });
-    validate_operation(&operation)?;
+    if crate::swap_routes::is_solana(&operation) {
+        crate::swap_solana::validate_operation(&operation)?;
+    } else {
+        validate_operation(&operation)?;
+    }
     let id = operation.id.clone();
     state
         .wallet
@@ -859,7 +945,7 @@ pub(crate) fn create_swap_operation(
     })
 }
 
-fn begin_action<'a>(
+pub(crate) fn begin_action<'a>(
     state: &'a Mutex<AppState>,
     id: &str,
 ) -> Result<(ActionGuard<'a>, u64, Operation), String> {
@@ -874,12 +960,19 @@ fn begin_action<'a>(
         .find(|o| o.id == id && o.kind == OperationKind::Swap)
         .ok_or("Swap operation missing")?
         .clone();
-    validate_operation(&operation)?;
-    if !wallet
-        .addresses
-        .get("evm")
-        .is_some_and(|a| a.eq_ignore_ascii_case(&operation.sender))
-    {
+    let source = network_by_id(&operation.source_asset.network).ok_or("Swap source missing")?;
+    if crate::swap_routes::is_solana(&operation) {
+        crate::swap_solana::validate_operation(&operation)?;
+    } else {
+        validate_operation(&operation)?;
+    }
+    if !wallet.addresses.get(&source.address_key).is_some_and(|a| {
+        if source.kind == "svm" {
+            a == &operation.sender
+        } else {
+            a.eq_ignore_ascii_case(&operation.sender)
+        }
+    }) {
         return Err("Swap does not belong to this wallet".into());
     }
     let generation = guard.wallet_generation;
@@ -888,7 +981,11 @@ fn begin_action<'a>(
         format!(
             "{}:{}",
             operation.source_asset.network,
-            operation.sender.to_ascii_lowercase()
+            if source.kind == "svm" {
+                operation.sender.clone()
+            } else {
+                operation.sender.to_ascii_lowercase()
+            }
         ),
     );
     if !guard.cctp_actions.insert(key.clone()) {
@@ -986,6 +1083,10 @@ async fn check_live_pool<P: SwapProvider + Sync>(
     if data.relay.is_some() {
         return Ok(());
     }
+    if intent.api.is_some() {
+        swap_call(intent, data)?;
+        return Ok(());
+    }
     let fee = data.pool_fee.ok_or("Local pool fee missing")?;
     let live = provider.quote(intent, Some(fee)).await?;
     if live.pool_fee != fee || live.amount_out < amount(&data.minimum_received)? {
@@ -1005,12 +1106,12 @@ pub(crate) async fn prepare_swap<P: SwapProvider + Sync>(
         return Err("Swap is complete, failed, or cancelled".into());
     }
     if let Some(attempt) = operation.attempts.last() {
-        if !succeeded(attempt) {
+        if !succeeded(attempt) && !approval_confirmed(attempt) {
             if attempt.status == TransactionStatus::Signed && attempt.tx_status.is_none() {
                 return prepared_view(&operation, attempt);
             }
             return Err(
-                "Wait for the saved transaction to finalize before preparing another".into(),
+                "Wait for the saved approval to confirm or the swap to finalize before preparing another".into(),
             );
         }
     }
@@ -1075,9 +1176,11 @@ pub(crate) async fn prepare_swap<P: SwapProvider + Sync>(
         .operations
         .clone();
     state.evm_nonces.restore_operations(&existing)?;
-    let nonce = state
-        .evm_nonces
-        .reserve(data.chain_id, &intent.sender, pending_nonce)?;
+    let nonce = state.evm_nonces.reserve(
+        data.chain_id.ok_or("EVM swap chain ID missing")?,
+        &intent.sender,
+        pending_nonce,
+    )?;
     let result = (|| {
         let wallet = state.wallet.as_ref().ok_or("Wallet closed")?;
         let key = signing_key_from_mnemonic(&wallet.mnemonic, &wallet.bip39_passphrase)?;
@@ -1091,7 +1194,7 @@ pub(crate) async fn prepare_swap<P: SwapProvider + Sync>(
         }
         let (_, hash, raw, r, s) = sign_eip1559_transfer(&Eip1559TxDraft {
             signing_key: &key,
-            chain_id: data.chain_id,
+            chain_id: data.chain_id.ok_or("EVM swap chain ID missing")?,
             nonce,
             gas_limit: estimate.gas_limit,
             max_fee_per_gas: estimate.fees.max_fee_per_gas,
@@ -1113,7 +1216,7 @@ pub(crate) async fn prepare_swap<P: SwapProvider + Sync>(
             tx_status: None,
             solana_context: None,
             evm_context: Some(EvmAttemptContext {
-                chain_id: data.chain_id,
+                chain_id: data.chain_id.ok_or("EVM swap chain ID missing")?,
                 from: sender,
                 to: call.to,
                 value: call.value.to_string(),
@@ -1137,9 +1240,11 @@ pub(crate) async fn prepare_swap<P: SwapProvider + Sync>(
         save_operation(&mut state, generation, &operation, &after)?;
         prepared_view(&after, &attempt)
     })();
-    state
-        .evm_nonces
-        .cancel_unbroadcast(data.chain_id, &intent.sender, nonce);
+    state.evm_nonces.cancel_unbroadcast(
+        data.chain_id.ok_or("EVM swap chain ID missing")?,
+        &intent.sender,
+        nonce,
+    );
     result
 }
 
@@ -1155,7 +1260,12 @@ fn validate_attempt(
         TransactionStep::Send => swap_call(&intent, data)?,
         _ => return Err("Unsupported swap transaction step".into()),
     };
-    validate_signed_call(attempt, &call, data.chain_id, &intent.sender)?;
+    validate_signed_call(
+        attempt,
+        &call,
+        data.chain_id.ok_or("EVM swap chain ID missing")?,
+        &intent.sender,
+    )?;
     Ok(call)
 }
 
@@ -1394,7 +1504,7 @@ fn validate_relay_operation<'a>(
         .as_deref()
         .ok_or("No working route: native destination settlement proof is unavailable")?;
     if relay.destination_network != destination.id
-        || data.chain_id != network.chain_id()?
+        || data.chain_id != Some(network.chain_id()?)
         || !data
             .router
             .eq_ignore_ascii_case(crate::providers::relay::DEPOSITORY)
@@ -1409,6 +1519,7 @@ fn validate_relay_operation<'a>(
         return Err("Saved cross-chain route no longer matches its terms".into());
     }
     let intent = SwapIntent {
+        api: None,
         network: network.clone(),
         token_in: token_in.into(),
         token_out: token_out.into(),
@@ -1512,6 +1623,7 @@ async fn build_routed_quote(
     )
     .await?;
     let intent = SwapIntent {
+        api: None,
         network: network.clone(),
         token_in: token_in.into(),
         token_out: token_out.into(),
@@ -1545,6 +1657,7 @@ async fn build_routed_quote(
     }
 
     let quote = UniswapQuote {
+        api: None,
         id: random_hex(16),
         network: source.into(),
         destination_network: destination.into(),
@@ -1720,6 +1833,12 @@ pub(crate) async fn compare_quotes(
         }
         guard.wallet_generation
     };
+    if native_max && source == "solana" && destination == "solana" {
+        if crate::swap_routes::token_identity(source, token_in).is_some() {
+            return Err("Native Max requires SOL input".into());
+        }
+        return crate::swap_routes::solana_max(state, client, token_out, slippage).await;
+    }
     if native_max {
         if token_identity(token_in).is_some() {
             return Err("Native Max requires a native input asset".into());
@@ -1748,20 +1867,54 @@ pub(crate) async fn compare_quotes(
             .await,
         )
     };
-    let relay = quote_routed_swap(
-        state,
-        client,
-        source,
-        destination,
-        token_in,
-        token_out,
-        input,
-        slippage,
-    );
-    // Bounded reads prevent one unavailable service from holding the working quote indefinitely.
-    let (relay, direct) = futures_util::future::join(
-        tokio::time::timeout(std::time::Duration::from_secs(30), relay),
-        tokio::time::timeout(std::time::Duration::from_secs(30), direct),
+    let relay = async {
+        if source == "solana" && destination == "solana" {
+            crate::swap_routes::quote(
+                state,
+                client,
+                crate::swap_routes::RouteProvider::Relay,
+                source,
+                token_in,
+                token_out,
+                input,
+                slippage,
+            )
+            .await
+        } else {
+            quote_routed_swap(
+                state,
+                client,
+                source,
+                destination,
+                token_in,
+                token_out,
+                input,
+                slippage,
+            )
+            .await
+        }
+    };
+    let lifi = async {
+        if source != destination {
+            return Err("LI.FI cross-chain execution is unavailable until its bridge-specific instructions are validated".into());
+        }
+        crate::swap_routes::quote(
+            state,
+            client,
+            crate::swap_routes::RouteProvider::Lifi,
+            source,
+            token_in,
+            token_out,
+            input,
+            slippage,
+        )
+        .await
+    };
+    let timeout = std::time::Duration::from_secs(30);
+    let (relay, direct, lifi) = futures_util::future::join3(
+        tokio::time::timeout(timeout, relay),
+        tokio::time::timeout(timeout, direct),
+        tokio::time::timeout(timeout, lifi),
     )
     .await;
     let relay = relay.unwrap_or_else(|_| Err("Relay quote timed out; refresh to retry".into()));
@@ -1770,12 +1923,17 @@ pub(crate) async fn compare_quotes(
             "Direct Uniswap quote timed out; refresh to retry".into()
         ))
     });
-    let comparison = collect_quotes(relay, direct)?;
+    let lifi = lifi.unwrap_or_else(|_| Err("LI.FI quote timed out; refresh to retry".into()));
+    let comparison = collect_provider_quotes(vec![
+        ("Relay", Some(relay)),
+        ("Uniswap V3", direct),
+        ("LI.FI", Some(lifi)),
+    ])?;
     let mut guard = state.lock().map_err(|_| "State lock failed")?;
     if !guard.can_commit_refresh(generation) {
         return Err("Wallet session changed while comparing routes".into());
     }
-    // Both reads populate the cache independently. Preserve every offered quote
+    // Provider reads populate the cache independently. Preserve every offered quote
     // together so eviction during the other provider's read cannot invalidate a choice.
     for quote in &comparison.quotes {
         guard.uniswap_quotes.insert(quote.id.clone(), quote.clone());
@@ -1796,13 +1954,20 @@ pub(crate) async fn compare_quotes(
     Ok(comparison)
 }
 
+#[cfg(test)]
 fn collect_quotes(
     relay: Result<UniswapQuote, String>,
     direct: Option<Result<UniswapQuote, String>>,
 ) -> Result<UniswapComparison, String> {
+    collect_provider_quotes(vec![("Relay", Some(relay)), ("Uniswap V3", direct)])
+}
+
+fn collect_provider_quotes(
+    candidates: Vec<(&str, Option<Result<UniswapQuote, String>>)>,
+) -> Result<UniswapComparison, String> {
     let mut quotes = Vec::new();
     let mut unavailable = Vec::new();
-    for (provider, result) in [("Relay", Some(relay)), ("Uniswap V3", direct)] {
+    for (provider, result) in candidates {
         match result {
             Some(Ok(quote)) => {
                 amount(&quote.quoted_output)?;
@@ -1826,13 +1991,29 @@ fn collect_quotes(
     for quote in &quotes[1..] {
         if quote.network != first.network
             || quote.destination_network != first.destination_network
-            || evm_address_word(&quote.token_in)? != evm_address_word(&first.token_in)?
-            || evm_address_word(&quote.token_out)? != evm_address_word(&first.token_out)?
+            || AssetIdentity::new(
+                &quote.network,
+                crate::swap_routes::token_identity(&quote.network, &quote.token_in),
+            ) != AssetIdentity::new(
+                &first.network,
+                crate::swap_routes::token_identity(&first.network, &first.token_in),
+            )
+            || AssetIdentity::new(
+                &quote.destination_network,
+                crate::swap_routes::token_identity(&quote.destination_network, &quote.token_out),
+            ) != AssetIdentity::new(
+                &first.destination_network,
+                crate::swap_routes::token_identity(&first.destination_network, &first.token_out),
+            )
             || amount(&quote.amount_base_units)? != amount(&first.amount_base_units)?
             || quote.output_decimals != first.output_decimals
             || quote.input_decimals != first.input_decimals
             || quote.slippage_bps != first.slippage_bps
-            || !quote.sender.eq_ignore_ascii_case(&first.sender)
+            || (if quote.network == "solana" {
+                quote.sender != first.sender
+            } else {
+                !quote.sender.eq_ignore_ascii_case(&first.sender)
+            })
         {
             return Err("Provider quotes describe different trades and cannot be compared".into());
         }

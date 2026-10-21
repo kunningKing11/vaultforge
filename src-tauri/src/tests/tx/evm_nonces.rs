@@ -43,6 +43,16 @@ fn cancel_releases_tail_nonce() {
 }
 
 #[test]
+fn included_approval_protects_its_nonce_without_bypassing_other_operations() {
+    let mut manager = EvmNonceManager::default();
+    manager.restore_included_nonce(8453, "0xabc", 7).unwrap();
+    assert_eq!(manager.reserve(8453, "0xabc", 7).unwrap(), 8);
+    manager.cancel_unbroadcast(8453, "0xabc", 8);
+    manager.durable.insert((8453, "0xabc".into(), 9));
+    assert!(manager.reserve(8453, "0xabc", 8).is_err());
+}
+
+#[test]
 fn reserves_separate_nonce_queues_per_chain_and_address() {
     let mut manager = EvmNonceManager::default();
 

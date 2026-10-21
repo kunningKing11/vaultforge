@@ -466,3 +466,5 @@ pub(crate) fn get_provider(symbol: &str) -> Option<Box<dyn ChainProvider>> {
 mod tests;
 
 pub(crate) mod relay;
+
+pub(crate) mod lifi;

@@ -83,9 +83,11 @@ pub(crate) struct RelayData {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct SwapData {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) api: Option<crate::swap_routes::ApiSwap>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) relay: Option<RelayData>,
     pub(crate) quote_id: String,
-    pub(crate) chain_id: u64,
+    pub(crate) chain_id: Option<u64>,
     pub(crate) router: String,
     pub(crate) quoter: String,
     pub(crate) pool_fee: Option<u32>,

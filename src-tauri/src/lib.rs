@@ -17,6 +17,8 @@ mod providers;
 mod registry;
 mod state;
 mod storage;
+mod swap_routes;
+mod swap_solana;
 #[cfg(test)]
 mod tests;
 mod tx;

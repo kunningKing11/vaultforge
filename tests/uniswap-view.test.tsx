@@ -99,6 +99,7 @@ function operation(): UniswapOperation {
     terminal: false,
     needs_sync: true,
     can_cancel: false,
+    can_prepare: false,
     prepared: null,
     attempt_status: "SubmissionUnknown",
     last_error: "Submission uncertain",
@@ -124,13 +125,13 @@ function render(
 }
 
 describe("Uniswap screen", () => {
-  test("explains confirmed approvals waiting for finality without offering another approval", () => {
+  test("keeps an unconfirmed approval pending without offering another approval", () => {
     const saved = operation();
     saved.attempt_status = "Submitted";
     saved.last_error = null;
-    saved.progress.title = "Approval confirmed";
+    saved.progress.title = "Swap approval pending";
     saved.progress.subtitle =
-      "Approval is confirmed on-chain. Waiting for network finality before preparing the swap.";
+      "Waiting for the approval transaction receipt. The swap has not been sent.";
     const html = render(controller([saved]));
     expect(html).toContain(saved.progress.subtitle);
     expect(html).toContain("Step 2 of 4: Approve");
@@ -139,12 +140,13 @@ describe("Uniswap screen", () => {
     expect(html).not.toContain("Confirm approval");
   });
 
-  test("offers the next transaction after approval finality with an explicit fee review", () => {
+  test("offers the swap after approval confirmation while finality polling continues", () => {
     const saved = operation();
-    saved.attempt_status = "Confirmed";
-    saved.needs_sync = false;
+    saved.attempt_status = "Submitted";
     saved.last_error = null;
     saved.stage = "swap";
+    saved.can_prepare = true;
+    saved.needs_sync = true;
     saved.progress.title = "Approval complete; prepare swap";
     saved.progress.subtitle =
       "Approval is complete. Choose Prepare next transaction to review its network fee, then confirm the swap.";
@@ -282,5 +284,43 @@ describe("Swap route comparison", () => {
     expect(html).toContain("Relay");
     expect(html).toContain("Start approval");
     expect(html).not.toContain('role="alert"');
+  });
+});
+
+describe("LI.FI and Solana swap display", () => {
+  test("displays LI.FI as a third route choice", () => {
+    const value = controller();
+    const relay = { ...quote, id: "relay", relay: {} as NonNullable<UniswapQuote["relay"]> };
+    const lifi = {
+      ...quote,
+      id: "lifi",
+      quoted_output: "2100000",
+      api: { provider: "lifi" } as NonNullable<UniswapQuote["api"]>,
+    };
+    value.quotes = [lifi, relay, quote];
+    value.quote = lifi;
+    const html = render(value);
+    expect(html).toContain("LI.FI: 2.1 OUT");
+    expect(html).toContain("Relay: 2.0 OUT");
+    expect(html).toContain("Uniswap V3: 2.0 OUT");
+  });
+  test("formats Solana fees in lamports rather than wei", () => {
+    const value = controller();
+    const choices = assets.map((asset) => ({ ...asset, network: "solana" as const }));
+    value.data.networks = ["solana"];
+    value.quote = {
+      ...quote,
+      network: "solana",
+      destination_network: "solana",
+      approval_required: false,
+      approval_max_fee: null,
+      swap_max_fee: "5000",
+      api: { provider: "lifi" } as NonNullable<UniswapQuote["api"]>,
+    };
+    value.quotes = [value.quote];
+    const html = render(value, choices);
+    expect(html).toContain("0.000005 SOL");
+    expect(html).toContain("LI.FI");
+    expect(html).not.toContain("0.000000000000005");
   });
 });

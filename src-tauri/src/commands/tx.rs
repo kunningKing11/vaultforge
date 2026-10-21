@@ -130,9 +130,15 @@ pub(crate) fn ensure_token_balance_covers_amount(
 /// An unresolved send is a signed or broadcast attempt without finalized
 /// evidence; it must be reconciled before another send can be authorized.
 fn is_unresolved_send(operation: &Operation, network: &str, from: &str) -> bool {
-    operation.kind == OperationKind::Send
+    (operation.kind == OperationKind::Send
+        || (network == "solana" && operation.kind == OperationKind::Swap))
+        && !crate::uniswap::local_swap_confirmed(operation)
         && operation.source_asset.network == network
-        && operation.sender.eq_ignore_ascii_case(from)
+        && (if network == "solana" {
+            operation.sender == from
+        } else {
+            operation.sender.eq_ignore_ascii_case(from)
+        })
         && !matches!(
             operation.step,
             OperationStep::Completed | OperationStep::Cancelled

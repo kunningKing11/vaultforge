@@ -155,6 +155,7 @@ fn parser_rejects_calldata_target_and_slippage_tampering() {
 fn settlement_requires_matching_receipt_token_recipient_and_minimum() {
     let (relay, _, minimum) = parse(&fixture()).unwrap();
     let intent = crate::uniswap::SwapIntent {
+        api: None,
         network: network_by_id("base").unwrap().clone(),
         token_in: NATIVE.into(),
         token_out: "0x0b2c639c533813f4aa9d7837caf62653d097ff85".into(),

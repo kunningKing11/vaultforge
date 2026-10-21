@@ -342,7 +342,9 @@ impl crate::uniswap::SwapProvider for LiveSwapProvider<'_> {
         {
             return Ok(true);
         }
-        let router = if intent.relay.is_some() {
+        let router = if intent.api.is_some() {
+            crate::tx::lifi::DIAMOND
+        } else if intent.relay.is_some() {
             crate::providers::relay::DEPOSITORY
         } else {
             deployment_for_network(&intent.network.id)?.router
@@ -385,13 +387,20 @@ impl crate::uniswap::SwapProvider for LiveSwapProvider<'_> {
             .as_ref()
             .and_then(|r| crate::registry::network_by_id(&r.destination_network))
             .unwrap_or(&intent.network);
-        let output = fetch_evm_token_balance_for_contract(
-            self.client,
-            destination,
-            &intent.token_out,
-            &intent.sender,
-        )
-        .await?;
+        let output = if intent
+            .token_out
+            .eq_ignore_ascii_case(crate::providers::relay::NATIVE)
+        {
+            fetch_evm_native_balance(self.client, destination, &intent.sender).await?
+        } else {
+            fetch_evm_token_balance_for_contract(
+                self.client,
+                destination,
+                &intent.token_out,
+                &intent.sender,
+            )
+            .await?
+        };
         Ok((native, input, output))
     }
 
@@ -400,6 +409,9 @@ impl crate::uniswap::SwapProvider for LiveSwapProvider<'_> {
         intent: &crate::uniswap::SwapIntent,
         call: &EvmCall,
     ) -> Result<EvmCallEstimate, String> {
+        if intent.api.is_some() {
+            crate::providers::lifi::verify_deployment(self.client, &intent.network).await?;
+        }
         verify_evm_chain(self.client, &intent.network).await?;
         estimate_with_fee_headroom(
             estimate_evm_call(self.client, &intent.network, &intent.sender, call).await?,
