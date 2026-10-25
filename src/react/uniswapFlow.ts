@@ -22,6 +22,7 @@ export function selectComparedQuote(
 }
 
 export function quoteProvider(quote: UniswapQuote): string {
+  if (quote.api?.provider === "jupiter") return "Jupiter";
   return quote.api?.provider === "lifi"
     ? "LI.FI"
     : quote.relay || quote.api?.provider === "relay"

@@ -620,7 +620,7 @@ fn encrypted_attempt_survives_restart_and_preparation_is_idempotent() {
     let stored = read_stored_wallet(&directory.join("wallet.json"))
         .unwrap()
         .unwrap();
-    assert_eq!(stored.version, 15);
+    assert_eq!(stored.version, 16);
     let decrypted = decrypt_wallet(&stored, password).unwrap();
     assert_eq!(decrypted.wallet().operations[0], op);
     let (wallet, key, salt) = decrypted.into_parts();
@@ -770,6 +770,7 @@ fn lifi_uses_saved_intent_through_native_evm_signing_and_finality() {
         .copy_from_slice(&crate::tx::evm::evm_address_word(&quote.sender).unwrap());
     quote.pool_fee = None;
     quote.api = Some(crate::swap_routes::ApiSwap {
+        jupiter: None,
         provider: crate::swap_routes::RouteProvider::Lifi,
         request_id: "lifi-quote".into(),
         route: vec![],
@@ -959,7 +960,7 @@ fn lost_response_is_reconciled_without_automatic_rebroadcast() {
         assert_eq!(attempt.status, TransactionStatus::SubmissionUnknown);
         assert!(attempt.raw_tx.is_some());
         let stored = read_stored_wallet(&guard.storage_path).unwrap().unwrap();
-        assert_eq!(stored.version, 15);
+        assert_eq!(stored.version, 16);
     }));
     provider.fail_broadcast.store(true, Ordering::SeqCst);
     runtime()

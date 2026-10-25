@@ -3,6 +3,7 @@ pub(crate) mod cctp;
 pub(crate) mod cctp_solana;
 pub(crate) mod evm;
 pub(crate) mod evm_nonces;
+pub(crate) mod jupiter;
 pub(crate) mod relay;
 pub(crate) mod solana;
 pub(crate) mod tron;

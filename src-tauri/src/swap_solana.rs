@@ -20,6 +20,15 @@ use solana_transaction::versioned::VersionedTransaction;
 use std::sync::Mutex;
 
 pub(crate) trait SolanaRpc {
+    fn execute_jupiter(
+        &self,
+        _request: &crate::providers::jupiter::ExecuteRequest<'_>,
+    ) -> impl std::future::Future<
+        Output = Result<crate::providers::jupiter::JupiterExecution, String>,
+    > + Send {
+        async { Err("Jupiter executor unavailable".into()) }
+    }
+
     fn swap_rpc(
         &self,
         method: &str,
@@ -27,6 +36,13 @@ pub(crate) trait SolanaRpc {
     ) -> impl std::future::Future<Output = Result<Value, String>> + Send;
 }
 impl SolanaRpc for reqwest::Client {
+    async fn execute_jupiter(
+        &self,
+        request: &crate::providers::jupiter::ExecuteRequest<'_>,
+    ) -> Result<crate::providers::jupiter::JupiterExecution, String> {
+        crate::providers::jupiter::execute_order(self, request).await
+    }
+
     async fn swap_rpc(&self, method: &str, params: Value) -> Result<Value, String> {
         let config = crate::registry::network_by_id("solana").ok_or("Solana network missing")?;
         let response = rpc_post(
@@ -96,6 +112,47 @@ async fn lookup(client: &(impl SolanaRpc + Sync), address: &str) -> Result<Solan
             .map(|v| bs58::encode(v).into_string())
             .collect(),
     })
+}
+/// Fetch lookup tables and check the original order blockhash.
+pub(crate) async fn order_lookups(
+    client: &(impl SolanaRpc + Sync),
+    raw: &str,
+) -> Result<Vec<SolanaLookup>, String> {
+    let tx = encoding::decode(raw)?;
+    let mut tables = Vec::new();
+    if let Some(lookups) = tx.message.address_table_lookups() {
+        if lookups.len() > 8 {
+            return Err("Too many Jupiter lookup tables".into());
+        }
+        for item in lookups {
+            tables.push(lookup(client, &item.account_key.to_string()).await?);
+        }
+    }
+    check_blockhash(
+        client,
+        &tx.message.recent_blockhash().to_string(),
+        "confirmed",
+    )
+    .await?;
+    Ok(tables)
+}
+async fn check_blockhash(
+    client: &(impl SolanaRpc + Sync),
+    hash: &str,
+    commitment: &str,
+) -> Result<(), String> {
+    if rpc(
+        client,
+        "isBlockhashValid",
+        json!([hash, {"commitment":commitment}]),
+    )
+    .await?["value"]
+        .as_bool()
+        != Some(true)
+    {
+        return Err("Jupiter order blockhash expired or unavailable; request a fresh quote".into());
+    }
+    Ok(())
 }
 pub(crate) async fn transaction(
     client: &(impl SolanaRpc + Sync),
@@ -228,6 +285,12 @@ pub(crate) fn validate_operation(operation: &Operation) -> Result<(), String> {
         return Err("Solana swap contains EVM execution terms".into());
     }
     let api = terms.api.as_ref().ok_or("Native Solana provider missing")?;
+    if crate::jupiter::is_jupiter(operation) {
+        return crate::jupiter::validate_operation(operation);
+    } else if api.jupiter.is_some() {
+        return Err("Foreign provider contains Jupiter execution terms".into());
+    }
+
     let RouteTransaction::Solana {
         transaction,
         lookups,
@@ -371,6 +434,73 @@ async fn fee_and_simulation(
     }
     Ok((fee, rent))
 }
+async fn validated_api_transaction(
+    client: &(impl SolanaRpc + Sync),
+    api: &ApiSwap,
+    sender: &str,
+    input: &str,
+    output: &str,
+    amount: u128,
+    minimum: u128,
+    slippage: u16,
+) -> Result<VersionedTransaction, String> {
+    let RouteTransaction::Solana {
+        transaction,
+        lookups,
+    } = &api.transaction
+    else {
+        return Err("Native swap required".into());
+    };
+    if api.provider != crate::swap_routes::RouteProvider::Jupiter {
+        return encoding::validate(
+            transaction,
+            lookups,
+            sender,
+            input,
+            output,
+            amount,
+            minimum,
+            slippage,
+        );
+    }
+    let saved = api.jupiter.as_ref().ok_or("Jupiter terms missing")?;
+    if saved.order.transaction_base64 != *transaction
+        || saved.order.minimum_output_base_units.parse::<u128>().ok() != Some(minimum)
+        || api.request_id != saved.order.request_id
+    {
+        return Err("Jupiter transaction or minimum differs from the reviewed order".into());
+    }
+    let request = crate::providers::jupiter::OrderRequest {
+        taker: sender.into(),
+        input_mint: input.into(),
+        output_mint: output.into(),
+        amount_base_units: amount.to_string(),
+        slippage_bps: slippage,
+    };
+    let validated = crate::tx::jupiter::validate_order(&saved.order, &request, lookups)?;
+    if validated.message_hash != saved.message_hash {
+        return Err("Jupiter message changed".into());
+    }
+    for (account, mint) in &validated.fee_token_accounts {
+        let response = rpc(
+            client,
+            "getAccountInfo",
+            json!([account, {"encoding":"jsonParsed", "commitment":"confirmed"}]),
+        )
+        .await?;
+        let value = &response["value"];
+        let parsed = &value["data"]["parsed"];
+        if value["owner"] != "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+            || parsed["type"] != "account"
+            || parsed["info"]["mint"].as_str() != Some(mint)
+            || parsed["info"]["state"] != "initialized"
+        {
+            return Err("Jupiter fee collector is not an initialized classic token account for the quoted fee mint".into());
+        }
+    }
+    Ok(validated.transaction)
+}
+
 pub(crate) async fn quote_fee(
     client: &(impl SolanaRpc + Sync),
     api: &ApiSwap,
@@ -381,23 +511,13 @@ pub(crate) async fn quote_fee(
     minimum: u128,
     slippage: u16,
 ) -> Result<u64, String> {
-    let RouteTransaction::Solana {
-        transaction,
-        lookups,
-    } = &api.transaction
-    else {
+    let RouteTransaction::Solana { lookups, .. } = &api.transaction else {
         return Err("Native swap required".into());
     };
-    let tx = encoding::validate(
-        transaction,
-        lookups,
-        sender,
-        input,
-        output,
-        amount,
-        minimum,
-        slippage,
-    )?;
+    let tx = validated_api_transaction(
+        client, api, sender, input, output, amount, minimum, slippage,
+    )
+    .await?;
     let (fee, rent) = fee_and_simulation(client, &tx, lookups).await?;
     fee.checked_add(rent)
         .ok_or("Solana fee and rent overflow".into())
@@ -420,8 +540,14 @@ async fn reconcile(
     generation: u64,
     original: &Operation,
 ) -> Result<Operation, String> {
+    if crate::jupiter::is_jupiter(original) {
+        validate_operation(original)?;
+    }
     let mut next = original.clone();
     crate::operations::reconcile_operation_with(&mut next, |_, hash| async move {
+        if crate::jupiter::is_jupiter(original) {
+            return crate::jupiter::observe(client, original, &hash).await;
+        }
         let response = rpc(
             client,
             "getSignatureStatuses",
@@ -463,6 +589,24 @@ async fn reconcile(
                 .as_u64()
                 .is_some_and(|height| height > last_valid_height)
             {
+                if let Some(jupiter) = crate::jupiter::terms(&next) {
+                    let tx = encoding::decode(&jupiter.order.transaction_base64)?;
+                    let invalid = rpc(client, "isBlockhashValid", json!([tx.message.recent_blockhash().to_string(), {"commitment":"finalized"}])).await
+                        .ok().and_then(|v| v["value"].as_bool()) == Some(false);
+                    // A confirmed blockhash may not be rooted yet; require both checks
+                    // to report expiry before releasing transaction protection.
+                    let invalid_confirmed = rpc(client, "isBlockhashValid", json!([tx.message.recent_blockhash().to_string(), {"commitment":"confirmed"}])).await
+                        .ok().and_then(|v| v["value"].as_bool()) == Some(false);
+                    if !invalid || !invalid_confirmed {
+                        save_operation(
+                            &mut *state.lock().map_err(|_| "State lock failed")?,
+                            generation,
+                            original,
+                            &next,
+                        )?;
+                        return Ok(next);
+                    }
+                }
                 if let Ok(finalized_slot) =
                     rpc(client, "getSlot", json!([{"commitment":"finalized"}])).await
                 {
@@ -488,9 +632,18 @@ async fn reconcile(
                                     if let Some(observation) = observed {
                                         crate::operations::reconcile_operation_with(
                                             &mut next,
-                                            |_, _| {
+                                            |_, hash| {
                                                 let observation = observation.clone();
-                                                async move { Ok(Some(observation)) }
+                                                async move {
+                                                    if crate::jupiter::is_jupiter(original) {
+                                                        crate::jupiter::observe(
+                                                            client, original, &hash,
+                                                        )
+                                                        .await
+                                                    } else {
+                                                        Ok(Some(observation))
+                                                    }
+                                                }
                                             },
                                         )
                                         .await?;
@@ -546,14 +699,18 @@ pub(crate) async fn prepare(
     else {
         return Err("Native transaction missing".into());
     };
-    let (raw, lookups) = transaction(client, &Value::String(raw.clone()), &original.sender).await?;
+    let (raw, lookups) = if crate::jupiter::is_jupiter(&original) {
+        (raw.clone(), order_lookups(client, raw).await?)
+    } else {
+        transaction(client, &Value::String(raw.clone()), &original.sender).await?
+    };
     api.transaction = RouteTransaction::Solana {
         transaction: raw.clone(),
         lookups: lookups.clone(),
     };
-    let mut tx = encoding::validate(
-        &raw,
-        &lookups,
+    let mut tx = validated_api_transaction(
+        client,
+        &api,
         &original.sender,
         original
             .source_asset
@@ -574,15 +731,34 @@ pub(crate) async fn prepare(
             .parse()
             .map_err(|_| "Invalid minimum")?,
         terms.slippage_bps,
-    )?;
+    )
+    .await?;
     let (fee, rent) = fee_and_simulation(client, &tx, &lookups).await?;
-    let (hash, last_valid) = latest(client).await?;
-    match &mut tx.message {
-        VersionedMessage::Legacy(m) => m.recent_blockhash = hash.clone(),
-        VersionedMessage::V0(m) => m.recent_blockhash = hash.clone(),
-        _ => return Err("Solana v1 swaps are not supported".into()),
-    }
-    // The new recent blockhash changes no instruction or signer; price terms remain pinned.
+    let (hash, last_valid) = if let Some(jupiter) = crate::jupiter::terms(&original) {
+        let height = rpc(
+            client,
+            "getBlockHeight",
+            json!([{"commitment":"confirmed"}]),
+        )
+        .await?
+        .as_u64()
+        .ok_or("Solana height missing")?;
+        if height > jupiter.last_valid_height {
+            return Err("Jupiter order expired".into());
+        }
+        (
+            tx.message.recent_blockhash().to_owned(),
+            jupiter.last_valid_height,
+        )
+    } else {
+        let (hash, height) = latest(client).await?;
+        match &mut tx.message {
+            VersionedMessage::Legacy(m) => m.recent_blockhash = hash.clone(),
+            VersionedMessage::V0(m) => m.recent_blockhash = hash.clone(),
+            _ => return Err("Solana v1 swaps are not supported".into()),
+        }
+        (hash, height)
+    };
     let mut lock = state.lock().map_err(|_| "State lock failed")?;
     check_snapshot(&lock, generation, &original)?;
     let wallet = lock.wallet.as_ref().ok_or("Wallet closed")?;
@@ -697,6 +873,9 @@ pub(crate) async fn submit(
     {
         return Err("Solana swap cannot be submitted until reconciliation succeeds".into());
     }
+    if crate::jupiter::is_jupiter(&original) && attempt.status != TransactionStatus::Signed {
+        return Err("Jupiter submission already attempted; reconcile the saved signature without re-executing".into());
+    }
     let context = attempt
         .solana_context
         .as_ref()
@@ -721,20 +900,52 @@ pub(crate) async fn submit(
     let tx = encoding::decode(raw)?;
     let terms = original.swap.as_ref().ok_or("Swap terms missing")?;
     let api = terms.api.as_ref().ok_or("Native provider missing")?;
-    let RouteTransaction::Solana {
-        transaction,
-        lookups,
-    } = &api.transaction
-    else {
+    let RouteTransaction::Solana { lookups, .. } = &api.transaction else {
         return Err("Native transaction missing".into());
     };
-    let mut quoted = encoding::decode(transaction)?;
-    match &mut quoted.message {
-        VersionedMessage::Legacy(m) => {
-            m.recent_blockhash = tx.message.recent_blockhash().to_owned()
+    let mut quoted = validated_api_transaction(
+        client,
+        api,
+        &original.sender,
+        original
+            .source_asset
+            .token_address
+            .as_deref()
+            .unwrap_or(encoding::NATIVE),
+        original
+            .destination_asset
+            .token_address
+            .as_deref()
+            .unwrap_or(encoding::NATIVE),
+        original
+            .amount_base_units
+            .parse()
+            .map_err(|_| "Invalid swap input")?,
+        terms
+            .minimum_received
+            .parse()
+            .map_err(|_| "Invalid swap minimum")?,
+        terms.slippage_bps,
+    )
+    .await?;
+
+    if !crate::jupiter::is_jupiter(&original) {
+        match &mut quoted.message {
+            VersionedMessage::Legacy(m) => {
+                m.recent_blockhash = tx.message.recent_blockhash().to_owned()
+            }
+            VersionedMessage::V0(m) => {
+                m.recent_blockhash = tx.message.recent_blockhash().to_owned()
+            }
+            _ => return Err("Solana v1 swaps are not supported".into()),
         }
-        VersionedMessage::V0(m) => m.recent_blockhash = tx.message.recent_blockhash().to_owned(),
-        _ => return Err("Solana v1 swaps are not supported".into()),
+    }
+    if let Some(jupiter) = crate::jupiter::terms(&original) {
+        crate::tx::jupiter::verify_signed_order(&jupiter.order, raw, &original.sender)?;
+        check_blockhash(client, &context.blockhash, "confirmed").await?;
+        if terms.deadline <= crate::uniswap::now() {
+            return Err("Jupiter order expired".into());
+        }
     }
     if quoted.message != tx.message
         || tx.message.recent_blockhash().to_string() != context.blockhash
@@ -767,14 +978,34 @@ pub(crate) async fn submit(
         "encoding": "base64", "skipPreflight": false,
         "preflightCommitment": "confirmed", "maxRetries": 0
     }]);
-    let result = rpc(client, "sendTransaction", params)
-        .await
-        .and_then(|value| {
-            value
-                .as_str()
-                .map(String::from)
-                .ok_or("Solana broadcast signature missing".into())
-        });
+    let result = if let Some(jupiter) = crate::jupiter::terms(&original) {
+        client
+            .execute_jupiter(&crate::providers::jupiter::ExecuteRequest {
+                request_id: &jupiter.order.request_id,
+                signed_transaction_base64: raw,
+            })
+            .await
+            .and_then(|report| {
+                // Service success records submission; chain evidence establishes delivery.
+                let response = report.raw_response;
+                if response["status"] != "Success" || response["code"].as_i64() != Some(0) {
+                    return Err("Jupiter reported a failure; awaiting chain evidence".into());
+                }
+                response["signature"]
+                    .as_str()
+                    .map(String::from)
+                    .ok_or("Jupiter execution signature missing".into())
+            })
+    } else {
+        rpc(client, "sendTransaction", params)
+            .await
+            .and_then(|value| {
+                value
+                    .as_str()
+                    .map(String::from)
+                    .ok_or("Solana broadcast signature missing".into())
+            })
+    };
     let mut after = submitting.clone();
     let next = after.attempts.last_mut().ok_or("Attempt missing")?;
     match result {

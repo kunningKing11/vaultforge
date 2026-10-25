@@ -41,6 +41,19 @@ const prepared: UniswapPreparedStep = {
 };
 
 describe("Additional swap providers", () => {
+  test("labels Jupiter and preserves its preference across refresh and failures", () => {
+    const direct = {
+      ...quote,
+      id: "jupiter-first",
+      api: { provider: "jupiter" } as NonNullable<UniswapQuote["api"]>,
+    };
+    const refreshed = { ...direct, id: "jupiter-refreshed" };
+    expect(quoteProvider(direct)).toBe("Jupiter");
+    expect(selectComparedQuote([quote, direct], "Jupiter")?.id).toBe("jupiter-first");
+    expect(selectComparedQuote([quote, refreshed], "Jupiter")?.id).toBe("jupiter-refreshed");
+    expect(selectComparedQuote([quote], "Jupiter")?.id).toBe(quote.id);
+    expect(selectComparedQuote([direct, quote], null)?.id).toBe("jupiter-first");
+  });
   test("labels LI.FI and native Relay quotes and retains their selection", () => {
     const lifi = {
       ...quote,

@@ -1813,7 +1813,7 @@ fn direct_quote_eligible(source: &str, destination: &str, token_in: &str, token_
         && deployment_for_network(source).is_ok()
 }
 
-/// Quote both providers independently. A failed provider must not discard a
+/// Quote eligible providers independently. A failed provider must not discard a
 /// working alternative, and direct Uniswap is never called across chains.
 pub(crate) async fn compare_quotes(
     state: &Mutex<AppState>,
@@ -1910,13 +1910,24 @@ pub(crate) async fn compare_quotes(
         )
         .await
     };
+    let jupiter = async {
+        if source != "solana" || destination != "solana" {
+            return None;
+        }
+        Some(crate::jupiter::quote(state, client, token_in, token_out, input, slippage).await)
+    };
     let timeout = std::time::Duration::from_secs(30);
-    let (relay, direct, lifi) = futures_util::future::join3(
-        tokio::time::timeout(timeout, relay),
-        tokio::time::timeout(timeout, direct),
-        tokio::time::timeout(timeout, lifi),
+    let ((relay, direct, lifi), jupiter) = futures_util::future::join(
+        futures_util::future::join3(
+            tokio::time::timeout(timeout, relay),
+            tokio::time::timeout(timeout, direct),
+            tokio::time::timeout(timeout, lifi),
+        ),
+        tokio::time::timeout(timeout, jupiter),
     )
     .await;
+    let jupiter =
+        jupiter.unwrap_or_else(|_| Some(Err("Jupiter quote timed out; refresh to retry".into())));
     let relay = relay.unwrap_or_else(|_| Err("Relay quote timed out; refresh to retry".into()));
     let direct = direct.unwrap_or_else(|_| {
         Some(Err(
@@ -1928,6 +1939,7 @@ pub(crate) async fn compare_quotes(
         ("Relay", Some(relay)),
         ("Uniswap V3", direct),
         ("LI.FI", Some(lifi)),
+        ("Jupiter", jupiter),
     ])?;
     let mut guard = state.lock().map_err(|_| "State lock failed")?;
     if !guard.can_commit_refresh(generation) {

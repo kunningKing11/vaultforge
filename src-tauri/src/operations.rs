@@ -648,6 +648,15 @@ pub(crate) async fn reconcile_operation(
     operation: &mut Operation,
     clients: &ProviderClients,
 ) -> Result<(), String> {
+    if crate::jupiter::is_jupiter(operation) {
+        crate::swap_solana::validate_operation(operation)?;
+        let snapshot = operation.clone();
+        return reconcile_operation_with(operation, |_, hash| {
+            let snapshot = &snapshot;
+            async move { crate::jupiter::observe(clients.http(), snapshot, &hash).await }
+        })
+        .await;
+    }
     let route = operation
         .deployment
         .as_ref()

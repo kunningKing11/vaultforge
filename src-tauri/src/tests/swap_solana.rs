@@ -9,6 +9,11 @@ use std::sync::{
 
 struct MockRpc {
     submitted: AtomicBool,
+    report_only: AtomicBool,
+    bad_delivery: AtomicBool,
+    fee_account_mint: Mutex<Option<String>>,
+    bad_fee_account: AtomicBool,
+    still_valid_confirmed: AtomicBool,
     finalized: AtomicBool,
     fail_send: AtomicBool,
     bad_genesis: AtomicBool,
@@ -24,6 +29,11 @@ impl Default for MockRpc {
     fn default() -> Self {
         Self {
             submitted: AtomicBool::new(false),
+            report_only: AtomicBool::new(false),
+            bad_delivery: AtomicBool::new(false),
+            fee_account_mint: Mutex::new(None),
+            bad_fee_account: AtomicBool::new(false),
+            still_valid_confirmed: AtomicBool::new(false),
             finalized: AtomicBool::new(false),
             fail_send: AtomicBool::new(false),
             bad_genesis: AtomicBool::new(false),
@@ -38,8 +48,54 @@ impl Default for MockRpc {
     }
 }
 impl SolanaRpc for MockRpc {
+    async fn execute_jupiter(
+        &self,
+        request: &crate::providers::jupiter::ExecuteRequest<'_>,
+    ) -> Result<crate::providers::jupiter::JupiterExecution, String> {
+        assert_eq!(request.request_id, "direct-jupiter");
+        if let Some(hook) = self.before_send.lock().unwrap().take() {
+            hook();
+        }
+        let tx = encoding::decode(request.signed_transaction_base64).unwrap();
+        self.sent
+            .lock()
+            .unwrap()
+            .push(request.signed_transaction_base64.into());
+        self.submitted
+            .store(!self.report_only.load(Ordering::SeqCst), Ordering::SeqCst);
+        if self.fail_send.load(Ordering::SeqCst) {
+            return Err("Execution response lost".into());
+        }
+        Ok(crate::providers::jupiter::JupiterExecution {
+            raw_response: json!({"status":"Success", "code":0, "signature":tx.signatures[0].to_string()}),
+        })
+    }
+
     async fn swap_rpc(&self, method: &str, params: Value) -> Result<Value, String> {
         Ok(match method {
+            "isBlockhashValid" => {
+                json!({"value":self.final_height.load(Ordering::SeqCst) <= 100 || (params[1]["commitment"] == "confirmed" && self.still_valid_confirmed.load(Ordering::SeqCst))})
+            }
+            "getTransaction" => {
+                let raw = self.sent.lock().unwrap().last().unwrap().clone();
+                let tx = encoding::decode(&raw).unwrap();
+                let keys = tx.message.static_account_keys();
+                let swap = tx
+                    .message
+                    .instructions()
+                    .iter()
+                    .find(|ix| {
+                        keys[usize::from(ix.program_id_index)] == key(encoding::JUPITER).unwrap()
+                    })
+                    .unwrap();
+                let output_index = swap.accounts[3];
+                let mint = keys[usize::from(swap.accounts[5])].to_string();
+                json!({"slot":42,"transaction":[raw,"base64"],"meta":{
+                    "err":null,"fee":5000,"preTokenBalances":[],
+                    "postTokenBalances":[{"accountIndex":output_index,"mint":mint,"owner":keys[0].to_string(),
+                        "uiTokenAmount":{"amount": if self.bad_delivery.load(Ordering::SeqCst) {"1"} else {"2000000"}}}]
+                }})
+            }
             "getGenesisHash" => json!(if self.bad_genesis.load(Ordering::SeqCst) {
                 "wrong"
             } else {
@@ -58,7 +114,15 @@ impl SolanaRpc for MockRpc {
             "getFeeForMessage" => json!({"value":5000}),
             "getBalance" => json!({"value":1_000_000_000u64}),
             "getTokenAccountsByOwner" => json!({"value":[]}),
-            "getAccountInfo" => json!({"value":null}),
+            "getAccountInfo" => {
+                if params[1]["encoding"] == "jsonParsed" {
+                    json!({"value":{"owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "data":{"parsed":{
+                        "type":"account", "info":{"mint":if self.bad_fee_account.load(Ordering::SeqCst) { Some(encoding::WSOL.into()) } else { self.fee_account_mint.lock().unwrap().clone() },"state":"initialized"}
+                    }}}})
+                } else {
+                    json!({"value":null})
+                }
+            }
             "getMinimumBalanceForRentExemption" => json!(2_039_280),
             "simulateTransaction" => {
                 json!({"value":{"err":if self.simulation_error.load(Ordering::SeqCst){json!({"InstructionError":[0,"failure"]})}else{Value::Null},"unitsConsumed":200000}})
@@ -125,6 +189,7 @@ fn setup() -> (std::path::PathBuf, Arc<Mutex<AppState>>, String) {
     })
     .collect();
     let api = ApiSwap {
+        jupiter: None,
         provider: RouteProvider::Lifi,
         request_id: "native-request".into(),
         route: vec![],
@@ -166,6 +231,51 @@ fn setup() -> (std::path::PathBuf, Arc<Mutex<AppState>>, String) {
         .operation_id;
     (directory, state, id)
 }
+fn setup_jupiter() -> (std::path::PathBuf, Arc<Mutex<AppState>>, String) {
+    let (directory, state, id) = setup();
+    {
+        let mut lock = state.lock().unwrap();
+        let operation = &mut lock.wallet.as_mut().unwrap().operations[0];
+        let swap = operation.swap.as_mut().unwrap();
+        let api = swap.api.as_mut().unwrap();
+        let RouteTransaction::Solana { transaction, .. } = &mut api.transaction else {
+            unreachable!()
+        };
+        let mut tx = encoding::decode(transaction).unwrap();
+        let VersionedMessage::Legacy(message) = tx.message else {
+            unreachable!()
+        };
+        tx.message = VersionedMessage::V0(solana_message::v0::Message {
+            header: message.header,
+            account_keys: message.account_keys,
+            recent_blockhash: message.recent_blockhash,
+            instructions: message.instructions,
+            address_table_lookups: vec![],
+        });
+        *transaction = STANDARD.encode(wincode::serialize(&tx).unwrap());
+        api.provider = RouteProvider::Jupiter;
+        api.request_id = "direct-jupiter".into();
+        swap.deadline = crate::uniswap::now() + 60;
+        api.jupiter = Some(crate::jupiter::JupiterTerms {
+            order: crate::providers::jupiter::JupiterOrder {
+                request_id: api.request_id.clone(),
+                router: "metis".into(),
+                transaction_base64: transaction.clone(),
+                quoted_output_base_units: swap.quoted_output.clone(),
+                minimum_output_base_units: swap.minimum_received.clone(),
+                raw_response: json!({"gasless":false,"feeBps":0,"lastValidBlockHeight":"100"}),
+            },
+            message_hash: {
+                use sha2::{Digest, Sha256};
+                hex::encode(Sha256::digest(tx.message.serialize()))
+            },
+            last_valid_height: 100,
+            deadline: swap.deadline,
+        });
+    }
+    (directory, state, id)
+}
+
 fn operation(state: &Mutex<AppState>, id: &str) -> Operation {
     state
         .lock()
@@ -281,6 +391,255 @@ fn includes_missing_token_account_rent_in_reviewed_and_persisted_budget() {
     std::fs::remove_dir_all(directory).unwrap();
 }
 #[test]
+fn jupiter_expiry_requires_invalid_finalized_blockhash_and_fresh_history() {
+    let (directory, state, id) = setup_jupiter();
+    let rpc = MockRpc::default();
+    runtime()
+        .block_on(crate::jupiter::prepare(&state, &rpc, &id))
+        .unwrap();
+    rpc.final_height.store(101, Ordering::SeqCst);
+    rpc.still_valid_confirmed.store(true, Ordering::SeqCst);
+    runtime()
+        .block_on(crate::jupiter::sync(&state, &rpc, &id))
+        .unwrap();
+    assert!(!expired(&operation(&state, &id)));
+    rpc.still_valid_confirmed.store(false, Ordering::SeqCst);
+    runtime()
+        .block_on(crate::jupiter::sync(&state, &rpc, &id))
+        .unwrap();
+    assert!(expired(&operation(&state, &id)));
+    assert!(rpc.sent.lock().unwrap().is_empty());
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn jupiter_failed_save_prevents_execution_and_expired_quotes_prevent_signing() {
+    for expiry in [false, true] {
+        let (directory, state, id) = setup_jupiter();
+        let rpc = MockRpc::default();
+        if expiry {
+            let mut lock = state.lock().unwrap();
+            let swap = lock.wallet.as_mut().unwrap().operations[0]
+                .swap
+                .as_mut()
+                .unwrap();
+            swap.deadline = 1;
+            swap.api
+                .as_mut()
+                .unwrap()
+                .jupiter
+                .as_mut()
+                .unwrap()
+                .deadline = 1;
+            drop(lock);
+            assert!(
+                runtime()
+                    .block_on(crate::jupiter::prepare(&state, &rpc, &id))
+                    .is_err()
+            );
+            assert!(operation(&state, &id).attempts.is_empty());
+        } else {
+            let prepared = runtime()
+                .block_on(crate::jupiter::prepare(&state, &rpc, &id))
+                .unwrap();
+            state.lock().unwrap().storage_path = directory.clone();
+            assert!(
+                runtime()
+                    .block_on(crate::jupiter::submit(&state, &rpc, &id, &prepared.tx_hash))
+                    .is_err()
+            );
+            assert_eq!(
+                operation(&state, &id).attempts[0].status,
+                TransactionStatus::Signed
+            );
+        }
+        assert!(rpc.sent.lock().unwrap().is_empty());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+}
+#[test]
+fn jupiter_lost_response_recovers_saved_identity_after_restart_without_reexecution() {
+    let (directory, state, id) = setup_jupiter();
+    let password = "jupiter-restart-test";
+    let (key, salt) = crate::storage::derive_storage_key(password, Some(&[2; 16])).unwrap();
+    {
+        let mut lock = state.lock().unwrap();
+        lock.encryption_key = Some(key);
+        lock.storage_salt = Some(salt);
+    }
+
+    let rpc = MockRpc::default();
+    rpc.fail_send.store(true, Ordering::SeqCst);
+    rpc.blockhash_seed.store(99, Ordering::SeqCst);
+    let prepared = runtime()
+        .block_on(crate::jupiter::prepare(&state, &rpc, &id))
+        .unwrap();
+    let saved = operation(&state, &id);
+    let raw = saved.attempts[0].raw_tx.clone().unwrap();
+    assert_eq!(
+        encoding::decode(&raw)
+            .unwrap()
+            .message
+            .recent_blockhash()
+            .to_string(),
+        solana_hash::Hash::from([7; 32]).to_string()
+    );
+    let before = state.clone();
+    *rpc.before_send.lock().unwrap() = Some(Box::new(move || {
+        assert_eq!(
+            operation(&before, &id).attempts[0].status,
+            TransactionStatus::SubmissionUnknown
+        );
+    }));
+    let id = saved.id.clone();
+    runtime()
+        .block_on(crate::jupiter::submit(&state, &rpc, &id, &prepared.tx_hash))
+        .unwrap();
+    assert_eq!(
+        operation(&state, &id).attempts[0].status,
+        TransactionStatus::SubmissionUnknown
+    );
+    let stored = crate::storage::read_stored_wallet(&directory.join("wallet.json"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.version, 16);
+    let decrypted = crate::storage::decrypt_wallet(&stored, password).unwrap();
+    let (wallet, key, salt) = decrypted.into_parts();
+    assert_eq!(wallet.operations[0], operation(&state, &id));
+    let mut restarted = AppState::from_storage(directory.join("wallet.json"));
+    restarted.wallet = Some(wallet);
+    restarted.encryption_key = Some(key);
+    restarted.storage_salt = Some(salt);
+    restarted.wallet_generation = 17;
+    restarted.locked = false;
+    let state = Arc::new(Mutex::new(restarted));
+    let mut recovered = operation(&state, &id);
+    let original = recovered.clone();
+    runtime()
+        .block_on(crate::operations::reconcile_operation_with(
+            &mut recovered,
+            |_, hash| {
+                let rpc = &rpc;
+                let original = &original;
+                async move { crate::jupiter::observe(rpc, original, &hash).await }
+            },
+        ))
+        .unwrap();
+    assert!(crate::uniswap::local_swap_confirmed(&recovered));
+    runtime()
+        .block_on(crate::jupiter::sync(&state, &rpc, &id))
+        .unwrap();
+    runtime()
+        .block_on(crate::jupiter::submit(&state, &rpc, &id, &prepared.tx_hash))
+        .unwrap();
+    assert_eq!(rpc.sent.lock().unwrap().as_slice(), &[raw]);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+#[test]
+fn jupiter_platform_fees_retain_total_input_net_minimum_and_recovery() {
+    for from_input in [false, true] {
+        for embedded in [false, true] {
+            let (directory, state, id) = setup_jupiter();
+            let rpc = MockRpc::default();
+            {
+                let mut lock = state.lock().unwrap();
+                let operation = &mut lock.wallet.as_mut().unwrap().operations[0];
+                let request = crate::providers::jupiter::OrderRequest {
+                    taker: operation.sender.clone(),
+                    input_mint: operation.source_asset.token_address.clone().unwrap(),
+                    output_mint: operation.destination_asset.token_address.clone().unwrap(),
+                    amount_base_units: operation.amount_base_units.clone(),
+                    slippage_bps: 50,
+                };
+                let swap = operation.swap.as_mut().unwrap();
+                let api = swap.api.as_mut().unwrap();
+                let terms = api.jupiter.as_mut().unwrap();
+                crate::tx::jupiter::tests::add_fee(
+                    &mut terms.order,
+                    &request,
+                    from_input,
+                    embedded,
+                );
+                let checked =
+                    crate::tx::jupiter::validate_order(&terms.order, &request, &[]).unwrap();
+                *rpc.fee_account_mint.lock().unwrap() =
+                    Some(checked.fee_token_accounts[0].1.clone());
+                terms.message_hash = checked.message_hash;
+                swap.quoted_output = terms.order.quoted_output_base_units.clone();
+                swap.minimum_received = terms.order.minimum_output_base_units.clone();
+                let RouteTransaction::Solana { transaction, .. } = &mut api.transaction else {
+                    unreachable!()
+                };
+                *transaction = terms.order.transaction_base64.clone();
+            }
+            rpc.bad_fee_account.store(true, Ordering::SeqCst);
+            assert!(
+                runtime()
+                    .block_on(crate::jupiter::prepare(&state, &rpc, &id))
+                    .is_err()
+            );
+            assert!(operation(&state, &id).attempts.is_empty());
+            rpc.bad_fee_account.store(false, Ordering::SeqCst);
+            let prepared = runtime()
+                .block_on(crate::jupiter::prepare(&state, &rpc, &id))
+                .unwrap();
+            let signed = operation(&state, &id).attempts[0].raw_tx.clone();
+            rpc.bad_fee_account.store(true, Ordering::SeqCst);
+            assert!(
+                runtime()
+                    .block_on(crate::jupiter::submit(&state, &rpc, &id, &prepared.tx_hash))
+                    .is_err()
+            );
+            assert!(rpc.sent.lock().unwrap().is_empty());
+            rpc.bad_fee_account.store(false, Ordering::SeqCst);
+            rpc.fail_send.store(true, Ordering::SeqCst);
+            runtime()
+                .block_on(crate::jupiter::submit(&state, &rpc, &id, &prepared.tx_hash))
+                .unwrap();
+            runtime()
+                .block_on(crate::jupiter::sync(&state, &rpc, &id))
+                .unwrap();
+            assert!(crate::uniswap::local_swap_confirmed(&operation(
+                &state, &id
+            )));
+            assert_eq!(operation(&state, &id).attempts[0].raw_tx, signed);
+            assert_eq!(rpc.sent.lock().unwrap().len(), 1);
+            std::fs::remove_dir_all(directory).unwrap();
+        }
+    }
+}
+
+#[test]
+fn jupiter_service_success_and_wrong_delivery_never_replace_chain_proof() {
+    for report_only in [false, true] {
+        let (directory, state, id) = setup_jupiter();
+        let rpc = MockRpc::default();
+        rpc.report_only.store(report_only, Ordering::SeqCst);
+        rpc.bad_delivery.store(!report_only, Ordering::SeqCst);
+        let prepared = runtime()
+            .block_on(crate::jupiter::prepare(&state, &rpc, &id))
+            .unwrap();
+        runtime()
+            .block_on(crate::jupiter::submit(&state, &rpc, &id, &prepared.tx_hash))
+            .unwrap();
+        runtime()
+            .block_on(crate::jupiter::sync(&state, &rpc, &id))
+            .unwrap();
+        assert!(!crate::uniswap::local_swap_confirmed(&operation(
+            &state, &id
+        )));
+        assert!(
+            runtime()
+                .block_on(crate::jupiter::submit(&state, &rpc, &id, &prepared.tx_hash))
+                .is_err()
+        );
+        assert_eq!(rpc.sent.lock().unwrap().len(), 1);
+        assert!(crate::uniswap::cancel(&state, &id).is_err());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+}
+
+#[test]
 fn native_inclusion_allows_another_swap_but_never_reuses_an_existing_signature() {
     let (directory, state, id) = setup();
     let provider = MockRpc::default();
@@ -334,7 +693,7 @@ fn persists_native_bytes_before_broadcast_and_completes_on_inclusion_while_track
     let stored = crate::storage::read_stored_wallet(&directory.join("wallet.json"))
         .unwrap()
         .unwrap();
-    assert_eq!(stored.version, 15);
+    assert_eq!(stored.version, 16);
     let decrypted = crate::storage::decrypt_wallet(&stored, password).unwrap();
     assert_eq!(decrypted.wallet().operations[0], saved);
     let before = state.clone();
@@ -375,6 +734,7 @@ fn persists_native_bytes_before_broadcast_and_completes_on_inclusion_while_track
     assert_eq!(provider.sent.lock().unwrap().len(), 1);
     std::fs::remove_dir_all(directory).unwrap();
 }
+
 #[test]
 fn rejects_wrong_genesis_simulation_failure_and_stale_snapshots_without_signing() {
     for failure in 0..3 {
@@ -403,6 +763,7 @@ fn rejects_wrong_genesis_simulation_failure_and_stale_snapshots_without_signing(
         std::fs::remove_dir_all(directory).unwrap();
     }
 }
+
 #[test]
 fn stale_or_late_signature_observations_cannot_release_native_protection() {
     for late in [false, true] {

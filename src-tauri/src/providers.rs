@@ -68,6 +68,7 @@ pub(crate) mod cctp_native;
 pub(crate) mod cctp_solana;
 pub(crate) mod evm;
 pub(crate) mod http;
+pub(crate) mod jupiter;
 pub(crate) mod prices;
 pub(crate) mod solana;
 pub(crate) mod tron;

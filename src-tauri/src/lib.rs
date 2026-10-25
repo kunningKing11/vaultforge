@@ -12,6 +12,7 @@ mod cctp_native;
 mod commands;
 mod derivation;
 mod dto;
+mod jupiter;
 mod operations;
 mod providers;
 mod registry;

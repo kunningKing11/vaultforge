@@ -15,6 +15,7 @@ import { assetKey, sortAssetsForSelection, sortNetworksForSelection } from "./mo
 import { slippageBasisPoints } from "./slippage";
 import { SlippagePicker } from "./SlippagePicker";
 import { SwapFiatValue } from "./SwapFiatValue";
+import { SwapPlatformFee } from "./SwapPlatformFee";
 import { SwapRoutePreview } from "./SwapRoutePreview";
 import { SwapStepper } from "./SwapStepper";
 import { nativeSwapToken, quoteProvider } from "./uniswapFlow";
@@ -353,6 +354,7 @@ export function UniswapView({
                         ? " · Highest token output"
                         : ""}
                     </Button>
+                    <SwapPlatformFee trade={option} assets={assets} />
                     <Text font="caption" color="fgMuted">
                       Maximum {option.approval_required ? "approval" : "swap"} network fee:{" "}
                       {formatWei(
@@ -384,6 +386,7 @@ export function UniswapView({
               <VStack background="bgSecondary" borderRadius={300} padding={3} gap={2}>
                 <Text font="headline">{quoteProvider(quote)}</Text>
                 <SwapRoutePreview route={quote.route} />
+                <SwapPlatformFee trade={quote} assets={assets} />
                 <Text font="headline">
                   Expected:{" "}
                   {formatWei(quote.quoted_output, quote.output_decimals, quote.output_decimals)}{" "}
@@ -501,6 +504,16 @@ export function UniswapView({
                 )}
                 currency={fiatCurrency}
                 rate={usdExchangeRate}
+              />
+              <SwapPlatformFee
+                trade={{
+                  api: operation.terms.api,
+                  amount_base_units: operation.amount_base_units,
+                  input_decimals: operation.terms.input_decimals,
+                  network: operation.network,
+                  token_in: operation.token_in,
+                }}
+                assets={assets}
               />
               {(operation.terms.relay || operation.terms.api) && (
                 <SwapRoutePreview

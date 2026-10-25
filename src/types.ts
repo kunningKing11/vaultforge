@@ -297,7 +297,20 @@ export type RelayTerms = {
 };
 
 export type ApiSwap = {
-  provider: "lifi" | "relay";
+  provider: "jupiter" | "lifi" | "relay";
+  jupiter?: {
+    order: {
+      request_id: string;
+      router: string;
+      transaction_base64: string;
+      quoted_output_base_units: string;
+      minimum_output_base_units: string;
+      raw_response: unknown;
+    };
+    message_hash: string;
+    last_valid_height: number;
+    deadline: number;
+  } | null;
   request_id: string;
   route: SwapRouteNode[];
   transaction:

@@ -125,6 +125,77 @@ function render(
 }
 
 describe("Uniswap screen", () => {
+  test("shows Jupiter percentages and USD input-based estimates for each route and selected quote", () => {
+    const choices = assets.map((asset, index) => ({
+      ...asset,
+      network: "solana" as const,
+      token_address: `mint-${index}`,
+      price_usd: index === 0 ? 2 : 9999,
+    }));
+    const jupiter = (bps: number): UniswapQuote => ({
+      ...quote,
+      id: `jupiter-${bps}`,
+      network: "solana",
+      destination_network: "solana",
+      token_in: "mint-0",
+      token_out: "mint-1",
+      amount_base_units: "50000000",
+      approval_required: false,
+      approval_max_fee: null,
+      swap_max_fee: "5000",
+      api: {
+        provider: "jupiter",
+        jupiter: {
+          order: {
+            raw_response: {
+              feeBps: bps,
+              platformFee: { feeBps: bps, amount: "123456789", feeMint: "mint-1" },
+            },
+          },
+        },
+      } as NonNullable<UniswapQuote["api"]>,
+    });
+    const value = controller();
+    value.data.networks = ["solana"];
+    value.quote = jupiter(20);
+    value.quotes = [value.quote, jupiter(50)];
+    const html = render(value, choices, "EUR", 0.8);
+    expect(html.match(/Jupiter platform fee: 0\.2%/g)?.length).toBe(2);
+    expect(html).toContain("Jupiter platform fee: 0.5%");
+    expect(html).toContain(`${money(0.2, "USD")} USD of initial input`);
+    expect(html).toContain(`${money(0.5, "USD")} USD of initial input`);
+  });
+  test("uses a saved Jupiter operation's original input amount for the fee review", () => {
+    const choices = assets.map((asset, index) => ({
+      ...asset,
+      network: "solana" as const,
+      token_address: `mint-${index}`,
+      price_usd: 2,
+    }));
+    const saved = operation();
+    saved.network = "solana";
+    saved.token_in = "mint-0";
+    saved.token_out = "mint-1";
+    saved.amount_base_units = "100000000";
+    saved.terms.api = {
+      provider: "jupiter",
+      jupiter: {
+        order: {
+          raw_response: {
+            feeBps: 20,
+            platformFee: { feeBps: 20 },
+          },
+        },
+      },
+    } as NonNullable<UniswapQuote["api"]>;
+    const value = controller([saved]);
+    value.data.networks = ["solana"];
+    const html = render(value, choices, "EUR", 0.8);
+    expect(html).toContain("Jupiter platform fee: 0.2%");
+    expect(html).toContain(`${money(0.4, "USD")} USD of initial input`);
+    expect(html).toContain("included");
+  });
+
   test("keeps an unconfirmed approval pending without offering another approval", () => {
     const saved = operation();
     saved.attempt_status = "Submitted";

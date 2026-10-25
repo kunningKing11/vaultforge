@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum RouteProvider {
+    Jupiter,
     Lifi,
     Relay,
 }
@@ -24,6 +25,8 @@ pub(crate) enum RouteTransaction {
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct ApiSwap {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) jupiter: Option<crate::jupiter::JupiterTerms>,
     pub(crate) provider: RouteProvider,
     pub(crate) request_id: String,
     pub(crate) route: Vec<RouteNode>,
@@ -248,7 +251,47 @@ pub(crate) async fn quote(
         return Err("Select different assets and a positive input amount".into());
     }
     crate::providers::uniswap::minimum_output(1, bps)?;
+    let mut jupiter = None;
     let (id, expected, minimum, transaction, tool) = match provider {
+        RouteProvider::Jupiter => {
+            if network != "solana" {
+                return Err("Jupiter requires same-chain Solana".into());
+            }
+            let request = crate::providers::jupiter::OrderRequest {
+                taker: sender.clone(),
+                input_mint: input.into(),
+                output_mint: output.into(),
+                amount_base_units: amount.into(),
+                slippage_bps: bps,
+            };
+            let order = crate::providers::jupiter::get_order(client, &request).await?;
+            let lookups =
+                crate::swap_solana::order_lookups(client, &order.transaction_base64).await?;
+            let validated = crate::tx::jupiter::validate_order(&order, &request, &lookups)?;
+            let last_valid_height = crate::jupiter::last_valid_height(&order)?;
+            let deadline = crate::jupiter::deadline(&order)?;
+            let result = (
+                order.request_id.clone(),
+                units(&serde_json::Value::String(
+                    order.quoted_output_base_units.clone(),
+                ))?,
+                units(&serde_json::Value::String(
+                    order.minimum_output_base_units.clone(),
+                ))?,
+                RouteTransaction::Solana {
+                    transaction: order.transaction_base64.clone(),
+                    lookups,
+                },
+                "Jupiter (Metis)".into(),
+            );
+            jupiter = Some(crate::jupiter::JupiterTerms {
+                order,
+                message_hash: validated.message_hash,
+                last_valid_height,
+                deadline,
+            });
+            result
+        }
         RouteProvider::Lifi => {
             let body =
                 crate::providers::lifi::quote(client, &config, &sender, input, output, amount, bps)
@@ -410,7 +453,12 @@ pub(crate) async fn quote(
             via: None,
         },
     ];
+    let deadline = jupiter
+        .as_ref()
+        .map(|terms| terms.deadline)
+        .unwrap_or_else(|| crate::uniswap::now() + 1200);
     let api = ApiSwap {
+        jupiter,
         provider,
         request_id: id,
         route: route.clone(),
@@ -476,7 +524,7 @@ pub(crate) async fn quote(
         minimum_received: minimum.to_string(),
         slippage_bps: bps,
         pool_fee: None,
-        deadline: crate::uniswap::now() + 1200,
+        deadline,
         approval_required,
         approval_max_fee: approval_required.then(|| fee.to_string()),
         swap_max_fee: (!approval_required).then(|| fee.to_string()),

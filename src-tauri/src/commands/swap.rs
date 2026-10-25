@@ -1,5 +1,4 @@
-//! Tauri boundary for local Uniswap and verified same-chain/cross-chain routes. Signing and storage stay in Rust.
-
+//! Tauri command dispatch for direct and routed swaps.
 use std::sync::Mutex;
 use tauri::State;
 
@@ -56,19 +55,22 @@ pub(crate) async fn prepare_uniswap_swap(
     clients: State<'_, ProviderClients>,
     operation_id: String,
 ) -> Result<UniswapPreparedStep, String> {
-    let native = {
+    let (jupiter, native) = {
         let guard = state.lock().map_err(|_| "State lock failed")?;
-        guard
-            .wallet
-            .as_ref()
-            .and_then(|wallet| {
-                wallet
-                    .operations
-                    .iter()
-                    .find(|operation| operation.id == operation_id)
-            })
-            .is_some_and(crate::swap_routes::is_solana)
+        let operation = guard.wallet.as_ref().and_then(|wallet| {
+            wallet
+                .operations
+                .iter()
+                .find(|operation| operation.id == operation_id)
+        });
+        (
+            operation.is_some_and(crate::jupiter::is_jupiter),
+            operation.is_some_and(crate::swap_routes::is_solana),
+        )
     };
+    if jupiter {
+        return crate::jupiter::prepare(state.inner(), clients.http(), &operation_id).await;
+    }
     if native {
         return crate::swap_solana::prepare(state.inner(), clients.http(), &operation_id).await;
     }
@@ -89,19 +91,28 @@ pub(crate) async fn submit_uniswap_swap(
     operation_id: String,
     expected_hash: String,
 ) -> Result<WalletSession, String> {
-    let native = {
+    let (jupiter, native) = {
         let guard = state.lock().map_err(|_| "State lock failed")?;
-        guard
-            .wallet
-            .as_ref()
-            .and_then(|wallet| {
-                wallet
-                    .operations
-                    .iter()
-                    .find(|operation| operation.id == operation_id)
-            })
-            .is_some_and(crate::swap_routes::is_solana)
+        let operation = guard.wallet.as_ref().and_then(|wallet| {
+            wallet
+                .operations
+                .iter()
+                .find(|operation| operation.id == operation_id)
+        });
+        (
+            operation.is_some_and(crate::jupiter::is_jupiter),
+            operation.is_some_and(crate::swap_routes::is_solana),
+        )
     };
+    if jupiter {
+        return crate::jupiter::submit(
+            state.inner(),
+            clients.http(),
+            &operation_id,
+            &expected_hash,
+        )
+        .await;
+    }
     if native {
         return crate::swap_solana::submit(
             state.inner(),
@@ -128,19 +139,22 @@ pub(crate) async fn sync_uniswap_swap(
     clients: State<'_, ProviderClients>,
     operation_id: String,
 ) -> Result<WalletSession, String> {
-    let native = {
+    let (jupiter, native) = {
         let guard = state.lock().map_err(|_| "State lock failed")?;
-        guard
-            .wallet
-            .as_ref()
-            .and_then(|wallet| {
-                wallet
-                    .operations
-                    .iter()
-                    .find(|operation| operation.id == operation_id)
-            })
-            .is_some_and(crate::swap_routes::is_solana)
+        let operation = guard.wallet.as_ref().and_then(|wallet| {
+            wallet
+                .operations
+                .iter()
+                .find(|operation| operation.id == operation_id)
+        });
+        (
+            operation.is_some_and(crate::jupiter::is_jupiter),
+            operation.is_some_and(crate::swap_routes::is_solana),
+        )
     };
+    if jupiter {
+        return crate::jupiter::sync(state.inner(), clients.http(), &operation_id).await;
+    }
     if native {
         return crate::swap_solana::sync(state.inner(), clients.http(), &operation_id).await;
     }

@@ -59,7 +59,7 @@ The below items are the priorities for this project and an item will probably ge
       - [x] same-chain
       - [ ] cross-chain
       - [ ] multiple pools
-    - [ ] Jupiter
+    - [x] Jupiter (Metis router)
     - [ ] Aerodrome
     - [ ] Raydium
     - [ ] Meteora
