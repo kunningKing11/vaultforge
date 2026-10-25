@@ -27,6 +27,7 @@ fn recovery_state(path: PathBuf) -> AppState {
         auto_lock_timeout_secs: Some(60),
         use_crypto_symbols: false,
         hide_below_usd: crate::dto::default_hide_below_usd(),
+        group_assets_by_chain: false,
     });
     state.stored_wallet = Some(StoredWalletMetadata {
         wallet_name: "Recovery wallet".to_string(),
@@ -56,6 +57,7 @@ fn applies_all_wallet_settings_together() {
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
         hide_below_usd: crate::dto::default_hide_below_usd(),
+        group_assets_by_chain: false,
     };
 
     apply_wallet_settings(
@@ -66,6 +68,7 @@ fn applies_all_wallet_settings_together() {
         Some(300),
         true,
         2.5,
+        true,
     );
 
     assert_eq!(wallet.name, "Renamed wallet");
@@ -74,6 +77,7 @@ fn applies_all_wallet_settings_together() {
     assert_eq!(wallet.auto_lock_timeout_secs, Some(300));
     assert!(wallet.use_crypto_symbols);
     assert_eq!(wallet.hide_below_usd, 2.5);
+    assert!(wallet.group_assets_by_chain);
 }
 
 #[test]
@@ -172,6 +176,7 @@ fn unlock_migrates_legacy_filecoin_addresses() {
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
         hide_below_usd: crate::dto::default_hide_below_usd(),
+        group_assets_by_chain: false,
     };
     refresh_filecoin_address(&mut wallet).unwrap();
     assert_eq!(

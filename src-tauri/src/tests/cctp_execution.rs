@@ -137,6 +137,7 @@ pub(crate) fn execution_state(directory: &Path) -> Mutex<AppState> {
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
         hide_below_usd: crate::dto::default_hide_below_usd(),
+        group_assets_by_chain: false,
     });
     state.encryption_key = Some([9; 32]);
     state.storage_salt = Some(vec![2; 16]);

@@ -57,6 +57,7 @@ export type WalletSession = {
   auto_lock_timeout_secs: number | null;
   use_crypto_symbols: boolean;
   hide_below_usd: number;
+  group_assets_by_chain: boolean;
 };
 
 export type CctpAttestationProgress = {

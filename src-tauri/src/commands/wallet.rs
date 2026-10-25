@@ -75,6 +75,7 @@ fn apply_wallet_settings(
     auto_lock_timeout_secs: Option<u64>,
     use_crypto_symbols: bool,
     hide_below_usd: f64,
+    group_assets_by_chain: bool,
 ) {
     wallet.name = clean_name(name);
     wallet.fiat_currency = fiat_currency;
@@ -82,6 +83,7 @@ fn apply_wallet_settings(
     wallet.auto_lock_timeout_secs = auto_lock_timeout_secs;
     wallet.use_crypto_symbols = use_crypto_symbols;
     wallet.hide_below_usd = hide_below_usd;
+    wallet.group_assets_by_chain = group_assets_by_chain;
 }
 
 fn validate_hide_below_usd(hide_below_usd: f64) -> Result<(), String> {
@@ -100,6 +102,7 @@ pub(crate) async fn update_wallet_settings(
     auto_lock_timeout_secs: Option<u64>,
     use_crypto_symbols: bool,
     hide_below_usd: f64,
+    group_assets_by_chain: bool,
 ) -> Result<WalletSession, String> {
     let (wallet_generation, current_currency, current_exchange_rate) = {
         let state = state.lock().map_err(|_| "State lock failed")?;
@@ -140,6 +143,7 @@ pub(crate) async fn update_wallet_settings(
         auto_lock_timeout_secs,
         use_crypto_symbols,
         hide_below_usd,
+        group_assets_by_chain,
     );
     state.advance_wallet_generation();
     persist_state_wallet(&mut state)?;
@@ -202,6 +206,7 @@ pub(crate) async fn create_wallet(
         auto_lock_timeout_secs,
         use_crypto_symbols,
         hide_below_usd: default_hide_below_usd(),
+        group_assets_by_chain: true,
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;
@@ -271,6 +276,7 @@ pub(crate) async fn import_wallet(
         auto_lock_timeout_secs,
         use_crypto_symbols,
         hide_below_usd: default_hide_below_usd(),
+        group_assets_by_chain: true,
     };
 
     let mut state = state.lock().map_err(|_| "State lock failed")?;

@@ -97,6 +97,7 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
                 auto_lock_timeout_secs: None,
                 use_crypto_symbols: false,
                 hide_below_usd: default_hide_below_usd(),
+                group_assets_by_chain: false,
             };
         }
 
@@ -113,6 +114,7 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
             auto_lock_timeout_secs: None,
             use_crypto_symbols: false,
             hide_below_usd: default_hide_below_usd(),
+            group_assets_by_chain: false,
         };
     };
 
@@ -130,6 +132,7 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
             auto_lock_timeout_secs: None,
             use_crypto_symbols: false,
             hide_below_usd: default_hide_below_usd(),
+            group_assets_by_chain: false,
         };
     }
 
@@ -175,6 +178,7 @@ pub(crate) fn session_from_state(state: &AppState) -> WalletSession {
         auto_lock_timeout_secs: wallet.auto_lock_timeout_secs,
         use_crypto_symbols: wallet.use_crypto_symbols,
         hide_below_usd: wallet.hide_below_usd,
+        group_assets_by_chain: wallet.group_assets_by_chain,
     }
 }
 

@@ -47,6 +47,7 @@ fn evm_transfer_validation_does_not_reject_using_cached_balances() {
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
         hide_below_usd: crate::dto::default_hide_below_usd(),
+        group_assets_by_chain: false,
     };
     let recipient = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
 
@@ -155,6 +156,7 @@ fn token_transfer_validation_uses_contract_or_mint_identity() {
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
         hide_below_usd: crate::dto::default_hide_below_usd(),
+        group_assets_by_chain: false,
     };
 
     assert!(
@@ -211,6 +213,7 @@ fn transfer_validation_rejects_malformed_amounts_and_mints() {
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
         hide_below_usd: crate::dto::default_hide_below_usd(),
+        group_assets_by_chain: false,
     };
     let recipient = "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ";
     let mint = "So11111111111111111111111111111111111111112";
@@ -333,6 +336,7 @@ fn validates_solana_token_transfer_recipient_as_solana_address() {
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
         hide_below_usd: crate::dto::default_hide_below_usd(),
+        group_assets_by_chain: false,
     };
 
     assert!(

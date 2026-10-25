@@ -51,6 +51,7 @@ export const walletApi = {
     autoLockTimeoutSecs: number | null;
     useCryptoSymbols: boolean;
     hideBelowUsd: number;
+    groupAssetsByChain: boolean;
   }) => invoke<WalletSession>("update_wallet_settings", args),
   signTransaction: (args: {
     to: string;

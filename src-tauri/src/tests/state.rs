@@ -32,6 +32,7 @@ fn locked_session_does_not_expose_secrets() {
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
         hide_below_usd: crate::dto::default_hide_below_usd(),
+        group_assets_by_chain: false,
     };
     state.wallet = Some(wallet);
     state.locked = true;
@@ -84,6 +85,7 @@ fn unlocked_tron_state() -> AppState {
         auto_lock_timeout_secs: None,
         use_crypto_symbols: false,
         hide_below_usd: crate::dto::default_hide_below_usd(),
+        group_assets_by_chain: true,
     });
     state
 }
@@ -148,4 +150,5 @@ fn unlocked_session_includes_cached_tron_portfolio_data() {
     assert_eq!(session.fiat_currency, Some(FiatCurrency::Usd));
     assert_eq!(session.usd_exchange_rate, Some(1.0));
     assert!(!session.use_crypto_symbols);
+    assert!(session.group_assets_by_chain);
 }

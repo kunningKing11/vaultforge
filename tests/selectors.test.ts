@@ -48,6 +48,7 @@ function unlockWallet() {
     auto_lock_timeout_secs: null,
     use_crypto_symbols: false,
     hide_below_usd: 1,
+    group_assets_by_chain: false,
   };
   const wallet = walletStateFromSession(session);
   if (wallet.status !== "unlocked") throw new Error("Expected unlocked test wallet");

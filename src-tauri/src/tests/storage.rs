@@ -39,6 +39,7 @@ fn encrypts_and_decrypts_wallet_payload() {
         auto_lock_timeout_secs: Some(300),
         use_crypto_symbols: true,
         hide_below_usd: crate::dto::default_hide_below_usd(),
+        group_assets_by_chain: true,
     };
     wallet.activity[0].asset = Some(AssetIdentity::new("ethereum", Some("0xABC")));
     wallet.activity[0].counter_asset = Some(AssetIdentity::new("base", Some("0xABC")));
@@ -94,6 +95,10 @@ fn encrypts_and_decrypts_wallet_payload() {
     assert_eq!(
         decrypted.wallet().use_crypto_symbols,
         wallet.use_crypto_symbols
+    );
+    assert_eq!(
+        decrypted.wallet().group_assets_by_chain,
+        wallet.group_assets_by_chain
     );
     let (decrypted_wallet, decrypted_key, decrypted_salt) = decrypted.into_parts();
     assert_eq!(decrypted_wallet.mnemonic, wallet.mnemonic);
@@ -162,7 +167,7 @@ fn encrypts_and_decrypts_wallet_payload() {
 }
 
 #[test]
-fn legacy_payloads_default_the_hide_below_cutoff_to_one_dollar() {
+fn legacy_payloads_default_the_missing_display_preferences() {
     let payload: WalletPayload = serde_json::from_value(serde_json::json!({
         "wallet_name": "Legacy",
         "mnemonic": "test mnemonic",
@@ -174,4 +179,5 @@ fn legacy_payloads_default_the_hide_below_cutoff_to_one_dollar() {
     }))
     .unwrap();
     assert_eq!(payload.hide_below_usd, 1.0);
+    assert!(!payload.group_assets_by_chain);
 }

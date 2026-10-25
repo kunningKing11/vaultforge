@@ -1479,7 +1479,19 @@ function WalletView({
   toast: ToastFn;
   wallet: Extract<WalletState, { status: "unlocked" }>;
 }) {
-  const [collapseAssets, setCollapseAssets] = useState(false);
+  const saveGroupAssets = useCallback(
+    (groupAssetsByChain: boolean) => {
+      void onSaveSettings({
+        name: wallet.name,
+        fiatCurrency: wallet.fiatCurrency,
+        autoLockTimeoutSecs: wallet.autoLockTimeoutSecs,
+        useCryptoSymbols: wallet.useCryptoSymbols,
+        hideBelowUsd: wallet.hideBelowUsd,
+        groupAssetsByChain,
+      });
+    },
+    [onSaveSettings, wallet],
+  );
   if (state.navigation.currentView === "send") {
     return (
       <SendView
@@ -1519,7 +1531,13 @@ function WalletView({
       />
     );
   if (state.navigation.currentView === "assets")
-    return <AssetsView wallet={wallet} collapse={collapseAssets} onCollapse={setCollapseAssets} />;
+    return (
+      <AssetsView
+        wallet={wallet}
+        collapse={wallet.groupAssetsByChain}
+        onCollapse={saveGroupAssets}
+      />
+    );
   if (state.navigation.currentView === "activity")
     return <ActivityView copyText={copyText} setState={setState} state={state} wallet={wallet} />;
   if (state.navigation.currentView === "settings") {
@@ -1539,8 +1557,8 @@ function WalletView({
     <DashboardView
       selectView={selectView}
       wallet={wallet}
-      collapse={collapseAssets}
-      onCollapse={setCollapseAssets}
+      collapse={wallet.groupAssetsByChain}
+      onCollapse={saveGroupAssets}
     />
   );
 }
@@ -2879,6 +2897,7 @@ function SettingsView({
   const [autoLockTimeoutSecs, setAutoLockTimeoutSecs] = useState(wallet.autoLockTimeoutSecs);
   const [useCryptoSymbols, setUseCryptoSymbols] = useState(wallet.useCryptoSymbols);
   const [hideBelowUsd, setHideBelowUsd] = useState(String(wallet.hideBelowUsd));
+  const [groupAssetsByChain, setGroupAssetsByChain] = useState(wallet.groupAssetsByChain);
   const hideBelowParsed = Number(hideBelowUsd);
   const hideBelowValid =
     hideBelowUsd.trim() !== "" && Number.isFinite(hideBelowParsed) && hideBelowParsed >= 0;
@@ -2891,6 +2910,7 @@ function SettingsView({
       autoLockTimeoutSecs,
       useCryptoSymbols,
       hideBelowUsd: hideBelowParsed,
+      groupAssetsByChain,
     });
   };
   return (
@@ -2941,6 +2961,12 @@ function SettingsView({
             onChange={(event) => setUseCryptoSymbols(event.target.checked)}
           >
             Use crypto symbols where available
+          </Switch>
+          <Switch
+            checked={groupAssetsByChain}
+            onChange={(event) => setGroupAssetsByChain(event.target.checked)}
+          >
+            Group assets across chains
           </Switch>
           <ColorSchemeToggle colorScheme={colorScheme} setColorScheme={setColorScheme} />
           <Button disabled={!hideBelowValid} loading={busy} type="submit">

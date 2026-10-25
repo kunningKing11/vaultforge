@@ -17,6 +17,7 @@ function session(overrides: Partial<WalletSession> = {}): WalletSession {
     auto_lock_timeout_secs: 300,
     use_crypto_symbols: true,
     hide_below_usd: 1,
+    group_assets_by_chain: true,
     ...overrides,
   };
 }
@@ -60,6 +61,19 @@ describe("wallet session transitions", () => {
     });
   });
 
+  test("maps the persisted chain-grouping preference", () => {
+    expect(walletStateFromSession(session({ group_assets_by_chain: true }))).toMatchObject({
+      status: "unlocked",
+      groupAssetsByChain: true,
+    });
+    expect(
+      walletStateFromSession(session({ group_assets_by_chain: null as unknown as boolean })),
+    ).toMatchObject({
+      status: "unlocked",
+      groupAssetsByChain: false,
+    });
+  });
+
   test("normalizes an unlocked session and filters unknown networks", () => {
     expect(
       walletStateFromSession(
@@ -82,6 +96,7 @@ describe("wallet session transitions", () => {
       autoLockTimeoutSecs: 300,
       useCryptoSymbols: true,
       hideBelowUsd: 1,
+      groupAssetsByChain: true,
     });
   });
 

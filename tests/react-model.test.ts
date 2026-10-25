@@ -33,6 +33,7 @@ const unlockedSession: WalletSession = {
   auto_lock_timeout_secs: null,
   use_crypto_symbols: false,
   hide_below_usd: 1,
+  group_assets_by_chain: false,
 };
 
 const ethereumAsset: Asset = {

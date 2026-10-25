@@ -63,6 +63,8 @@ pub(crate) struct Wallet {
     pub(crate) use_crypto_symbols: bool,
     #[serde(default = "default_hide_below_usd")]
     pub(crate) hide_below_usd: f64,
+    #[serde(default)]
+    pub(crate) group_assets_by_chain: bool,
 }
 
 impl Drop for Wallet {
@@ -98,6 +100,8 @@ pub(crate) struct WalletPayload {
     pub(crate) use_crypto_symbols: bool,
     #[serde(default = "default_hide_below_usd")]
     pub(crate) hide_below_usd: f64,
+    #[serde(default)]
+    pub(crate) group_assets_by_chain: bool,
 }
 
 fn default_enabled_networks() -> Vec<String> {
@@ -175,6 +179,7 @@ pub(crate) struct WalletSession {
     #[serde(default)]
     pub(crate) use_crypto_symbols: bool,
     pub(crate) hide_below_usd: f64,
+    pub(crate) group_assets_by_chain: bool,
 }
 
 #[derive(Clone, Serialize)]
