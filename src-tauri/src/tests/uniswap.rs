@@ -1257,8 +1257,10 @@ fn routed_deposit_stays_pending_until_destination_finality_and_survives_restart(
     order["output"]["payments"][0]["minimumAmount"] = serde_json::json!("1990000");
     order["output"]["payments"][0]["expectedAmount"] = serde_json::json!("2000000");
     order["output"]["payments"][0]["recipient"] = serde_json::json!(op.sender);
+    order["output"]["deadline"] = serde_json::json!(4102444800u64);
     for refund in order["inputs"][0]["refunds"].as_array_mut().unwrap() {
         refund["recipient"] = serde_json::json!(op.sender);
+        refund["deadline"] = serde_json::json!(4102444800u64);
     }
     let relay = crate::providers::relay::RelayData {
         destination_network: "optimism".into(),

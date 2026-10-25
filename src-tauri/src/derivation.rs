@@ -141,7 +141,7 @@ impl BitcoinAccount {
         let address_xpub = branch_xpub
             .derive_child(index)
             .map_err(|_| "Failed to derive Bitcoin BIP84 address".to_string())?;
-        let public_key = address_xpub.public_key().to_encoded_point(true);
+        let public_key = address_xpub.public_key().to_sec1_point(true);
         let address = bitcoin_bech32_address_from_public_key(public_key.as_bytes(), false)?;
         Ok(BitcoinDerivedAddress { origin, address })
     }

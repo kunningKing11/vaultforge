@@ -3,6 +3,23 @@ use super::*;
 fn fixture() -> Value {
     serde_json::from_str(include_str!("../fixtures/relay-base-optimism.json")).unwrap()
 }
+fn fresh_fixture() -> Value {
+    let mut body = fixture();
+    let order = &mut body["protocol"]["v2"]["orderData"];
+    order["output"]["deadline"] = json!(4102444800u64);
+    for refund in order["inputs"][0]["refunds"].as_array_mut().unwrap() {
+        refund["deadline"] = json!(4102444800u64);
+    }
+    let id = order_id(&body["protocol"]["v2"]["orderData"]).unwrap();
+    body["protocol"]["v2"]["orderId"] = json!(id);
+    let data = body["steps"][0]["items"][0]["data"]["data"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    body["steps"][0]["items"][0]["data"]["data"] =
+        json!(format!("{}{}", &data[..data.len() - 64], &id[2..]));
+    body
+}
 fn parse(body: &Value) -> Result<(RelayData, u128, u128), String> {
     parse_quote(
         body,
@@ -18,7 +35,7 @@ fn parse(body: &Value) -> Result<(RelayData, u128, u128), String> {
 
 #[test]
 fn deposit_binds_every_reviewed_trade_field() {
-    let (relay, expected, minimum) = parse(&fixture()).unwrap();
+    let (relay, expected, minimum) = parse(&fresh_fixture()).unwrap();
     let valid = |route: &RelayData, source, token_in, token_out, sender, amount, min, out| {
         deposit_call(route, source, token_in, token_out, sender, amount, min, out)
     };
@@ -134,7 +151,7 @@ fn order_hash_matches_live_relay_sdk_vector() {
 
 #[test]
 fn parser_rejects_calldata_target_and_slippage_tampering() {
-    let body = fixture();
+    let body = fresh_fixture();
     for replacement in [json!("0x"), json!("0x49290c1c")] {
         let mut invalid = body.clone();
         invalid["steps"][0]["items"][0]["data"]["data"] = replacement;
@@ -153,7 +170,7 @@ fn parser_rejects_calldata_target_and_slippage_tampering() {
 
 #[test]
 fn settlement_requires_matching_receipt_token_recipient_and_minimum() {
-    let (relay, _, minimum) = parse(&fixture()).unwrap();
+    let (relay, _, minimum) = parse(&fresh_fixture()).unwrap();
     let intent = crate::uniswap::SwapIntent {
         api: None,
         network: network_by_id("base").unwrap().clone(),
