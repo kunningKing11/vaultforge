@@ -28,3 +28,23 @@ fn parses_discovered_token_metadata_without_float_amounts() {
     assert_eq!(metadata.decimals, Some(6));
     assert_eq!(metadata.price_usd, Some(0.9998));
 }
+
+#[test]
+fn receipt_tokens_do_not_inherit_the_underlying_price_id() {
+    let mut asset = crate::dto::Asset {
+        network: "solana".into(),
+        token_address: Some("JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD".into()),
+        symbol: "JupUSD".into(),
+        unicode_symbol: None,
+        name: "Jupiter USD".into(),
+        balance: "1000000".into(),
+        decimals: 6,
+        price_usd: 0.0,
+        change_24h: 0.0,
+    };
+    assert_eq!(super::price_id_for_asset(&asset), Some("jupusd"));
+    asset.token_address = Some("7GxATsNMnaC88vdwd2t3mwrFuQwwGvmYPrUQ4D6FotXk".into());
+    assert_eq!(super::price_id_for_asset(&asset), None);
+    asset.token_address = Some("juprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD".into());
+    assert_eq!(super::price_id_for_asset(&asset), None);
+}

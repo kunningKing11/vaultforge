@@ -13,7 +13,7 @@ use crate::providers::prices::{
     CoinGeckoPriceResponse, TokenMetadata, fetch_market_prices, fetch_token_metadata,
     fetch_usd_exchange_rate, price_id_for_asset,
 };
-use crate::registry::network_by_id;
+use crate::registry::{configured_asset, network_by_id};
 use crate::state::{AppState, refresh_result_from_state};
 use crate::storage::persist_state_wallet;
 
@@ -170,7 +170,7 @@ pub(crate) async fn refresh_asset_prices(
     let mut dynamic_tokens = HashMap::<AssetIdentity, TokenMetadata>::new();
     let mut failed_token_networks = BTreeSet::new();
     for asset in assets.iter() {
-        if price_id_for_asset(asset).is_some() {
+        if price_id_for_asset(asset).is_some() || asset.balance == "0" {
             continue;
         }
         let Some(token_address) = asset.token_address.as_deref() else {
@@ -204,11 +204,7 @@ pub(crate) async fn refresh_asset_prices(
         if let Some(metadata) =
             dynamic_tokens.get(&AssetIdentity::new(&asset.network, Some(token_address)))
         {
-            asset.symbol.clone_from(&metadata.symbol);
-            asset.name.clone_from(&metadata.name);
-            if let Some(price) = metadata.price_usd {
-                asset.price_usd = price;
-            }
+            update_token_metadata(asset, metadata);
         }
     }
 
@@ -220,6 +216,18 @@ pub(crate) async fn refresh_asset_prices(
         warnings.push(value_warning("Market prices"));
     }
     warnings
+}
+
+fn update_token_metadata(asset: &mut Asset, metadata: &TokenMetadata) {
+    let configured = network_by_id(&asset.network)
+        .and_then(|network| configured_asset(network, asset.token_address.as_deref()));
+    if configured.is_none() {
+        asset.symbol.clone_from(&metadata.symbol);
+        asset.name.clone_from(&metadata.name);
+    }
+    if let Some(price) = metadata.price_usd {
+        asset.price_usd = price;
+    }
 }
 
 fn preserve_cached_market_data(assets: &mut [Asset], cached_assets: &[Asset]) {

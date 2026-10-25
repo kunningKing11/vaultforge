@@ -45,9 +45,19 @@ const transactionStatusProviderKinds = {
 
 export const DEFAULT_NETWORK_ID: NetworkId = "ethereum";
 
-function validateAsset(asset: NetworkAssetConfig, context: string) {
-  if (!asset.symbol || !asset.name || !asset.coinGeckoId) {
+function validateAsset(
+  asset: NetworkAssetConfig | NetworkTokenConfig,
+  context: string,
+  requirePriceId = true,
+) {
+  if (!asset.symbol || !asset.name || (requirePriceId && !asset.coinGeckoId)) {
     throw new Error(`${context} must define symbol, name, and coinGeckoId`);
+  }
+  if (
+    asset.coinGeckoId !== undefined &&
+    (typeof asset.coinGeckoId !== "string" || !asset.coinGeckoId.trim())
+  ) {
+    throw new Error(`${context} has an invalid coinGeckoId`);
   }
   if (!Number.isInteger(asset.decimals) || asset.decimals < 0) {
     throw new Error(`${context} has invalid decimals`);
@@ -85,7 +95,7 @@ const tokenStandardDefinitions = {
 } satisfies Record<NetworkTokenConfig["standard"], TokenStandardDefinition>;
 
 function validateToken(token: NetworkTokenConfig, context: string, network: Network) {
-  validateAsset(token, context);
+  validateAsset(token, context, false);
   const definition = tokenStandardDefinitions[token.standard];
   if (
     definition.networkKind !== network.kind ||

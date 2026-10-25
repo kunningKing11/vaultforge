@@ -6,6 +6,92 @@ use super::{
 use crate::tx::tx_status::{Execution, Finality, legacy_tx_status};
 
 #[test]
+fn merges_live_solana_balances_with_trusted_metadata_and_confirmed_zeros() {
+    let config = super::solana_config().unwrap();
+    let jup = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
+    let usdc = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    let unknown = bs58::encode([42u8; 32]).into_string();
+    let cached = vec![
+        crate::dto::Asset {
+            symbol: "stale symbol".into(),
+            unicode_symbol: None,
+            name: "stale name".into(),
+            balance: "999999999".into(),
+            decimals: 6,
+            price_usd: 0.5,
+            change_24h: 2.0,
+            network: "solana".into(),
+            token_address: Some(jup.into()),
+        },
+        crate::dto::Asset {
+            symbol: "USDC".into(),
+            unicode_symbol: None,
+            name: "USD Coin".into(),
+            balance: "888888888".into(),
+            decimals: 6,
+            price_usd: 1.0,
+            change_24h: 0.0,
+            network: "solana".into(),
+            token_address: Some(usdc.into()),
+        },
+    ];
+    let accounts = [(jup, 100, 6), (jup, 200, 6), (unknown.as_str(), 42, 9)]
+        .into_iter()
+        .map(|(mint, amount, decimals)| super::SolanaTokenAccount {
+            address: String::new(),
+            mint: mint.into(),
+            amount,
+            decimals,
+        })
+        .collect();
+    let assets = super::solana_token_assets(config, accounts, &cached);
+    assert_eq!(assets.len(), config.tokens.len() + 1);
+    let find = |mint: &str| {
+        assets
+            .iter()
+            .find(|asset| asset.token_address.as_deref() == Some(mint))
+            .unwrap()
+    };
+    assert_eq!(find(jup).balance, "300");
+    assert_eq!(find(jup).symbol, "JUP");
+    assert_eq!(find(jup).name, "Jupiter");
+    assert_eq!(find(jup).decimals, 6);
+    assert_eq!(find(jup).price_usd, 0.5);
+    assert_eq!(find(usdc).balance, "0");
+    assert_eq!(find(&unknown).balance, "42");
+    assert_eq!(find(&unknown).decimals, 9);
+    assert_eq!(find(&unknown).symbol, format!("SPL-{}", &unknown[..6]));
+
+    let mut changed = config.clone();
+    changed
+        .tokens
+        .iter_mut()
+        .find(|token| token.symbol == "JUP")
+        .unwrap()
+        .decimals = 9;
+    for amount in [0, 100] {
+        let assets = super::solana_token_assets(
+            &changed,
+            vec![super::SolanaTokenAccount {
+                address: String::new(),
+                mint: jup.into(),
+                amount,
+                decimals: 6,
+            }],
+            &[],
+        );
+        assert_eq!(
+            assets
+                .iter()
+                .find(|asset| asset.symbol == "JUP")
+                .unwrap()
+                .decimals,
+            6
+        );
+    }
+}
+
+#[test]
 fn parses_classic_solana_mint_and_simulation_preflight() {
     let mint = serde_json::json!({
         "jsonrpc": "2.0",

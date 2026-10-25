@@ -42,7 +42,7 @@ pub(crate) struct AssetConfig {
     pub(crate) unicode_symbol: Option<String>,
     pub(crate) name: String,
     pub(crate) decimals: u32,
-    pub(crate) coin_gecko_id: String,
+    pub(crate) coin_gecko_id: Option<String>,
     pub(crate) token_address: Option<String>,
 }
 

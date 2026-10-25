@@ -304,11 +304,35 @@
         },
         {
           "standard": "erc20",
+          "symbol": "H",
+          "name": "Humanity",
+          "decimals": 18,
+          "tokenAddress": "0xE76c5b78f93909d34404E9eb4C1f19e7582a5dE1",
+          "coinGeckoId": "humanity"
+        },
+        {
+          "standard": "erc20",
           "symbol": "LINK",
           "name": "Chainlink",
           "decimals": 18,
           "tokenAddress": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
           "coinGeckoId": "chainlink"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "PEPE",
+          "name": "Pepe",
+          "decimals": 18,
+          "tokenAddress": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+          "coinGeckoId": "pepe"
+        },
+        {
+          "standard": "erc20",
+          "symbol": "SHIB",
+          "name": "Shiba Inu",
+          "decimals": 18,
+          "tokenAddress": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+          "coinGeckoId": "shiba-inu"
         },
         {
           "standard": "erc20",
@@ -557,6 +581,160 @@
         },
         {
           "standard": "spl",
+          "symbol": "BNSOL",
+          "name": "Binance Staked SOL",
+          "decimals": 9,
+          "tokenAddress": "BNso1VUJnh4zcfpZa6986Ea66P6TCp59hvtNJ8b1X85",
+          "coinGeckoId": "binance-staked-sol"
+        },
+        {
+          "standard": "spl",
+          "symbol": "BONK",
+          "name": "Bonk",
+          "decimals": 5,
+          "tokenAddress": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+          "coinGeckoId": "bonk"
+        },
+        {
+          "standard": "spl",
+          "symbol": "cbBTC",
+          "name": "Coinbase Wrapped BTC",
+          "decimals": 8,
+          "tokenAddress": "cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij",
+          "coinGeckoId": "coinbase-wrapped-btc"
+        },
+        {
+          "standard": "spl",
+          "symbol": "DRIFT",
+          "name": "Drift",
+          "decimals": 6,
+          "tokenAddress": "DriFtupJYLTosbwoN8koMbEYSx54aFAVLddWsbksjwg7",
+          "coinGeckoId": "drift-protocol"
+        },
+        {
+          "standard": "spl",
+          "symbol": "EURC",
+          "name": "EURC",
+          "decimals": 6,
+          "tokenAddress": "HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr",
+          "coinGeckoId": "euro-coin"
+        },
+        {
+          "standard": "spl",
+          "symbol": "FARTCOIN",
+          "name": "Fartcoin",
+          "decimals": 6,
+          "tokenAddress": "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump",
+          "coinGeckoId": "fartcoin"
+        },
+        {
+          "standard": "spl",
+          "symbol": "HNT",
+          "name": "Helium Network Token",
+          "decimals": 8,
+          "tokenAddress": "hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux",
+          "coinGeckoId": "helium"
+        },
+        {
+          "standard": "spl",
+          "symbol": "JitoSOL",
+          "name": "Jito Staked SOL",
+          "decimals": 9,
+          "tokenAddress": "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn",
+          "coinGeckoId": "jito-staked-sol"
+        },
+        {
+          "standard": "spl",
+          "symbol": "jlEURC",
+          "name": "Jupiter Lend EURC",
+          "decimals": 6,
+          "tokenAddress": "GcV9tEj62VncGithz4o4N9x6HWXARxuRgEAYk9zahNA8"
+        },
+        {
+          "standard": "spl",
+          "symbol": "JLP",
+          "name": "Jupiter Perps",
+          "decimals": 6,
+          "tokenAddress": "27G8MtK7VtTcCHkpASjSDdkWWYfoqT6ggEuKidVJidD4",
+          "coinGeckoId": "jupiter-perpetuals-liquidity-provider-token"
+        },
+        {
+          "standard": "spl",
+          "symbol": "jlUSDC",
+          "name": "Jupiter Lend USDC",
+          "decimals": 6,
+          "tokenAddress": "9BEcn9aPEmhSPbPQeFGjidRiEKki46fVQDyPpSQXPA2D"
+        },
+        {
+          "standard": "spl",
+          "symbol": "jlUSDS",
+          "name": "Jupiter Lend USDS",
+          "decimals": 6,
+          "tokenAddress": "j14XLJZSVMcUYpAfajdZRpnfHUpJieZHS4aPektLWvh"
+        },
+        {
+          "standard": "spl",
+          "symbol": "jlUSDT",
+          "name": "Jupiter Lend USDT",
+          "decimals": 6,
+          "tokenAddress": "Cmn4v2wipYV41dkakDvCgFJpxhtaaKt11NyWV8pjSE8A"
+        },
+        {
+          "standard": "spl",
+          "symbol": "jlWSOL",
+          "name": "Jupiter Lend WSOL",
+          "decimals": 9,
+          "tokenAddress": "2uQsyo1fXXQkDtcpXnLofWy88PxcvnfH2L8FPSE62FVU"
+        },
+        {
+          "standard": "spl",
+          "symbol": "JTO",
+          "name": "JITO",
+          "decimals": 9,
+          "tokenAddress": "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL",
+          "coinGeckoId": "jito-governance-token"
+        },
+        {
+          "standard": "spl",
+          "symbol": "JUICED",
+          "name": "Jupiter Lend JupUSD",
+          "decimals": 6,
+          "tokenAddress": "7GxATsNMnaC88vdwd2t3mwrFuQwwGvmYPrUQ4D6FotXk"
+        },
+        {
+          "standard": "spl",
+          "symbol": "JUP",
+          "name": "Jupiter",
+          "decimals": 6,
+          "tokenAddress": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+          "coinGeckoId": "jupiter-exchange-solana"
+        },
+        {
+          "standard": "spl",
+          "symbol": "JupSOL",
+          "name": "Jupiter Staked SOL",
+          "decimals": 9,
+          "tokenAddress": "jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v",
+          "coinGeckoId": "jupiter-staked-sol"
+        },
+        {
+          "standard": "spl",
+          "symbol": "JupUSD",
+          "name": "Jupiter USD",
+          "decimals": 6,
+          "tokenAddress": "JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD",
+          "coinGeckoId": "jupusd"
+        },
+        {
+          "standard": "spl",
+          "symbol": "KMNO",
+          "name": "Kamino",
+          "decimals": 6,
+          "tokenAddress": "KMNo3nJsBXfcpJTVhZcXLW7RmTwTt4GVFE7suUBo9sS",
+          "coinGeckoId": "kamino"
+        },
+        {
+          "standard": "spl",
           "symbol": "LINK",
           "name": "Chainlink (Wormhole)",
           "decimals": 8,
@@ -573,6 +751,77 @@
         },
         {
           "standard": "spl",
+          "symbol": "MELANIA",
+          "name": "Melania Meme",
+          "decimals": 6,
+          "tokenAddress": "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
+          "coinGeckoId": "melania-meme"
+        },
+        {
+          "standard": "spl",
+          "symbol": "MET",
+          "name": "Meteora",
+          "decimals": 6,
+          "tokenAddress": "METvsvVRapdj9cFLzq4Tr43xK4tAjQfwX76z3n6mWQL",
+          "coinGeckoId": "meteora"
+        },
+        {
+          "standard": "spl",
+          "symbol": "ORCA",
+          "name": "Orca",
+          "decimals": 6,
+          "tokenAddress": "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE",
+          "coinGeckoId": "orca"
+        },
+        {
+          "standard": "spl",
+          "symbol": "PEPE",
+          "name": "Pepe",
+          "decimals": 4,
+          "tokenAddress": "PEPEqnuuCDbBC89p1u9vpnP1KQ2oj1xTcQBsjt9X55m"
+        },
+        {
+          "standard": "spl",
+          "symbol": "PENGU",
+          "name": "Pudgy Penguins",
+          "decimals": 6,
+          "tokenAddress": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
+          "coinGeckoId": "pudgy-penguins"
+        },
+        {
+          "standard": "spl",
+          "symbol": "PYTH",
+          "name": "Pyth Network",
+          "decimals": 6,
+          "tokenAddress": "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3",
+          "coinGeckoId": "pyth-network"
+        },
+        {
+          "standard": "spl",
+          "symbol": "RAY",
+          "name": "Raydium",
+          "decimals": 6,
+          "tokenAddress": "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R",
+          "coinGeckoId": "raydium"
+        },
+        {
+          "standard": "spl",
+          "symbol": "RENDER",
+          "name": "Render Token",
+          "decimals": 8,
+          "tokenAddress": "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof",
+          "coinGeckoId": "render-token"
+        },
+        {
+          "standard": "spl",
+          "symbol": "TRUMP",
+          "name": "OFFICIAL TRUMP",
+          "decimals": 6,
+          "tokenAddress": "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
+          "coinGeckoId": "official-trump"
+        },
+        {
+          "standard": "spl",
           "symbol": "UNI",
           "name": "Uniswap (Wormhole)",
           "decimals": 8,
@@ -581,11 +830,75 @@
         },
         {
           "standard": "spl",
+          "symbol": "USD1",
+          "name": "World Liberty Financial USD",
+          "decimals": 6,
+          "tokenAddress": "USD1ttGY1N17NEEHLmELoaybftRBUSErhqYiQzvEmuB",
+          "coinGeckoId": "usd1-wlfi"
+        },
+        {
+          "standard": "spl",
           "symbol": "USDC",
           "name": "USD Coin",
           "decimals": 6,
           "tokenAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
           "coinGeckoId": "usd-coin"
+        },
+        {
+          "standard": "spl",
+          "symbol": "USDe",
+          "name": "USDe",
+          "decimals": 9,
+          "tokenAddress": "DEkqHyPN7GMRJ5cArtQFAWefqbZb33Hyf6s5iCwjEonT",
+          "coinGeckoId": "ethena-usde"
+        },
+        {
+          "standard": "spl",
+          "symbol": "USDS",
+          "name": "USDS",
+          "decimals": 6,
+          "tokenAddress": "USDSwr9ApdHk5bvJKMjzff41FfuX8bSxdKcR81vTwcA",
+          "coinGeckoId": "usds"
+        },
+        {
+          "standard": "spl",
+          "symbol": "USDT",
+          "name": "USDT",
+          "decimals": 6,
+          "tokenAddress": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+          "coinGeckoId": "tether"
+        },
+        {
+          "standard": "spl",
+          "symbol": "USELESS",
+          "name": "USELESS COIN",
+          "decimals": 6,
+          "tokenAddress": "Dz9mQ9NzkBcCsuGPFJ3r1bS4wgqKMHBPiVuniW8Mbonk",
+          "coinGeckoId": "useless-3"
+        },
+        {
+          "standard": "spl",
+          "symbol": "W",
+          "name": "Wormhole Token",
+          "decimals": 6,
+          "tokenAddress": "85VBFQZC9TZkfaptBWjvUw7YbZjy52A6mjtPGjstQAmQ",
+          "coinGeckoId": "wormhole"
+        },
+        {
+          "standard": "spl",
+          "symbol": "WIF",
+          "name": "dogwifhat",
+          "decimals": 6,
+          "tokenAddress": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+          "coinGeckoId": "dogwifcoin"
+        },
+        {
+          "standard": "spl",
+          "symbol": "WSOL",
+          "name": "Wrapped SOL",
+          "decimals": 9,
+          "tokenAddress": "So11111111111111111111111111111111111111112",
+          "coinGeckoId": "wrapped-solana"
         }
       ]
     },

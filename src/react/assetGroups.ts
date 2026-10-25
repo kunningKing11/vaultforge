@@ -73,7 +73,9 @@ export function assetGroups(assets: Asset[], collapse: boolean, cutoff: number):
       return aggregate(id, collapse && funded.length > 0 ? funded : members);
     })
     .filter(
-      (group) => group.members.some((asset) => asset.price_usd <= 0) || group.valueUsd >= cutoff,
+      (group) =>
+        group.valueUsd >= cutoff ||
+        group.members.some((asset) => BigInt(asset.balance) > 0n && !(asset.price_usd > 0)),
     )
     .sort((left, right) => right.valueUsd - left.valueUsd || left.id.localeCompare(right.id));
 }

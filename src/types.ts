@@ -191,7 +191,8 @@ export interface NetworkAssetConfig {
   coinGeckoId: string;
 }
 
-export interface NetworkTokenConfig extends NetworkAssetConfig {
+export interface NetworkTokenConfig extends Omit<NetworkAssetConfig, "coinGeckoId"> {
+  coinGeckoId?: string;
   standard: "erc20" | "spl" | "trc20";
   tokenAddress: string;
 }

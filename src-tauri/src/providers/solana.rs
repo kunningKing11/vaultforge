@@ -2,7 +2,7 @@ use crate::assets::{cached_asset, cached_asset_by_token_address};
 use crate::dto::Asset;
 use crate::providers::NetworkAssetRefresh;
 use crate::providers::http::{json_rpc_result, optional_tx_height, rpc_post};
-use crate::registry::{NetworkConfig, network_by_id};
+use crate::registry::{NetworkConfig, configured_asset, network_by_id};
 use crate::tx::tx_status::{Execution, Finality, TxStatus, legacy_tx_status};
 use std::collections::BTreeMap;
 
@@ -100,32 +100,59 @@ pub(crate) async fn fetch_solana_assets(
         }
     };
 
-    let mut token_balances = BTreeMap::<String, (u128, u8)>::new();
+    assets.extend(solana_token_assets(config, token_accounts, cached_assets));
+    NetworkAssetRefresh {
+        assets,
+        balance_failed,
+    }
+}
+
+/// A complete successful owner-account read proves zero for absent registered mints.
+fn solana_token_assets(
+    config: &NetworkConfig,
+    token_accounts: Vec<SolanaTokenAccount>,
+    cached_assets: &[Asset],
+) -> Vec<Asset> {
+    let mut token_balances = BTreeMap::<String, (u128, u32)>::new();
     for account in token_accounts {
-        if account.amount == 0 {
+        if account.amount == 0 && configured_asset(config, Some(&account.mint)).is_none() {
             continue;
         }
         let entry = token_balances
             .entry(account.mint)
-            .or_insert((0, account.decimals));
-        if entry.1 == account.decimals {
+            .or_insert((0, u32::from(account.decimals)));
+        if entry.1 == u32::from(account.decimals) {
             entry.0 += u128::from(account.amount);
         }
     }
+    for token in &config.tokens {
+        if let Some(mint) = &token.token_address {
+            token_balances
+                .entry(mint.clone())
+                .or_insert((0, token.decimals));
+        }
+    }
 
+    let mut assets = Vec::with_capacity(token_balances.len());
     for (mint, (amount, decimals)) in token_balances {
         let cached = cached_asset_by_token_address(cached_assets, "solana", &mint);
-        let symbol = cached
-            .as_ref()
+        let configured = configured_asset(config, Some(&mint));
+        let symbol = configured
             .map(|asset| asset.symbol.clone())
+            .or_else(|| cached.as_ref().map(|asset| asset.symbol.clone()))
             .unwrap_or_else(|| fallback_solana_token_symbol(&mint));
-        let name = cached
-            .as_ref()
+        let name = configured
             .map(|asset| asset.name.clone())
+            .or_else(|| cached.as_ref().map(|asset| asset.name.clone()))
             .unwrap_or_else(|| format!("SPL Token {}", short_mint(&mint)));
-        let unicode_symbol = cached
-            .as_ref()
-            .and_then(|asset| asset.unicode_symbol.clone());
+        let unicode_symbol = configured.map_or_else(
+            || {
+                cached
+                    .as_ref()
+                    .and_then(|asset| asset.unicode_symbol.clone())
+            },
+            |asset| asset.unicode_symbol.clone(),
+        );
         let price_usd = cached.as_ref().map(|asset| asset.price_usd).unwrap_or(0.0);
         let change_24h = cached.as_ref().map(|asset| asset.change_24h).unwrap_or(0.0);
 
@@ -134,17 +161,14 @@ pub(crate) async fn fetch_solana_assets(
             unicode_symbol,
             name,
             balance: amount.to_string(),
-            decimals: u32::from(decimals),
+            decimals,
             price_usd,
             change_24h,
             network: "solana".to_string(),
             token_address: Some(mint),
         });
     }
-    NetworkAssetRefresh {
-        assets,
-        balance_failed,
-    }
+    assets
 }
 
 fn cached_solana_token_assets(cached_assets: &[Asset]) -> impl Iterator<Item = Asset> + '_ {

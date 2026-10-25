@@ -54,12 +54,27 @@
       "sourcePage": "https://chain.link/brand-assets",
       "usage": "Official project artwork; project brand terms apply."
     },
+    "drift": {
+      "url": "https://www.drift.foundation/icon.svg?b87a46d2e7333d52",
+      "file": "coins/drift.svg",
+      "sha256": "9682d08e72e8e8da4f9497b2017b877118773dfad443e8575aa456fc694be882",
+      "sourcePage": "https://www.drift.foundation",
+      "usage": "Official project artwork; project brand terms apply."
+    },
     "ethereum": {
       "url": "https://ethereum.org/images/assets/svgs/eth-diamond-black-white.svg",
       "file": "chains/ethereum.svg",
       "sha256": "80b0d456357828eedd321b8ed17426c909444f400d51390d9555fa649e20fe64",
       "sourcePage": "https://ethereum.org/en/assets/",
       "usage": "Official project artwork; project brand terms apply."
+    },
+    "eurc": {
+      "url": "https://6778953.fs1.hubspotusercontent-na1.net/hubfs/6778953/Pressroom/brandkit/logo-downloads/eurc.zip",
+      "file": "coins/eurc.svg",
+      "sha256": "6ae03397ca1775169d5371b1e40562714a779e9656ab0ce41ca71f79da0b3e2d",
+      "sourcePage": "https://www.circle.com/pressroom#brand-kit",
+      "usage": "Official project artwork; project brand terms apply.",
+      "archiveMember": "Token Logo/EURC Token.svg"
     },
     "filecoin": {
       "url": "https://filecoin.io",
@@ -69,6 +84,21 @@
       "usage": "Official project artwork; project brand terms apply.",
       "inlineSvgMatch": "id=\"filecoin-logo-icon_svg__Layer_1\""
     },
+    "helium": {
+      "url": "https://raw.githubusercontent.com/helium/docs/main/static/img/icons/logo.svg",
+      "file": "coins/helium.svg",
+      "sha256": "205f6b6ed3373ef5d4ddf171eaa7cb862a34a51fb8f2753135cdfb5ff1078b40",
+      "sourcePage": "https://github.com/helium/docs/tree/main/static/img/icons",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "humanity": {
+      "url": "https://drive.usercontent.google.com/download?id=1QUhYiFJZlSSK-lmcdeLU1OQfdYAe_-6z&export=download",
+      "file": "coins/humanity.svg",
+      "sha256": "19530ba3836ec72601d5e8957e8bf173fd6e212db279ed71602939877be2a7fe",
+      "sourcePage": "https://www.humanity.org/h-token",
+      "usage": "Official project artwork; project brand terms apply.",
+      "brandKit": "https://drive.google.com/drive/folders/1agCB_sH52W0--WerptTO2qN7521XZraL"
+    },
     "injective": {
       "url": "https://injective.com",
       "file": "chains/injective.svg",
@@ -77,6 +107,43 @@
       "usage": "Official project artwork; project brand terms apply.",
       "inlineSvgMatch": "icon-name=\"logoInjectiveMark\"",
       "svgTransform": "injective_purple"
+    },
+    "jito": {
+      "url": "https://drive.usercontent.google.com/download?id=1g5xMEv3Dyqql72H844PqEfUuwRMgcFra&export=download",
+      "file": "coins/jito.svg",
+      "sha256": "dcffb4f75328156f1352795866ce09fce3464f966012ee170d6bb84c6155e421",
+      "sourcePage": "https://www.jito.network/jto/",
+      "brandKit": "https://drive.google.com/drive/folders/1KuEn60FLsmQZDSDDZ15dCPyxFgQAaAtL",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "jitosol": {
+      "url": "https://drive.usercontent.google.com/download?id=1-voz5vts9BcenS3C0JMSQPocIzOddy_q&export=download",
+      "file": "coins/jitosol.svg",
+      "sha256": "26a9ec49c935385f36810306c49c780b1056b43a89d1f7e03377ee8179a9e148",
+      "sourcePage": "https://www.jito.network/jitosol/",
+      "usage": "Official project artwork; project brand terms apply.",
+      "brandKit": "https://drive.google.com/drive/folders/1KuEn60FLsmQZDSDDZ15dCPyxFgQAaAtL"
+    },
+    "jupiter": {
+      "url": "https://jup.ag/favicon.svg",
+      "file": "coins/jupiter.svg",
+      "sha256": "36198236d8b6cfea00f3aa1341fed4d9a11edd6a20192de3ac12bf51407e2007",
+      "sourcePage": "https://jup.ag",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "kamino": {
+      "url": "https://cdn.kamino.finance/kamino.svg",
+      "file": "coins/kamino.svg",
+      "sha256": "e19f5e83c436008eecc60644fef9402c4476901977936fad39d6e4b418afb7ee",
+      "sourcePage": "https://kamino.com",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "meteora": {
+      "url": "https://assets.meteora.ag/met-token.svg",
+      "file": "coins/meteora.svg",
+      "sha256": "f15c75f0c01a3dd7658f697909bff5a3b990951aaed653441ac238c1ac9a7025",
+      "sourcePage": "https://meteora.ag",
+      "usage": "Official project artwork; project brand terms apply."
     },
     "monad": {
       "url": "https://www.monad.xyz",
@@ -94,12 +161,58 @@
       "usage": "Official project artwork; project brand terms apply.",
       "svgTransform": "optimism_token"
     },
+    "orca": {
+      "url": "https://www.orca.so",
+      "file": "coins/orca.svg",
+      "sha256": "e8b3da4654bc8d73344e3f2874255ec1f5a362bae0b7b0a6441f0b59abcaa8c3",
+      "sourcePage": "https://www.orca.so",
+      "usage": "Official project artwork; project brand terms apply.",
+      "inlineSvgMatch": "viewBox=\"0 0 111 30\"",
+      "svgViewBox": "0 0 30 30"
+    },
+    "pepe": {
+      "url": "https://raw.githubusercontent.com/0xa3k5/web3icons/3cce0f390cf902f204a1b3d52f485bcc95d2fe9e/raw-svgs/tokens/background/PEPE.svg",
+      "file": "coins/pepe.svg",
+      "sha256": "45e0b14e0a26a25ef0b777c9bff071e226a5bd1d5997fef7b604e043a8d8cc6b",
+      "sourcePage": "https://www.pepe.vip",
+      "usage": "Community vector recreation of the official Pepe token artwork; project brand terms apply."
+    },
     "polygon": {
       "url": "https://polygon.technology/favicon.svg",
       "file": "chains/polygon.svg",
       "sha256": "7eda178dc46658f07c55fa47d0d4d51840547f1ff73eab4da28a22923f9baf5b",
       "sourcePage": "https://polygon.technology",
       "usage": "Official project artwork; project brand terms apply."
+    },
+    "pyth": {
+      "url": "https://pyth.network/token.svg",
+      "file": "coins/pyth.svg",
+      "sha256": "f3c88fd9f75cc92e361dba733d133ef55072a63d70d3bbcb37ed7b8242cdba64",
+      "sourcePage": "https://pyth.network",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "raydium": {
+      "url": "https://raw.githubusercontent.com/raydium-io/raydium-ui/master/src/assets/icons/logo.svg",
+      "file": "coins/raydium.svg",
+      "sha256": "06dbcf576a1876cd3a09aa5fd33799c3f72d4f69b996874d08d53eb9f25f3396",
+      "sourcePage": "https://github.com/raydium-io/raydium-ui",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "render": {
+      "url": "https://rendernetwork.com/api/medias/file/logotest3.svg",
+      "file": "coins/render.svg",
+      "sha256": "23b8b1fe0c777570d6e77ef25dc0cc04fb7509ea5741218d2dcedf1ad9d3387c",
+      "sourcePage": "https://rendernetwork.com",
+      "usage": "Official project artwork; project brand terms apply.",
+      "svgViewBox": "0 0 40 40"
+    },
+    "shiba_inu": {
+      "url": "https://shib.mypinata.cloud/ipfs/bafybeidvkdvjgb7efb2b4n5pthoyw4cwmc3h2wanbcm7zoyu4ksjbtwwu4/images/redesign/shibio_logo.svg",
+      "file": "coins/shiba_inu.svg",
+      "sha256": "6f1305a24a0da5465d555d4d14aabc7d1d4596ac00753a32c11fa4132d806c32",
+      "sourcePage": "https://shib.io/tokens/shib",
+      "usage": "Official project artwork; project brand terms apply.",
+      "svgViewBox": "0 0 122 122"
     },
     "solana": {
       "url": "https://solana.com/src/img/branding/solanaLogoMark.svg",
@@ -129,6 +242,13 @@
       "sourcePage": "https://github.com/feathericons/feather/tree/v4.29.2",
       "usage": "MIT"
     },
+    "usd1": {
+      "url": "https://static.worldlibertyfinancial.com/assets/brand/usd1.svg",
+      "file": "coins/usd1.svg",
+      "sha256": "5fe35dde9cecef3904c408094a788787fe563013b22cb087d69e1d4b88502f7e",
+      "sourcePage": "https://worldlibertyfinancial.com/usd1",
+      "usage": "Official project artwork; project brand terms apply."
+    },
     "usdc": {
       "url": "https://6778953.fs1.hubspotusercontent-na1.net/hubfs/6778953/Pressroom/brandkit/logo-downloads/usdc.zip",
       "archiveMember": "Token Logo/USDC Token.svg",
@@ -137,11 +257,25 @@
       "sourcePage": "https://www.circle.com/pressroom#brand-kit",
       "usage": "Circle brand use policy applies."
     },
+    "usde": {
+      "url": "https://ethena.fi/shared/usde.svg",
+      "file": "coins/usde.svg",
+      "sha256": "42d65f9b6db6184cd18bf1bf6679dbc5f231d47dde82b4e15d3791138f54d1b5",
+      "sourcePage": "https://ethena.fi",
+      "usage": "Official project artwork; project brand terms apply."
+    },
     "usdt": {
       "url": "https://tether.to/images/logoMarkGreen.svg",
       "file": "coins/usdt.svg",
       "sha256": "155d19d88ac9043f7233662c20396e41b0a71a68f3811889de07baff82afc2f6",
       "sourcePage": "https://tether.to/en/media/",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "wormhole": {
+      "url": "https://static.wormhole.com/token.svg",
+      "file": "coins/wormhole.svg",
+      "sha256": "6d85021a295686f16dd51bb211b655e5efc1ce3f035260ddf7e2ece1dbe17cc0",
+      "sourcePage": "https://wormhole.com/brand-and-press",
       "usage": "Official project artwork; project brand terms apply."
     },
     "xrpl": {
@@ -280,6 +414,101 @@
       "icon": "chainlink"
     },
     {
+      "network": "solana",
+      "tokenAddress": "DriFtupJYLTosbwoN8koMbEYSx54aFAVLddWsbksjwg7",
+      "icon": "drift"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "GcV9tEj62VncGithz4o4N9x6HWXARxuRgEAYk9zahNA8",
+      "icon": "eurc"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr",
+      "icon": "eurc"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux",
+      "icon": "helium"
+    },
+    {
+      "network": "ethereum",
+      "tokenAddress": "0xE76c5b78f93909d34404E9eb4C1f19e7582a5dE1",
+      "icon": "humanity"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL",
+      "icon": "jito"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn",
+      "icon": "jitosol"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      "icon": "jupiter"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "KMNo3nJsBXfcpJTVhZcXLW7RmTwTt4GVFE7suUBo9sS",
+      "icon": "kamino"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "METvsvVRapdj9cFLzq4Tr43xK4tAjQfwX76z3n6mWQL",
+      "icon": "meteora"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE",
+      "icon": "orca"
+    },
+    {
+      "network": "ethereum",
+      "tokenAddress": "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+      "icon": "pepe"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "PEPEqnuuCDbBC89p1u9vpnP1KQ2oj1xTcQBsjt9X55m",
+      "icon": "pepe"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3",
+      "icon": "pyth"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R",
+      "icon": "raydium"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof",
+      "icon": "render"
+    },
+    {
+      "network": "ethereum",
+      "tokenAddress": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+      "icon": "shiba_inu"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "2uQsyo1fXXQkDtcpXnLofWy88PxcvnfH2L8FPSE62FVU",
+      "icon": "solana"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "So11111111111111111111111111111111111111112",
+      "icon": "solana"
+    },
+    {
       "network": "arbitrum_one",
       "tokenAddress": "0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0",
       "icon": "uniswap"
@@ -330,6 +559,11 @@
       "icon": "uniswap"
     },
     {
+      "network": "solana",
+      "tokenAddress": "USD1ttGY1N17NEEHLmELoaybftRBUSErhqYiQzvEmuB",
+      "icon": "usd1"
+    },
+    {
       "network": "arbitrum_one",
       "tokenAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
       "icon": "usdc"
@@ -371,6 +605,11 @@
     },
     {
       "network": "solana",
+      "tokenAddress": "9BEcn9aPEmhSPbPQeFGjidRiEKki46fVQDyPpSQXPA2D",
+      "icon": "usdc"
+    },
+    {
+      "network": "solana",
       "tokenAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       "icon": "usdc"
     },
@@ -378,6 +617,11 @@
       "network": "tron",
       "tokenAddress": "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8",
       "icon": "usdc"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "DEkqHyPN7GMRJ5cArtQFAWefqbZb33Hyf6s5iCwjEonT",
+      "icon": "usde"
     },
     {
       "network": "avalanche_c",
@@ -395,9 +639,24 @@
       "icon": "usdt"
     },
     {
+      "network": "solana",
+      "tokenAddress": "Cmn4v2wipYV41dkakDvCgFJpxhtaaKt11NyWV8pjSE8A",
+      "icon": "usdt"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+      "icon": "usdt"
+    },
+    {
       "network": "tron",
       "tokenAddress": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
       "icon": "usdt"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "85VBFQZC9TZkfaptBWjvUw7YbZjy52A6mjtPGjstQAmQ",
+      "icon": "wormhole"
     }
   ],
   "nativeCoins": {

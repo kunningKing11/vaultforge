@@ -10,7 +10,7 @@ const root = fileURLToPath(new URL("../public/icons/", import.meta.url));
 const checkOnly = process.argv.includes("--check");
 const checksum = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
-function transformSvg(bytes: Uint8Array, transform?: string): Uint8Array {
+function transformSvg(bytes: Uint8Array, transform?: string, viewBox?: string): Uint8Array {
   let text = Buffer.from(bytes).toString("utf8");
   if (transform === "inline_xml" || transform === "injective_purple") {
     text = text.replace(/viewbox=/g, "viewBox=").replace(/\sdata-v-[a-z0-9]+(?:="[^"]*")?/g, "");
@@ -27,6 +27,17 @@ function transformSvg(bytes: Uint8Array, transform?: string): Uint8Array {
     const paths = [...text.matchAll(/<path\b[^>]*(?:\/>|>[\s\S]*?<\/path>)/g)].slice(0, count);
     if (paths.length !== count) throw new Error("Official symbol paths missing");
     text = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}">${paths.map((path) => path[0]).join("")}</svg>\n`;
+  }
+  if (viewBox !== undefined) {
+    const bounds = viewBox.trim().split(/\s+/).map(Number);
+    if (bounds.length !== 4 || !bounds.every(Number.isFinite) || bounds[2] <= 0 || bounds[3] <= 0)
+      throw new Error("Invalid icon viewBox crop");
+    // Isolate a published symbol from its wordmark without changing any paths.
+    text = text.replace(/<svg\b[^>]*>/, (root) =>
+      root
+        .replace(/\s(?:viewBox|width|height|overflow)=(["']).*?\1/g, "")
+        .replace(/>$/, ` viewBox="${bounds.join(" ")}" overflow="hidden">`),
+    );
   }
   return Buffer.from(text);
 }
@@ -96,6 +107,7 @@ for (const [id, asset] of Object.entries(manifest.assets)) {
             transformSvg(
               Buffer.from(svg),
               "svgTransform" in asset ? asset.svgTransform : undefined,
+              "svgViewBox" in asset ? asset.svgViewBox : undefined,
             ),
           ) === asset.sha256,
       );
@@ -105,7 +117,12 @@ for (const [id, asset] of Object.entries(manifest.assets)) {
       bytes = downloaded;
     }
   }
-  if (!checkOnly && "svgTransform" in asset) bytes = transformSvg(bytes, asset.svgTransform);
+  if (!checkOnly && ("svgTransform" in asset || "svgViewBox" in asset))
+    bytes = transformSvg(
+      bytes,
+      "svgTransform" in asset ? asset.svgTransform : undefined,
+      "svgViewBox" in asset ? asset.svgViewBox : undefined,
+    );
   if (checksum(bytes) !== asset.sha256)
     throw new Error(
       `${id}: checksum changed; review the official asset before updating the manifest`,

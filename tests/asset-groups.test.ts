@@ -48,6 +48,37 @@ test("excludes zero-balance chains and represents the funded chain", () => {
   expect(assetGroupChains(empty)).toHaveLength(0);
 });
 
+test("hides unpriced zero-balance selections when a cutoff is set", () => {
+  const selection: Asset = {
+    ...ethUsdc,
+    network: "solana",
+    token_address: "GcV9tEj62VncGithz4o4N9x6HWXARxuRgEAYk9zahNA8",
+    symbol: "jlEURC",
+    balance: "0",
+    price_usd: 0,
+  };
+  expect(assetGroups([selection], false, 1)).toHaveLength(0);
+  expect(assetGroups([selection], false, 0)).toHaveLength(1);
+});
+
+test("keeps Jupiter receipt tokens apart from their underlying assets", () => {
+  const jupUsd: Asset = {
+    ...ethUsdc,
+    network: "solana",
+    token_address: "JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD",
+    symbol: "JupUSD",
+  };
+  const receipt: Asset = {
+    ...jupUsd,
+    token_address: "7GxATsNMnaC88vdwd2t3mwrFuQwwGvmYPrUQ4D6FotXk",
+    symbol: "JUICED",
+    price_usd: 1.04,
+  };
+  const groups = assetGroups([jupUsd, receipt], true, 0);
+  expect(groups).toHaveLength(2);
+  expect(groups.find((group) => group.asset.symbol === "JUICED")!.asset.price_usd).toBe(1.04);
+});
+
 test("keeps explicitly separate price identities apart", () => {
   const bridged = {
     ...ethUsdc,
@@ -55,6 +86,18 @@ test("keeps explicitly separate price identities apart", () => {
     token_address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
   };
   expect(assetGroups([ethUsdc, bridged], true, 0)).toHaveLength(2);
+});
+
+test("keeps funded assets with unknown prices visible", () => {
+  const unknown: Asset = {
+    ...ethUsdc,
+    network: "solana",
+    token_address: "PEPEqnuuCDbBC89p1u9vpnP1KQ2oj1xTcQBsjt9X55m",
+    symbol: "PEPE",
+    balance: "1000000",
+    price_usd: 0,
+  };
+  expect(assetGroups([unknown], false, 1)).toHaveLength(1);
 });
 
 test("requires distinct funded chains rather than multiple token entries", () => {

@@ -69,7 +69,37 @@ For a full list of upcoming features (there are quite a few!), click [here](http
 - Tron Mainnet (TRX; native transfers only)
 - XRP Ledger Mainnet (XRP; native transfers only)
 
-The token registry includes AAVE, UNI, and LINK on Ethereum, Arbitrum, Avalanche, Base, BNB Chain, Optimism, Polygon, and Solana, plus LINK on Monad. It retains distinct bridged/CCIP/ERC-677 contracts rather than merging assets by ticker. Contract sources are the [Uniswap token list](https://tokens.uniswap.org), [UNI documentation](https://developers.uniswap.org/docs/ecosystem/governance/uni), [Chainlink documentation](https://docs.chain.link/resources/link-token-contracts), [Avalanche bridge registry](https://github.com/ava-labs/avalanche-bridge-resources/blob/main/avalanche_contract_address.json), and [Wormhole token registry](https://github.com/wormhole-foundation/wormhole-token-list/blob/main/content/by_dest.csv). Solana Wormhole mints use eight decimals; the separate Chainlink LINK mint uses nine.
+## Token registry
+
+The bundled tokens are summarised below; exact contracts, mints and decimals are in [the registry](src/networks.json). Native coins are listed under Supported chains above.
+
+| Chain / token group                     | Tokens                                                                    |
+| :-------------------------------------- | :------------------------------------------------------------------------ |
+| Ethereum, Avalanche C-Chain, Polygon    | AAVE, LINK, UNI (UNI.e on Avalanche), USDC, USDT; Polygon also has USDC.e |
+| Ethereum — additional                   | H (Humanity), PEPE, SHIB                                                  |
+| Arbitrum One, Base, Optimism            | AAVE, LINK, UNI, USDC                                                     |
+| BNB Chain                               | AAVE, LINK, UNI                                                           |
+| Monad                                   | LINK, USDC                                                                |
+| Solana — Jupiter                        | JUP, JLP, JupSOL, JupUSD                                                  |
+| Solana — Jupiter Lend receipts          | JUICED, jlUSDC, jlUSDT, jlWSOL, jlEURC, jlUSDS                            |
+| Solana — stablecoins and wrapped assets | USDC, USDT, USDS, USDe, USD1, EURC, cbBTC, WSOL                           |
+| Solana — staking                        | JitoSOL, mSOL, BNSOL                                                      |
+| Solana — DeFi / DePIN                   | AAVE, LINK, UNI, RAY, ORCA, MET, JTO, PYTH, KMNO, DRIFT, W, HNT, RENDER   |
+| Solana — memecoins                      | BONK, WIF, PEPE, PENGU, FARTCOIN, TRUMP, MELANIA, USELESS                 |
+| Tron                                    | USDC, USDT metadata; transfers currently support native TRX only          |
+
+Bridged, CCIP and ERC-677 variants remain separate assets by contract or mint, even when their tickers match.
+
+<details>
+<summary>Registry sources and verification</summary>
+
+- EVM and bridged tokens: [Uniswap token list](https://tokens.uniswap.org), [UNI documentation](https://developers.uniswap.org/docs/ecosystem/governance/uni), [Chainlink documentation](https://docs.chain.link/resources/link-token-contracts), [Avalanche bridge registry](https://github.com/ava-labs/avalanche-bridge-resources/blob/main/avalanche_contract_address.json), and [Wormhole token registry](https://github.com/wormhole-foundation/wormhole-token-list/blob/main/content/by_dest.csv). Solana Wormhole mints use eight decimals; the separate Chainlink LINK mint uses nine.
+- Humanity uses the [migrated Ethereum H contract](https://announcements.bybit.com/en/article/bybit-will-support-the-humanity-h-contract-migration-bltb4caa60378a0ed28/), with its name, symbol and decimals verified on-chain.
+- Ethereum memecoins: [PEPE](https://www.pepe.vip) and [SHIB](https://shib.io/tokens/shib), with contracts and decimals verified on-chain. Pepe publishes raster artwork only, so its bundled SVG is a pinned [Web3 Icons](https://github.com/0xa3k5/web3icons) vector recreation.
+- [Solana PEPE](https://jup.ag/tokens/PEPEqnuuCDbBC89p1u9vpnP1KQ2oj1xTcQBsjt9X55m) uses the Jupiter-verified classic SPL mint with four on-chain decimals and per-mint pricing; it retains a separate asset identity from Ethereum PEPE.
+- Solana: [Jupiter's verified token metadata](https://developers.jup.ag/docs/tokens/token-information) and [Lend asset catalogue](https://api.jup.ag/lend/v1/earn/tokens), checked against finalized mainnet mint accounts. CoinGecko IDs are matched by exact Solana mint using its [asset registry](https://api.coingecko.com/api/v3/coins/list?include_platform=true).
+
+</details>
 
 ### Supported features
 
@@ -97,9 +127,11 @@ The table distinguishes implemented backend paths from network entries that are 
 
 ### Chain and coin icons
 
-`src/icon-manifest.json` curates official project artwork, source pages, local filenames, SHA-256 checksums, chain mappings, and token mappings by network and contract/mint. Only SVG vector artwork is bundled in `public/icons/` for offline display; raster images and embedded raster content are rejected. Some chain assets are official website icons or wordmarks rather than standalone symbols; project branding terms still apply.
+`src/icon-manifest.json` curates official project artwork, issuer source pages and brand kits, local filenames, SHA-256 checksums, chain mappings, and token mappings by network and contract/mint. Only SVG vector artwork is bundled in `public/icons/` for offline display; raster images and embedded raster content are rejected. Some chain assets are official website icons or wordmarks rather than standalone symbols; project branding terms still apply.
 
 Run `bun run icons:download` to download the pinned assets (Bun and `unzip` are required for Circle's USDC archive), or `bun run icons:check` to verify existing files without network access. Changed upstream files fail checksum validation; review them before updating the manifest. The downloader rejects active SVG content; USDT uses Tether’s official green SVG logo mark. Explicit manifest transforms extract the original Bitcoin and BNB symbol paths from wordmarks and normalize Injective’s inline SVG attributes, apply its official `#4D3DFF` brand purple, and remove the OP token preview background and padding. Original symbol geometry is preserved.
+
+For published wordmarks, `svgViewBox` records a reviewed viewport crop that displays the original symbol without changing its paths. Icons without an available reviewed vector source retain the question-mark fallback.
 
 Pre-commit and `bun run lint` enforce alphabetical icon IDs and network-map keys. Token mappings are grouped by icon, then sorted by network ID and contract. Run `bun run lint:icon-order:fix` to sort the manifest.
 

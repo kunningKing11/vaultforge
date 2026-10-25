@@ -306,6 +306,7 @@ textarea {
 }
 
 .asset-card-coin-icon[src="/icons/chains/ethereum.svg"],
+.asset-card-coin-icon[src="/icons/coins/render.svg"],
 .asset-card-chain-icon[src="/icons/chains/ethereum.svg"] {
   background: #fff;
 }
@@ -677,8 +678,14 @@ textarea {
 }
 
 .selection-icon[src="/icons/chains/ethereum.svg"],
+.selection-icon[src="/icons/coins/render.svg"],
 .selection-icon[src="/icons/fallback/unknown.svg"] {
   background: #fff;
+}
+
+.asset-card-coin-icon[src="/icons/coins/helium.svg"],
+.selection-icon[src="/icons/coins/helium.svg"] {
+  background: #000;
 }
 
 .asset-card-slot > div,

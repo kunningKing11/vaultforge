@@ -65,7 +65,7 @@ pub(crate) struct TokenMetadata {
 pub(crate) fn price_id_for_asset(asset: &Asset) -> Option<&'static str> {
     let network = network_by_id(&asset.network)?;
     configured_asset(network, asset.token_address.as_deref())
-        .map(|configured| configured.coin_gecko_id.as_str())
+        .and_then(|configured| configured.coin_gecko_id.as_deref())
 }
 
 pub(crate) async fn fetch_market_prices(

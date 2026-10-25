@@ -22,6 +22,17 @@ describe("network registry normalization", () => {
     ).toBeNull();
   });
 
+  test("allows metadata-only tokens while requiring native price IDs", () => {
+    const source = networkSource();
+    const solana = source.networks.find((network) => network.id === "solana")!;
+    delete solana.tokens![0].coinGeckoId;
+    expect(() => normalizeNetworkRegistry(source)).not.toThrow();
+    Reflect.deleteProperty(solana.nativeAsset, "coinGeckoId");
+    expect(() => normalizeNetworkRegistry(source)).toThrow(
+      "solana native asset must define symbol, name, and coinGeckoId",
+    );
+  });
+
   test("allows same-symbol tokens with distinct contracts", () => {
     const source = networkSource();
     const ethereum = source.networks.find((network) => network.id === "ethereum")!;
@@ -84,6 +95,15 @@ describe("network registry normalization", () => {
       },
     ];
     expect(() => normalizeNetworkRegistry(solanaTokens)).not.toThrow();
+  });
+
+  test("rejects empty optional CoinGecko IDs", () => {
+    for (const id of ["", " "]) {
+      const source = networkSource();
+      const solana = source.networks.find((network) => network.id === "solana")!;
+      solana.tokens![0].coinGeckoId = id;
+      expect(() => normalizeNetworkRegistry(source)).toThrow("has an invalid coinGeckoId");
+    }
   });
 
   test("rejects invalid providers and duplicate tokens", () => {

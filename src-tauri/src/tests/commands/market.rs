@@ -1,4 +1,7 @@
-use super::{exchange_rate_or_cached, preserve_cached_market_data, update_simple_price};
+use super::{
+    exchange_rate_or_cached, preserve_cached_market_data, update_simple_price,
+    update_token_metadata,
+};
 use crate::dto::{Asset, RefreshWarningKind};
 use crate::providers::prices::CoinGeckoPriceResponse;
 
@@ -80,6 +83,36 @@ fn preserves_cached_market_data_when_a_price_refresh_fails() {
 
     assert_eq!(refreshed[0].price_usd, 1.0);
     assert_eq!(refreshed[0].change_24h, 0.25);
+}
+
+#[test]
+fn receipt_market_prices_preserve_curated_names_and_chain_decimals() {
+    let mut receipt = asset(
+        1.02,
+        0.0,
+        Some("7GxATsNMnaC88vdwd2t3mwrFuQwwGvmYPrUQ4D6FotXk"),
+    );
+    receipt.network = "solana".into();
+    receipt.symbol = "JUICED".into();
+    receipt.name = "Jupiter Lend JupUSD".into();
+    let metadata = crate::providers::prices::TokenMetadata {
+        symbol: "JupUSD".into(),
+        name: "Unreviewed market label".into(),
+        decimals: Some(9),
+        price_usd: Some(1.04),
+    };
+    update_token_metadata(&mut receipt, &metadata);
+    assert_eq!(receipt.symbol, "JUICED");
+    assert_eq!(receipt.name, "Jupiter Lend JupUSD");
+    assert_eq!(receipt.decimals, 6);
+    assert_eq!(receipt.price_usd, 1.04);
+
+    let mut unknown = asset(0.0, 0.0, Some("unknown"));
+    update_token_metadata(&mut unknown, &metadata);
+    assert_eq!(unknown.symbol, metadata.symbol);
+    assert_eq!(unknown.name, metadata.name);
+    assert_eq!(unknown.decimals, 6);
+    assert_eq!(unknown.price_usd, 1.04);
 }
 
 #[test]
