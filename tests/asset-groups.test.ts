@@ -44,11 +44,10 @@ test("excludes zero-balance chains and represents the funded chain", () => {
   expect(group.asset.network).toBe("base");
   expect(group.members).toHaveLength(1);
   expect(assetGroupChains(group).map((chain) => chain.id)).toEqual(["base"]);
-  const [empty] = assetGroups([{ ...ethUsdc, balance: "0" }], true, 0);
-  expect(assetGroupChains(empty)).toHaveLength(0);
+  expect(assetGroups([{ ...ethUsdc, balance: "0" }], true, 0)).toHaveLength(0);
 });
 
-test("hides unpriced zero-balance selections when a cutoff is set", () => {
+test("hides unpriced zero-balance selections at every cutoff", () => {
   const selection: Asset = {
     ...ethUsdc,
     network: "solana",
@@ -58,7 +57,7 @@ test("hides unpriced zero-balance selections when a cutoff is set", () => {
     price_usd: 0,
   };
   expect(assetGroups([selection], false, 1)).toHaveLength(0);
-  expect(assetGroups([selection], false, 0)).toHaveLength(1);
+  expect(assetGroups([selection], false, 0)).toHaveLength(0);
 });
 
 test("keeps Jupiter receipt tokens apart from their underlying assets", () => {
