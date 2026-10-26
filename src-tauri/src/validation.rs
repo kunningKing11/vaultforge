@@ -8,7 +8,7 @@ use crate::address::xrpl::validate_address as validate_xrpl_address;
 use crate::address::zcash::validate_address as validate_zcash_address;
 use crate::assets::asset_matches;
 use crate::dto::Wallet;
-use crate::registry::network_by_id;
+use crate::registry::{configured_asset, network_by_id};
 
 pub(crate) fn validate_wallet_password(wallet_password: &str) -> Result<(), String> {
     if wallet_password.chars().count() < 8 {
@@ -97,7 +97,17 @@ fn validate_token_identifier(network: &str, token_address: &str) -> Result<(), S
         network if network_by_id(network).is_some_and(|config| config.kind == "evm") => {
             validate_evm_address(token_address)
         }
-        "tron" => Err("TRC-20 token transfers are not implemented".to_string()),
+        "tron" => {
+            if configured_asset(
+                network_by_id(network).ok_or("Tron missing from registry")?,
+                Some(token_address),
+            )
+            .is_none()
+            {
+                return Err("TRC-20 token is not in the wallet token registry".into());
+            }
+            validate_tron_address(token_address)
+        }
         _ => Err(format!("Token transfers are not implemented on {network}")),
     }
 }

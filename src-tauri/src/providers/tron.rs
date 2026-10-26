@@ -51,8 +51,8 @@ pub(crate) async fn fetch_tron_assets(
 ) -> NetworkAssetRefresh {
     let config = tron_config().expect("Tron must exist in the generated network registry");
     match fetch_tron_native_balance(client, address).await {
-        Ok(sun) => NetworkAssetRefresh {
-            assets: vec![Asset {
+        Ok(sun) => {
+            let mut assets = vec![Asset {
                 solana_token: None,
                 symbol: config.native_asset.symbol.clone(),
                 unicode_symbol: config.native_asset.unicode_symbol.clone(),
@@ -63,16 +63,175 @@ pub(crate) async fn fetch_tron_assets(
                 change_24h: 0.0,
                 network: "tron".to_string(),
                 token_address: None,
-            }],
-            balance_failed: false,
-        },
+            }];
+            let mut balance_failed = false;
+            for token in &config.tokens {
+                let Some(token_address) = token.token_address.as_deref() else {
+                    continue;
+                };
+                match fetch_tron_token_balance(client, address, token_address).await {
+                    Ok(balance) => assets.push(Asset {
+                        solana_token: None,
+                        symbol: token.symbol.clone(),
+                        unicode_symbol: token.unicode_symbol.clone(),
+                        name: token.name.clone(),
+                        balance: balance.to_string(),
+                        decimals: token.decimals,
+                        price_usd: 0.0,
+                        change_24h: 0.0,
+                        network: config.id.clone(),
+                        token_address: Some(token_address.to_string()),
+                    }),
+                    Err(_) => {
+                        balance_failed = true;
+                        if let Some(cached) =
+                            cached_asset(cached_assets, &config.id, Some(token_address))
+                        {
+                            assets.push(cached);
+                        }
+                    }
+                }
+            }
+            NetworkAssetRefresh {
+                assets,
+                balance_failed,
+            }
+        }
         Err(_) => NetworkAssetRefresh {
-            assets: cached_asset(cached_assets, &config.id, None)
-                .into_iter()
+            assets: cached_assets
+                .iter()
+                .filter(|asset| asset.network == config.id)
+                .cloned()
                 .collect(),
             balance_failed: true,
         },
     }
+}
+
+/// Reads a configured TRC-20 balance using TronGrid's constant-contract endpoint.
+pub(crate) async fn fetch_tron_token_balance(
+    client: &reqwest::Client,
+    owner: &str,
+    contract: &str,
+) -> Result<u128, String> {
+    configured_tron_token(contract)?;
+    let owner =
+        hex::decode(tron_address_to_hex(owner)?).map_err(|_| "Invalid Tron owner address")?;
+    let parameter = format!("{}{}", "0".repeat(24), hex::encode(&owner[1..]));
+    let response = rpc_post(
+        client,
+        &format!("{}/wallet/triggerconstantcontract", tron_rpc_url()?),
+        &serde_json::json!({
+            "owner_address": hex::encode(owner),
+            "contract_address": tron_address_to_hex(contract)?,
+            "function_selector": "balanceOf(address)",
+            "parameter": parameter,
+            "visible": false
+        }),
+    )
+    .await?;
+    if response["result"]["result"].as_bool() != Some(true) {
+        return Err("Tron TRC-20 balance query failed".into());
+    }
+    let value = response["constant_result"][0]
+        .as_str()
+        .ok_or("Tron TRC-20 balance response is missing")?;
+    let bytes = hex::decode(value).map_err(|_| "Invalid Tron TRC-20 balance")?;
+    if bytes.len() != 32 || bytes[..16].iter().any(|byte| *byte != 0) {
+        return Err("Tron TRC-20 balance exceeds supported amount range".into());
+    }
+    Ok(u128::from_be_bytes(
+        bytes[16..]
+            .try_into()
+            .map_err(|_| "Invalid TRC-20 balance")?,
+    ))
+}
+
+fn configured_tron_token(contract: &str) -> Result<&'static crate::registry::AssetConfig, String> {
+    let config = tron_config()?;
+    config
+        .tokens
+        .iter()
+        .find(|token| token.token_address.as_deref() == Some(contract))
+        .ok_or_else(|| "TRC-20 contract is not in the wallet token registry".into())
+}
+
+/// Builds a fee-capped TRC-20 `transfer(address,uint256)` transaction.
+pub(crate) async fn create_tron_token_transfer(
+    client: &reqwest::Client,
+    from: &str,
+    to: &str,
+    contract: &str,
+    amount: u128,
+) -> Result<(serde_json::Value, u64), String> {
+    configured_tron_token(contract)?;
+    let from_hex = tron_address_to_hex(from)?;
+    let to_hex = tron_address_to_hex(to)?;
+    let contract_hex = tron_address_to_hex(contract)?;
+    let parameter = format!(
+        "{}{}{}",
+        "0".repeat(24),
+        &to_hex[2..],
+        format!("{amount:064x}")
+    );
+    let estimate = rpc_post(
+        client,
+        &format!("{}/wallet/estimateenergy", tron_rpc_url()?),
+        &serde_json::json!({
+            "owner_address": from_hex,
+            "contract_address": contract_hex,
+            "function_selector": "transfer(address,uint256)",
+            "parameter": parameter,
+            "visible": false
+        }),
+    )
+    .await?;
+    let energy = estimate["energy_required"]
+        .as_u64()
+        .or_else(|| estimate["energy_used"].as_u64())
+        .ok_or("Tron energy estimate unavailable")?;
+    let parameters = rpc_post(
+        client,
+        &format!("{}/wallet/getchainparameters", tron_rpc_url()?),
+        &serde_json::json!({}),
+    )
+    .await?;
+    let energy_price = parameters["chainParameter"]
+        .as_array()
+        .and_then(|items| items.iter().find(|item| item["key"] == "getEnergyFee"))
+        .and_then(|item| item["value"].as_u64())
+        .ok_or("Tron energy price unavailable")?;
+    let fee_limit = energy
+        .checked_mul(energy_price)
+        .and_then(|fee| fee.checked_mul(120))
+        .map(|fee| fee / 100)
+        .and_then(|fee| fee.checked_add(1_000_000))
+        .ok_or("Tron fee estimate overflow")?;
+    let response = rpc_post(
+        client,
+        &format!("{}/wallet/triggersmartcontract", tron_rpc_url()?),
+        &serde_json::json!({
+            "owner_address": from_hex,
+            "contract_address": contract_hex,
+            "function_selector": "transfer(address,uint256)",
+            "parameter": parameter,
+            "fee_limit": fee_limit,
+            "call_value": 0,
+            "visible": false
+        }),
+    )
+    .await?;
+    if response["result"]["result"].as_bool() != Some(true) {
+        return Err(response["result"]["message"]
+            .as_str()
+            .map(|s| String::from_utf8_lossy(&hex::decode(s).unwrap_or_default()).into_owned())
+            .unwrap_or_else(|| "Tron TRC-20 transaction construction failed".into()));
+    }
+    let transaction = response
+        .get("transaction")
+        .cloned()
+        .ok_or("Tron TRC-20 transaction missing")?;
+    Ok((transaction, fee_limit))
 }
 
 pub(crate) async fn create_tron_transfer(

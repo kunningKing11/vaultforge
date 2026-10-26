@@ -29,7 +29,7 @@ A local-first crypto wallet desktop app built with a React frontend, Coinbase De
 - Portfolio and Assets share a “Group across chains” toggle remembered in the wallet file; new wallets start with grouping enabled. Known registry assets with the same price ID combine into one display card; hovering or keyboard-focusing it shows per-chain balances and fiat values only when at least two chains hold a nonzero balance. Zero-balance chains are omitted. Grouping does not change stored balances or send selections, and unknown token contracts remain separate.
 - Save the wallet name, display currency, auto-lock timeout, crypto-symbol preference, hidden-asset cutoff, and chain-grouping preference together from settings
 - Sign and review chain-specific transactions before broadcasting them
-- Basic real transfer paths for BTC, EVM native/ERC-20, Solana native/classic SPL and reviewed Token-2022 assets, Tron native, and XRP Ledger native XRP
+- Basic real transfer paths for BTC, EVM native/ERC-20, Solana native/classic SPL and reviewed Token-2022 assets, Tron native and configured TRC-20 assets, and XRP Ledger native XRP
 - Review provider-derived fees, total debit, selected fiat value, and post-send balance estimates
 - EVM native and ERC-20 sends recheck live chain balances before signing
 - Portfolio discovery reads both classic SPL and Token-2022 accounts and verifies their mint programs and decimals. Incomplete token reads retain cached balances. Token-2022 sends support reviewed passive extensions and transfer-fee tokens. Same-chain swaps support reviewed Jupiter v2 exact-input routes through Jupiter, Relay and LI.FI; route availability depends on the returned instructions and fee layout. Optional Solana capability metadata is a cached display hint; signing always rechecks the chain.
@@ -57,7 +57,7 @@ Direct Jupiter `/order` + `/execute` participates in same-chain Solana compariso
 
 ### Coming soon
 
-- Non-native Tron token support (e.g., stablecoins)
+- Tron swaps (the current LI.FI TVM route cannot yet pass the wallet's transaction validation and signing flow)
 - Zcash (ZEC) support with support for shielded addresses planned
 
 For a full list of upcoming features (there are quite a few!), click [here](https://github.com/kunningKing11/vaultforge/blob/main/ROADMAP.md).
@@ -67,7 +67,7 @@ For a full list of upcoming features (there are quite a few!), click [here](http
 - Bitcoin Mainnet (BTC)
 - EVM: Ethereum Mainnet (ETH), Arbitrum One, Avalanche C-Chain (AVAX), Base, BNB Smart Chain (BNB), Monad (MON), Optimism, and Polygon (POL)
 - Solana Mainnet (SOL)
-- Tron Mainnet (TRX; native transfers only)
+- Tron Mainnet (TRX, USDT, USD1, TRUMP, and the legacy USDC TRC-20 contract, with balance and transfer support)
 - XRP Ledger Mainnet (XRP; native transfers only)
 
 ## Token registry
@@ -88,7 +88,7 @@ The bundled tokens are summarised below; exact contracts, mints and decimals are
 | Solana — DeFi / DePIN                   | AAVE, LINK, UNI, RAY, ORCA, MET, JTO, PYTH, KMNO, DRIFT, W, HNT, RENDER   |
 | Solana — Pump                           | PUMP                                                                      |
 | Solana — memecoins                      | BONK, WIF, PEPE, PENGU, FARTCOIN, TRUMP, MELANIA, USELESS                 |
-| Tron                                    | USDC, USDT metadata; transfers currently support native TRX only          |
+| Tron                                    | USDT, USD1, TRUMP and legacy USDC TRC-20 balances and transfers           |
 
 Bridged, CCIP and ERC-677 variants remain separate assets by contract or mint, even when their tickers match.
 
@@ -121,7 +121,7 @@ The table distinguishes implemented backend paths from network entries that are 
 | Optimism          | Yes                        | ERC-20                  |                                                                  No |
 | Polygon           | Yes                        | ERC-20                  |                                                                  No |
 | Solana            | Yes                        | SPL / Token-2022        |                                                                  No |
-| Tron              | Yes                        | No (TRC-20 unavailable) |                                                                  No |
+| Tron              | Yes                        | Yes (configured TRC-20) |      No (wallet transaction validator supports EVM and Solana only) |
 | XRP Ledger        | Yes (classic addresses)    | No                      |                                                                  No |
 | Zcash             | No                         | No                      |                                                                  No |
 

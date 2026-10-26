@@ -787,6 +787,11 @@
       "icon": "trump"
     },
     {
+      "network": "tron",
+      "tokenAddress": "TXZQuyCasxN42bjAcYpP2xwYVMCF6gHBnv",
+      "icon": "trump"
+    },
+    {
       "network": "arbitrum_one",
       "tokenAddress": "0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0",
       "icon": "uniswap"
@@ -839,6 +844,11 @@
     {
       "network": "solana",
       "tokenAddress": "USD1ttGY1N17NEEHLmELoaybftRBUSErhqYiQzvEmuB",
+      "icon": "usd1"
+    },
+    {
+      "network": "tron",
+      "tokenAddress": "TPFqcBAaaUMCSVRCqPaQ9QnzKhmuoLR6Rc",
       "icon": "usd1"
     },
     {

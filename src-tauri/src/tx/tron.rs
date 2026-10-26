@@ -2,7 +2,9 @@ use k256::ecdsa::signature::hazmat::PrehashSigner;
 use sha2::{Digest, Sha256};
 
 use crate::derivation::{tron_address_from_private_key, tron_private_key_from_mnemonic};
-use crate::providers::tron::{TRON_NATIVE_FEE_SUN, create_tron_transfer};
+use crate::providers::tron::{
+    TRON_NATIVE_FEE_SUN, create_tron_token_transfer, create_tron_transfer, tron_address_to_hex,
+};
 
 pub(crate) struct SignedTronTransfer {
     pub(crate) txid: String,
@@ -88,4 +90,37 @@ pub(crate) async fn sign_tron_transfer(
 ) -> Result<SignedTronTransfer, String> {
     let unsigned_tx = create_tron_transfer(client, from, to, amount_sun).await?;
     sign_tron_unsigned_transfer(mnemonic, bip39_passphrase, from, unsigned_tx)
+}
+
+pub(crate) async fn sign_tron_token_transfer(
+    client: &reqwest::Client,
+    mnemonic: &str,
+    bip39_passphrase: &str,
+    from: &str,
+    to: &str,
+    contract: &str,
+    amount: u128,
+) -> Result<SignedTronTransfer, String> {
+    let (transaction, fee_limit) =
+        create_tron_token_transfer(client, from, to, contract, amount).await?;
+    let contract_value = transaction["raw_data"]["contract"][0]["parameter"]["value"].clone();
+    let expected_data = format!(
+        "a9059cbb{}{:064x}",
+        format!("{}", &tron_address_to_hex(to)?[2..]),
+        amount
+    );
+    if transaction["raw_data"]["contract"][0]["type"].as_str() != Some("TriggerSmartContract")
+        || contract_value["owner_address"].as_str() != Some(tron_address_to_hex(from)?.as_str())
+        || contract_value["contract_address"].as_str()
+            != Some(tron_address_to_hex(contract)?.as_str())
+        || contract_value["call_value"].as_u64().unwrap_or(0) != 0
+        || !contract_value["data"]
+            .as_str()
+            .is_some_and(|data| data.eq_ignore_ascii_case(&expected_data))
+    {
+        return Err("Tron provider changed the reviewed TRC-20 transfer".into());
+    }
+    let mut signed = sign_tron_unsigned_transfer(mnemonic, bip39_passphrase, from, transaction)?;
+    signed.fee_sun = fee_limit;
+    Ok(signed)
 }

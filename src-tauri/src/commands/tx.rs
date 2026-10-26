@@ -20,7 +20,9 @@ use crate::providers::http::ProviderClients;
 use crate::providers::solana::{
     broadcast_solana_transaction, fetch_solana_native_balance, simulate_solana_transaction,
 };
-use crate::providers::tron::broadcast_tron_transaction;
+use crate::providers::tron::{
+    broadcast_tron_transaction, fetch_tron_native_balance, fetch_tron_token_balance,
+};
 use crate::providers::xrpl::{
     broadcast_xrpl_transaction, fetch_xrpl_account_info, fetch_xrpl_network_info,
 };
@@ -30,7 +32,7 @@ use crate::tx::evm::{
     Eip1559TxDraft, build_erc20_transfer_call, build_native_transfer_call, sign_eip1559_transfer,
 };
 use crate::tx::solana::{SolanaTransferDraft, sign_solana_instructions, sign_solana_transfer};
-use crate::tx::tron::sign_tron_transfer;
+use crate::tx::tron::{sign_tron_token_transfer, sign_tron_transfer};
 use crate::tx::tx_status::{Execution, Finality, TxStatus};
 use crate::tx::xrpl::sign_xrpl_payment;
 use crate::validation::validate_transfer;
@@ -164,7 +166,7 @@ fn prepare_durable_send(
     }
     let supported = evm_config_by_id(&signed.network).is_some()
         || signed.network == "solana"
-        || (signed.token_address.is_none() && matches!(signed.network.as_str(), "tron" | "xrpl"));
+        || matches!(signed.network.as_str(), "tron" | "xrpl");
     if !supported {
         return Ok(None);
     }
@@ -734,28 +736,51 @@ pub(crate) async fn sign_transaction(
             }
             Ok(signed)
         }
-        "tron" if is_native => {
+        "tron" => {
             let from = addresses
                 .get("tron")
                 .ok_or_else(|| "Wallet Tron address is not available".to_string())?
                 .clone();
-            let amount_sun: u64 = value
-                .try_into()
-                .map_err(|_| "TRX amount is too large".to_string())?;
-            let trx_balance: u128 = asset
-                .balance
-                .parse()
-                .map_err(|_| "Invalid TRX balance".to_string())?;
-            let signed_trx =
+            let trx_balance = fetch_tron_native_balance(client, &from).await?;
+            let token_balance = if is_native {
+                None
+            } else {
+                let contract = asset
+                    .token_address
+                    .as_deref()
+                    .ok_or("TRC-20 contract missing")?;
+                let balance = fetch_tron_token_balance(client, &from, contract).await?;
+                ensure_token_balance_covers_amount(balance, value, &symbol)?;
+                Some(balance)
+            };
+            let signed_trx = if is_native {
+                let amount_sun: u64 = value
+                    .try_into()
+                    .map_err(|_| "TRX amount is too large".to_string())?;
                 sign_tron_transfer(client, &mnemonic, &bip39_passphrase, &from, &to, amount_sun)
-                    .await?;
+                    .await?
+            } else {
+                sign_tron_token_transfer(
+                    client,
+                    &mnemonic,
+                    &bip39_passphrase,
+                    &from,
+                    &to,
+                    asset
+                        .token_address
+                        .as_deref()
+                        .ok_or("TRC-20 contract missing")?,
+                    value,
+                )
+                .await?
+            };
             let fee_sun = signed_trx.fee_sun as u128;
-            let required_trx = required_native_debit(true, value, fee_sun, "TRX")?;
+            let required_trx = required_native_debit(is_native, value, fee_sun, "TRX")?;
             ensure_native_balance_covers_debit(
                 trx_balance,
                 required_trx,
                 "TRX",
-                true,
+                is_native,
                 "Tron transaction fee",
             )?;
             let raw_tx = serde_json::to_string(&signed_trx.raw_tx)
@@ -777,8 +802,13 @@ pub(crate) async fn sign_transaction(
                 signature: signed_trx.signature,
                 fee_amount: signed_trx.fee_sun.to_string(),
                 fee_symbol: "TRX".to_string(),
-                total_debit: required_trx.to_string(),
-                post_balance: trx_balance.saturating_sub(required_trx).to_string(),
+                total_debit: if is_native { required_trx } else { value }.to_string(),
+                post_balance: if is_native {
+                    trx_balance.saturating_sub(required_trx)
+                } else {
+                    token_balance.unwrap_or(0).saturating_sub(value)
+                }
+                .to_string(),
                 decimals,
                 fiat_value: (value as f64) * asset.price_usd,
                 raw_tx: Some(raw_tx),
@@ -973,7 +1003,7 @@ pub(crate) async fn send_transaction(
             }
         }
         "solana" => broadcast_solana_transaction(client, &raw_tx).await,
-        "tron" if signed.token_address.is_none() => {
+        "tron" => {
             let tx: serde_json::Value = serde_json::from_str(&raw_tx)
                 .map_err(|_| "Invalid signed Tron transaction JSON".to_string())?;
             broadcast_tron_transaction(client, &tx).await

@@ -42,7 +42,7 @@ The below items are the priorities for this project and an item will probably ge
     - [x] pre-sign live balance refresh
   - [x] Tron (TRX) basic transfers
     - [x] native TRX transfers
-    - [x] Tron token transfers
+    - [x] configured TRC-20 balance discovery and transfers (USDT, USD1, TRUMP, and legacy USDC)
   - [ ] XRP Ledger (XRP) basic transfers
     - [x] native XRP transfers
     - [ ] issued-currency, MPT, and NFT transfers
@@ -82,12 +82,13 @@ The below items are the priorities for this project and an item will probably ge
   - [ ] Bitcoin
   - [x] EVM
   - [ ] Solana
-  - [ ] Tron
+  - [x] Tron
   - [ ] XRPL
 - [ ] Proper fee estimation engine + preflight checks
   - [ ] EVM: `eth_feeHistory` / priority fee strategy
   - [ ] EVM: simulate transactions and smart contracts before signing where possible
   - [ ] SOL: simulate contracts and signed transactions before signing where possible
+  - [x] TRON: estimate TRC-20 energy and current energy price before signing
   - [ ] BTC: better fee target selection
   - [ ] show all native fee/rent/funding debits clearly in UI
 - [ ] Improved sync functionality to sync as much as possible of any stored wallet data.

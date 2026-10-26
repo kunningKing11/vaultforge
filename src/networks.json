@@ -946,20 +946,36 @@
       "tokens": [
         {
           "standard": "trc20",
+          "symbol": "TRUMP",
+          "name": "OFFICIAL TRUMP",
+          "decimals": 18,
+          "tokenAddress": "TXZQuyCasxN42bjAcYpP2xwYVMCF6gHBnv",
+          "coinGeckoId": "official-trump"
+        },
+        {
+          "standard": "trc20",
+          "symbol": "USDC",
+          "name": "USD Coin (legacy TRON contract)",
+          "decimals": 6,
+          "tokenAddress": "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8",
+          "coinGeckoId": "usd-coin"
+        },
+        {
+          "standard": "trc20",
+          "symbol": "USD1",
+          "name": "World Liberty Financial USD",
+          "decimals": 18,
+          "tokenAddress": "TPFqcBAaaUMCSVRCqPaQ9QnzKhmuoLR6Rc",
+          "coinGeckoId": "usd1-wlfi"
+        },
+        {
+          "standard": "trc20",
           "symbol": "USDT",
           "unicodeSymbol": "₮",
           "name": "Tether USD",
           "decimals": 6,
           "tokenAddress": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
           "coinGeckoId": "tether"
-        },
-        {
-          "standard": "trc20",
-          "symbol": "USDC",
-          "name": "USD Coin",
-          "decimals": 6,
-          "tokenAddress": "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8",
-          "coinGeckoId": "usd-coin"
         }
       ]
     },
