@@ -43,7 +43,8 @@ commit)
   ;;
 push)
   run_check "TypeScript tests" bun test --parallel
-  run_check "Rust Analyzer analysis" bash -c 'cd src-tauri && rust-analyzer analysis-stats .'
+  run_check "Cargo lock consistency" cargo metadata --locked --format-version 1 --manifest-path src-tauri/Cargo.toml
+  run_check "Cargo audit" cargo audit --file src-tauri/Cargo.lock
   run_check "Cargo test" cargo test --manifest-path src-tauri/Cargo.toml
   operation="push"
   ;;

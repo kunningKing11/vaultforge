@@ -162,7 +162,7 @@ When adding tests, keep them alphabetically ordered: Rust test functions by func
 With Lefthook installed, local Git operations run these unit tests:
 
 - Pre-commit: `bun test --parallel` runs the TypeScript tests. Rust unit tests do not run at commit time; the hook runs `cargo check` and `cargo fmt --check`.
-- Pre-push: `bun test --parallel` runs the TypeScript tests again, and `cargo test --manifest-path src-tauri/Cargo.toml` runs the Rust tests. The hook also runs Rust Analyzer analysis and a dependency audit.
+- Pre-push: `bun test --parallel` runs the TypeScript tests again, `cargo metadata --locked` checks Cargo manifests against the lockfile, and `cargo audit --file src-tauri/Cargo.lock` audits resolved Rust dependencies, and `cargo test --manifest-path src-tauri/Cargo.toml` runs the Rust tests. Lefthook also runs `bun audit` for JavaScript dependencies.
 - GitHub Actions: the Quality workflow runs `bun test --parallel` and `cargo test --manifest-path src-tauri/Cargo.toml` for pull requests and pushes to `main`.
 
 Local hooks run these checks for each commit or push, even if an earlier check fails, and block the operation when any check fails. Tests run against the current checkout, including unstaged changes.
