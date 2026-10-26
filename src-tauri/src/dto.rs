@@ -117,8 +117,19 @@ fn default_enabled_networks() -> Vec<String> {
     ]
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct SolanaTokenCapabilities {
+    pub(crate) program: String,
+    pub(crate) extensions: Vec<u16>,
+    pub(crate) send_supported: bool,
+    pub(crate) swap_supported: bool,
+    pub(crate) unsupported_reason: Option<String>,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct Asset {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) solana_token: Option<SolanaTokenCapabilities>,
     pub(crate) symbol: String,
     #[serde(default)]
     pub(crate) unicode_symbol: Option<String>,
@@ -202,9 +213,40 @@ pub(crate) struct WalletRefreshResult {
     pub(crate) warnings: Vec<RefreshWarning>,
 }
 
+/// Reviewed Solana token terms; all amounts and epochs cross the UI as strings.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SolanaTransferFeeSchedule {
+    pub(crate) epoch: String,
+    pub(crate) basis_points: u16,
+    pub(crate) maximum_fee: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SolanaTokenSendSource {
+    pub(crate) address: String,
+    pub(crate) amount: String,
+    pub(crate) fee: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SolanaTokenSendReview {
+    pub(crate) token_program: String,
+    pub(crate) mint_extensions: Vec<u16>,
+    pub(crate) fee_schedule: Option<SolanaTransferFeeSchedule>,
+    pub(crate) sources: Vec<SolanaTokenSendSource>,
+    pub(crate) transfer_fee: String,
+    pub(crate) recipient_amount: String,
+    pub(crate) account_rent_lamports: String,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SignedTransaction {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) solana_token_send: Option<SolanaTokenSendReview>,
     pub(crate) token_address: Option<String>,
     pub(crate) from: String,
     pub(crate) to: String,

@@ -47,6 +47,30 @@
       "usage": "Official project artwork; project brand terms apply.",
       "svgTransform": "bnb_symbol"
     },
+    "bnsol": {
+      "url": "https://arweave.net/LepI-hea-JrbLMb4L_HpMzaq9k0aHY2-lVSGiBtwvFM?ext=png",
+      "file": "coins/bnsol.png",
+      "sha256": "669d1ea00af4d16133b8c062fa41dd7ade858ea5cbed732a35f5a02eedb2e58a",
+      "sourcePage": "https://www.binance.com/en/solana-staking",
+      "catalogPage": "https://api.jup.ag/tokens/v2/search?query=BNso1VUJnh4zcfpZa6986Ea66P6TCp59hvtNJ8b1X85",
+      "usage": "Jupiter token-catalog image for Binance BNSOL; resolved by the registered Solana mint."
+    },
+    "bonk": {
+      "url": "https://arweave.net/hQiPZOsRZXGXBJd_82PhVdlM_hACsT_q6wqwf5cSY7I",
+      "file": "coins/bonk.jpg",
+      "sha256": "498ca3589dbe075f0cfed24f7e7a31ba868079ad98e3e25813893eaa99092c31",
+      "sourcePage": "https://bonkcoin.com",
+      "usage": "Original artwork referenced by the registered Solana mint metadata; project brand terms apply.",
+      "metadataUri": "https://arweave.net/QPC6FYdUn-3V8ytFNuoCS85S2tHAuiDblh6u3CIZLsw"
+    },
+    "cbbtc": {
+      "url": "https://gateway.pinata.cloud/ipfs/QmZ7L8yd5j36oXXydUiYFiFsRHbi3EdgC4RuFwvM7dcqge",
+      "file": "coins/cbbtc.png",
+      "sha256": "d43e85e73b77180a873c36ebed62c56a0153dab872e7803e453acc8af686f1cf",
+      "sourcePage": "https://www.coinbase.com/cbbtc",
+      "usage": "Original artwork referenced by the registered Solana mint metadata; project brand terms apply.",
+      "metadataUri": "https://ipfs.io/ipfs/QmeFwJMpQuzF7KEtaYx5fBtouy9ynbBDUVCqTcDAw8bEGe"
+    },
     "chainlink": {
       "url": "https://cdn.prod.website-files.com/5f6b7190899f41fb70882d08/6aa7fef7f56d1f1d953c589d_Chainlink-Symbol-Blue.svg",
       "file": "coins/chainlink.svg",
@@ -75,6 +99,13 @@
       "sourcePage": "https://www.circle.com/pressroom#brand-kit",
       "usage": "Official project artwork; project brand terms apply.",
       "archiveMember": "Token Logo/EURC Token.svg"
+    },
+    "fartcoin": {
+      "url": "https://fart.dev/favicon.png",
+      "file": "coins/fartcoin.png",
+      "sha256": "57c4ec4a7a51b557ae8fcf11ab718713ad06b18438ff73711f3a3daaa6c42633",
+      "sourcePage": "https://fart.dev",
+      "usage": "Official project artwork; project brand terms apply."
     },
     "filecoin": {
       "url": "https://filecoin.io",
@@ -124,6 +155,86 @@
       "usage": "Official project artwork; project brand terms apply.",
       "brandKit": "https://drive.google.com/drive/folders/1KuEn60FLsmQZDSDDZ15dCPyxFgQAaAtL"
     },
+    "jlepyusd": {
+      "url": "https://coin-images.coingecko.com/coins/images/31212/large/PYUSD_Token_Logo_2x.png?1765987788",
+      "file": "coins/jlepyusd.png",
+      "sha256": "fffc4f413fcf4d225a3685540e2b4037760b13eef9b2daf60718ee2cd3d0a00d",
+      "sourcePage": "https://jup.ag/lend/ethena/earn",
+      "catalogPage": "https://api.jup.ag/lend/v1/earn/tokens?market=ethena",
+      "usage": "Jupiter Lend UI token artwork associated with this exact Solana mint."
+    },
+    "jleurc": {
+      "url": "https://cdn.instadapp.io/solana/tokens/icons/eurc.png",
+      "file": "coins/jleurc.png",
+      "sha256": "78c1d5c054af55a54498c67270700fbeff63fb90c76a9384ff88520c69a443f1",
+      "sourcePage": "https://jup.ag/lend",
+      "catalogPage": "https://api.jup.ag/tokens/v2/search?query=GcV9tEj62VncGithz4o4N9x6HWXARxuRgEAYk9zahNA8",
+      "usage": "Jupiter Lend UI token artwork associated with this exact Solana mint."
+    },
+    "jleusdg": {
+      "url": "https://cdn.instadapp.io/solana/tokens/icons/eusdg.png",
+      "file": "coins/jleusdg.png",
+      "sha256": "cc336e7e235034d7ddec4566cca73a161bdfe46eb2a30741f1f8ede8715594d9",
+      "sourcePage": "https://jup.ag/lend/ethena/market/USDG/deposit",
+      "catalogPage": "https://api.jup.ag/tokens/v2/search?query=Bd2wJsmaF3YKC6fKLo4AFQDYaFEzWR6SNvoxvTnA6dXc",
+      "usage": "Jupiter Lend UI token artwork associated with this exact Solana mint."
+    },
+    "jlp": {
+      "url": "https://static.jup.ag/jlp/icon.png",
+      "file": "coins/jlp.png",
+      "sha256": "7df599a8066a482b7ab4ab721c8f082910416f8eb152a9513d9b9d9d07966d4d",
+      "sourcePage": "https://jup.ag/perps/jlp-earn",
+      "catalogPage": "https://api.jup.ag/tokens/v2/search?query=27G8MtK7VtTcCHkpASjSDdkWWYfoqT6ggEuKidVJidD4",
+      "usage": "Official Jupiter token artwork; project brand terms apply."
+    },
+    "jlusdc": {
+      "url": "https://cdn.instadapp.io/solana/tokens/icons/usdc.png",
+      "file": "coins/jlusdc.png",
+      "sha256": "dc1eba27655a73b7420f736a53127cff70b603336c48dcc9c12d1e8742b47c77",
+      "sourcePage": "https://jup.ag/lend",
+      "catalogPage": "https://api.jup.ag/tokens/v2/search?query=9BEcn9aPEmhSPbPQeFGjidRiEKki46fVQDyPpSQXPA2D",
+      "usage": "Jupiter Lend UI token artwork associated with this exact Solana mint."
+    },
+    "jlusdg": {
+      "url": "https://cdn.instadapp.io/solana/tokens/icons/usdg.png",
+      "file": "coins/jlusdg.png",
+      "sha256": "bdcf66b4ea9e9c4da078f737864420082276595aaf3fb6eec6e0043b9a6b3fcf",
+      "sourcePage": "https://jup.ag/lend",
+      "catalogPage": "https://api.jup.ag/tokens/v2/search?query=9fvHrYNw1A8Evpcj7X2yy4k4fT7nNHcA9L6UsamNHAif",
+      "usage": "Jupiter Lend UI token artwork associated with this exact Solana mint."
+    },
+    "jlusds": {
+      "url": "https://cdn.instadapp.io/solana/tokens/icons/usds.png",
+      "file": "coins/jlusds.png",
+      "sha256": "a9797aa6b0017a5f58933b25908457c8ea3c3107b9efa528d26a1d0015b5cee9",
+      "sourcePage": "https://jup.ag/lend",
+      "catalogPage": "https://api.jup.ag/tokens/v2/search?query=j14XLJZSVMcUYpAfajdZRpnfHUpJieZHS4aPektLWvh",
+      "usage": "Jupiter Lend UI token artwork associated with this exact Solana mint."
+    },
+    "jlusdt": {
+      "url": "https://cdn.instadapp.io/solana/tokens/icons/usdt.png",
+      "file": "coins/jlusdt.png",
+      "sha256": "e3426b6af77bc17565c15139e0e5a4910bf1a20be6a7e6bcbf1c25ee9f3f135b",
+      "sourcePage": "https://jup.ag/lend",
+      "catalogPage": "https://api.jup.ag/tokens/v2/search?query=Cmn4v2wipYV41dkakDvCgFJpxhtaaKt11NyWV8pjSE8A",
+      "usage": "Jupiter Lend UI token artwork associated with this exact Solana mint."
+    },
+    "jlwsol": {
+      "url": "https://cdn.instadapp.io/solana/tokens/icons/sol.png",
+      "file": "coins/jlwsol.png",
+      "sha256": "2f87313aa5aeed856472a88fd4dc15f3e6eeb82c15701d1f8cb2e17bc450a88e",
+      "sourcePage": "https://jup.ag/lend",
+      "catalogPage": "https://api.jup.ag/tokens/v2/search?query=2uQsyo1fXXQkDtcpXnLofWy88PxcvnfH2L8FPSE62FVU",
+      "usage": "Jupiter Lend UI token artwork associated with this exact Solana mint."
+    },
+    "juiced": {
+      "url": "https://cdn.instadapp.io/solana/tokens/icons/jupusd.png?v=1",
+      "file": "coins/juiced.png",
+      "sha256": "fd8079d8eeb3b5360bc8906ff548a05bfc29f5330d40466ec75571b98872496e",
+      "sourcePage": "https://jup.ag/lend",
+      "catalogPage": "https://api.jup.ag/lend/v1/earn/tokens",
+      "usage": "Jupiter Lend UI token artwork associated with this exact Solana mint."
+    },
     "jupiter": {
       "url": "https://jup.ag/favicon.svg",
       "file": "coins/jupiter.svg",
@@ -131,11 +242,41 @@
       "sourcePage": "https://jup.ag",
       "usage": "Official project artwork; project brand terms apply."
     },
+    "jupiter_lend": {
+      "url": "https://jup.ag/svg/jupiter-lend.svg",
+      "file": "coins/jupiter-lend.svg",
+      "sha256": "06a16d5d1ae7f5c70f20d3ef2adc5d3b7e1297d62469c19f89058176dae1e6d8",
+      "sourcePage": "https://jup.ag/lend/ethena/market",
+      "usage": "Official Jupiter Lend artwork; project brand terms apply. Shared protocol icon for lending receipt tokens."
+    },
+    "jupsol": {
+      "url": "https://static.jup.ag/jupSOL/icon.png",
+      "file": "coins/jupsol.png",
+      "sha256": "b7acd8e9094739758bdabb0885a114bc610f4ad5f41f4fce4c9d163315e2b04a",
+      "sourcePage": "https://jup.ag/stake?tab=Liquid",
+      "catalogPage": "https://api.jup.ag/tokens/v2/search?query=jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v",
+      "usage": "Official Jupiter token artwork; project brand terms apply."
+    },
+    "jupusd": {
+      "url": "https://static.jup.ag/jupUSD/icon.png",
+      "file": "coins/jupusd.png",
+      "sha256": "6adb6919b0b76b08e4207893b9da3cbb0f6c9a7eb370ecb392f5f41cc6f5bb66",
+      "sourcePage": "https://jupusd.jup.ag/",
+      "catalogPage": "https://api.jup.ag/tokens/v2/search?query=JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD",
+      "usage": "Official Jupiter token artwork; project brand terms apply."
+    },
     "kamino": {
       "url": "https://cdn.kamino.finance/kamino.svg",
       "file": "coins/kamino.svg",
       "sha256": "e19f5e83c436008eecc60644fef9402c4476901977936fad39d6e4b418afb7ee",
       "sourcePage": "https://kamino.com",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "melania": {
+      "url": "https://pbs.twimg.com/profile_images/1881013617350397952/rhS5uKcB_400x400.jpg",
+      "file": "coins/melania.jpg",
+      "sha256": "ed8c03695d30bfb8fcbeb6f713d3c3327ae062dbf5aa2eeebb1df03195a72729",
+      "sourcePage": "https://melaniameme.com",
       "usage": "Official project artwork; project brand terms apply."
     },
     "meteora": {
@@ -170,6 +311,14 @@
       "inlineSvgMatch": "viewBox=\"0 0 111 30\"",
       "svgViewBox": "0 0 30 30"
     },
+    "pengu": {
+      "url": "https://arweave.net/BW67hICaKGd2_wamSB0IQq-x7Xwtmr2oJj1WnWGJRHU",
+      "file": "coins/pengu.png",
+      "sha256": "0b6260425d584ee3d198f8e84a452b202fbe8ca3500fee1ffc03f46f880ce73c",
+      "sourcePage": "https://pengu.pudgypenguins.com",
+      "usage": "Original artwork referenced by the registered Solana mint metadata; project brand terms apply.",
+      "metadataUri": "https://arweave.net/nFo9Nwcam4ek0SwtKQchYD47T9dkTpGqL62CgcXSjZE"
+    },
     "pepe": {
       "url": "https://raw.githubusercontent.com/0xa3k5/web3icons/3cce0f390cf902f204a1b3d52f485bcc95d2fe9e/raw-svgs/tokens/background/PEPE.svg",
       "file": "coins/pepe.svg",
@@ -183,6 +332,17 @@
       "sha256": "7eda178dc46658f07c55fa47d0d4d51840547f1ff73eab4da28a22923f9baf5b",
       "sourcePage": "https://polygon.technology",
       "usage": "Official project artwork; project brand terms apply."
+    },
+    "pump": {
+      "url": "https://pump.fun/pump-logomark.svg",
+      "file": "coins/pump.svg",
+      "sha256": "2c72b8e06bbd7be8823c2cce4bbe652ba7a36e35074b8a1b27fd668304816379",
+      "sourcePage": "https://pump.fun/pump-token",
+      "usage": "Official project artwork; project brand terms apply.",
+      "requestHeaders": {
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36",
+        "accept": "image/svg+xml"
+      }
     },
     "pyth": {
       "url": "https://pyth.network/token.svg",
@@ -201,10 +361,10 @@
     "render": {
       "url": "https://rendernetwork.com/api/medias/file/logotest3.svg",
       "file": "coins/render.svg",
-      "sha256": "23b8b1fe0c777570d6e77ef25dc0cc04fb7509ea5741218d2dcedf1ad9d3387c",
+      "sha256": "6afce9ece02dc599b36a0b7f3e81e997907d934aa9b3d40e82dfdbd1e5fa9ae8",
       "sourcePage": "https://rendernetwork.com",
-      "usage": "Official project artwork; project brand terms apply.",
-      "svgViewBox": "0 0 40 40"
+      "usage": "Official Render symbol paths with requested white fill on a red circle; original path geometry preserved. Project brand terms apply.",
+      "svgTransform": "render_token"
     },
     "shiba_inu": {
       "url": "https://shib.mypinata.cloud/ipfs/bafybeidvkdvjgb7efb2b4n5pthoyw4cwmc3h2wanbcm7zoyu4ksjbtwwu4/images/redesign/shibio_logo.svg",
@@ -226,6 +386,13 @@
       "file": "chains/tron.svg",
       "sha256": "8d48c2ffbd6255f5f027ee977609de5aa3c534db0a55ea03b6cd426700b86fe3",
       "sourcePage": "https://tron.network",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "trump": {
+      "url": "https://gettrumpmemes.com/images/trump-favicon-256.png",
+      "file": "coins/trump.png",
+      "sha256": "1112b2f016db063d78805af57181a0d4434ba5ae008f0a9e6cdc388dc6ebc4bb",
+      "sourcePage": "https://gettrumpmemes.com",
       "usage": "Official project artwork; project brand terms apply."
     },
     "uniswap": {
@@ -264,11 +431,32 @@
       "sourcePage": "https://ethena.fi",
       "usage": "Official project artwork; project brand terms apply."
     },
+    "usds": {
+      "url": "https://app.sky.money/tokens/usds.svg",
+      "file": "coins/usds.svg",
+      "sha256": "4fdd3f88eb41ecac1faafeb23e4fdc5b05b130b91452cb340b7ec38e5d14e1ad",
+      "sourcePage": "https://app.sky.money",
+      "usage": "Official project artwork; project brand terms apply."
+    },
     "usdt": {
       "url": "https://tether.to/images/logoMarkGreen.svg",
       "file": "coins/usdt.svg",
       "sha256": "155d19d88ac9043f7233662c20396e41b0a71a68f3811889de07baff82afc2f6",
       "sourcePage": "https://tether.to/en/media/",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "useless": {
+      "url": "https://theuselesscoin.com/useless_logo_round.png",
+      "file": "coins/useless.png",
+      "sha256": "3b08193ec820a0016d1d376e7349538b1afee398158a1e2b51f1ca8b12200251",
+      "sourcePage": "https://theuselesscoin.com",
+      "usage": "Official project artwork; project brand terms apply."
+    },
+    "wif": {
+      "url": "https://dogwifcoin.org/wp-content/uploads/2023/11/cropped-wif_icon_512x512.png",
+      "file": "coins/wif.png",
+      "sha256": "7ff7449784976604c370ec170346e7bbb7998a39d92a6b9d974954fa2940298b",
+      "sourcePage": "https://dogwifcoin.org",
       "usage": "Official project artwork; project brand terms apply."
     },
     "wormhole": {
@@ -354,6 +542,21 @@
       "icon": "aave"
     },
     {
+      "network": "solana",
+      "tokenAddress": "BNso1VUJnh4zcfpZa6986Ea66P6TCp59hvtNJ8b1X85",
+      "icon": "bnsol"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "icon": "bonk"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij",
+      "icon": "cbbtc"
+    },
+    {
       "network": "arbitrum_one",
       "tokenAddress": "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4",
       "icon": "chainlink"
@@ -420,13 +623,13 @@
     },
     {
       "network": "solana",
-      "tokenAddress": "GcV9tEj62VncGithz4o4N9x6HWXARxuRgEAYk9zahNA8",
+      "tokenAddress": "HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr",
       "icon": "eurc"
     },
     {
       "network": "solana",
-      "tokenAddress": "HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr",
-      "icon": "eurc"
+      "tokenAddress": "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump",
+      "icon": "fartcoin"
     },
     {
       "network": "solana",
@@ -450,13 +653,78 @@
     },
     {
       "network": "solana",
+      "tokenAddress": "7T1qPZUPdaEhfQ6tXLvFeCoehyDfzdk76XbszbXyqgjx",
+      "icon": "jlepyusd"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "GcV9tEj62VncGithz4o4N9x6HWXARxuRgEAYk9zahNA8",
+      "icon": "jleurc"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "Bd2wJsmaF3YKC6fKLo4AFQDYaFEzWR6SNvoxvTnA6dXc",
+      "icon": "jleusdg"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "27G8MtK7VtTcCHkpASjSDdkWWYfoqT6ggEuKidVJidD4",
+      "icon": "jlp"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "9BEcn9aPEmhSPbPQeFGjidRiEKki46fVQDyPpSQXPA2D",
+      "icon": "jlusdc"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "9fvHrYNw1A8Evpcj7X2yy4k4fT7nNHcA9L6UsamNHAif",
+      "icon": "jlusdg"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "j14XLJZSVMcUYpAfajdZRpnfHUpJieZHS4aPektLWvh",
+      "icon": "jlusds"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "Cmn4v2wipYV41dkakDvCgFJpxhtaaKt11NyWV8pjSE8A",
+      "icon": "jlusdt"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "2uQsyo1fXXQkDtcpXnLofWy88PxcvnfH2L8FPSE62FVU",
+      "icon": "jlwsol"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "7GxATsNMnaC88vdwd2t3mwrFuQwwGvmYPrUQ4D6FotXk",
+      "icon": "juiced"
+    },
+    {
+      "network": "solana",
       "tokenAddress": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
       "icon": "jupiter"
     },
     {
       "network": "solana",
+      "tokenAddress": "jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v",
+      "icon": "jupsol"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD",
+      "icon": "jupusd"
+    },
+    {
+      "network": "solana",
       "tokenAddress": "KMNo3nJsBXfcpJTVhZcXLW7RmTwTt4GVFE7suUBo9sS",
       "icon": "kamino"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
+      "icon": "melania"
     },
     {
       "network": "solana",
@@ -469,6 +737,11 @@
       "icon": "orca"
     },
     {
+      "network": "solana",
+      "tokenAddress": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
+      "icon": "pengu"
+    },
+    {
       "network": "ethereum",
       "tokenAddress": "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
       "icon": "pepe"
@@ -477,6 +750,11 @@
       "network": "solana",
       "tokenAddress": "PEPEqnuuCDbBC89p1u9vpnP1KQ2oj1xTcQBsjt9X55m",
       "icon": "pepe"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn",
+      "icon": "pump"
     },
     {
       "network": "solana",
@@ -500,13 +778,13 @@
     },
     {
       "network": "solana",
-      "tokenAddress": "2uQsyo1fXXQkDtcpXnLofWy88PxcvnfH2L8FPSE62FVU",
+      "tokenAddress": "So11111111111111111111111111111111111111112",
       "icon": "solana"
     },
     {
       "network": "solana",
-      "tokenAddress": "So11111111111111111111111111111111111111112",
-      "icon": "solana"
+      "tokenAddress": "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
+      "icon": "trump"
     },
     {
       "network": "arbitrum_one",
@@ -605,11 +883,6 @@
     },
     {
       "network": "solana",
-      "tokenAddress": "9BEcn9aPEmhSPbPQeFGjidRiEKki46fVQDyPpSQXPA2D",
-      "icon": "usdc"
-    },
-    {
-      "network": "solana",
       "tokenAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       "icon": "usdc"
     },
@@ -622,6 +895,11 @@
       "network": "solana",
       "tokenAddress": "DEkqHyPN7GMRJ5cArtQFAWefqbZb33Hyf6s5iCwjEonT",
       "icon": "usde"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "USDSwr9ApdHk5bvJKMjzff41FfuX8bSxdKcR81vTwcA",
+      "icon": "usds"
     },
     {
       "network": "avalanche_c",
@@ -640,11 +918,6 @@
     },
     {
       "network": "solana",
-      "tokenAddress": "Cmn4v2wipYV41dkakDvCgFJpxhtaaKt11NyWV8pjSE8A",
-      "icon": "usdt"
-    },
-    {
-      "network": "solana",
       "tokenAddress": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
       "icon": "usdt"
     },
@@ -652,6 +925,16 @@
       "network": "tron",
       "tokenAddress": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
       "icon": "usdt"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "Dz9mQ9NzkBcCsuGPFJ3r1bS4wgqKMHBPiVuniW8Mbonk",
+      "icon": "useless"
+    },
+    {
+      "network": "solana",
+      "tokenAddress": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+      "icon": "wif"
     },
     {
       "network": "solana",

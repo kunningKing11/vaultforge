@@ -34,7 +34,11 @@ The below items are the priorities for this project and an item will probably ge
     - [x] native SOL transfers
     - [x] SPL token transfers
     - [x] recipient ATA rent estimation
-    - [ ] Token-2022 support
+    - [ ] Token-2022
+      - [x] balance discovery and shared mint/account inspection
+      - [x] sends with reviewed extensions and transfer-fee handling
+      - [x] reviewed same-chain swaps (Jupiter, Relay and LI.FI)
+      - [ ] embedded Jupiter v2 platform-fee collector layouts
     - [x] pre-sign live balance refresh
   - [x] Tron (TRX) basic transfers
     - [x] native TRX transfers

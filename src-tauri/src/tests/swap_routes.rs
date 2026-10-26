@@ -4,6 +4,7 @@ use serde_json::json;
 
 fn selected(network: &str, token: &str) -> Asset {
     Asset {
+        solana_token: None,
         network: network.into(),
         token_address: Some(token.into()),
         symbol: "TOKEN".into(),

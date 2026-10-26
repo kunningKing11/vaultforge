@@ -48,6 +48,8 @@ pub(crate) struct Operation {
     pub(crate) deployment: Option<CctpDeploymentIdentity>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) swap: Option<SwapData>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) solana_token_send: Option<crate::dto::SolanaTokenSendReview>,
     pub(crate) created_at: String,
     pub(crate) updated_at: String,
     #[serde(default)]
@@ -305,6 +307,7 @@ pub(crate) fn create_operation(
         cctp: None,
         deployment: Some(transfer.route.identity()?),
         swap: None,
+        solana_token_send: None,
         created_at: now.clone(),
         updated_at: now,
         last_error: None,
@@ -341,6 +344,7 @@ pub(crate) fn create_send_operation(
         cctp: None,
         deployment: None,
         swap: None,
+        solana_token_send: None,
         created_at: now.clone(),
         updated_at: now,
         last_error: None,
@@ -648,14 +652,8 @@ pub(crate) async fn reconcile_operation(
     operation: &mut Operation,
     clients: &ProviderClients,
 ) -> Result<(), String> {
-    if crate::jupiter::is_jupiter(operation) {
-        crate::swap_solana::validate_operation(operation)?;
-        let snapshot = operation.clone();
-        return reconcile_operation_with(operation, |_, hash| {
-            let snapshot = &snapshot;
-            async move { crate::jupiter::observe(clients.http(), snapshot, &hash).await }
-        })
-        .await;
+    if crate::swap_routes::is_solana(operation) {
+        return crate::solana_delivery::reconcile(operation, clients.http()).await;
     }
     let route = operation
         .deployment

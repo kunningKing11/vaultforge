@@ -26,6 +26,10 @@ pub(crate) enum RouteTransaction {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct ApiSwap {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) solana_tokens: Option<crate::solana_swap_tokens::SwapTokens>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) delivery: Option<crate::solana_delivery::DeliveryEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) jupiter: Option<crate::jupiter::JupiterTerms>,
     pub(crate) provider: RouteProvider,
     pub(crate) request_id: String,
@@ -251,6 +255,19 @@ pub(crate) async fn quote(
         return Err("Select different assets and a positive input amount".into());
     }
     crate::providers::uniswap::minimum_output(1, bps)?;
+    let solana_tokens = if network == "solana" {
+        let tokens = crate::solana_swap_tokens::load(client, input, output).await?;
+        if u32::from(tokens.input.decimals) != from.decimals
+            || u32::from(tokens.output.decimals) != to.decimals
+        {
+            return Err(
+                "Live Solana mint decimals differ from selected assets; refresh balances".into(),
+            );
+        }
+        Some(tokens)
+    } else {
+        None
+    };
     let mut jupiter = None;
     let (id, expected, minimum, transaction, tool) = match provider {
         RouteProvider::Jupiter => {
@@ -267,7 +284,12 @@ pub(crate) async fn quote(
             let order = crate::providers::jupiter::get_order(client, &request).await?;
             let lookups =
                 crate::swap_solana::order_lookups(client, &order.transaction_base64).await?;
-            let validated = crate::tx::jupiter::validate_order(&order, &request, &lookups)?;
+            let validated = crate::tx::jupiter::validate_order_with_tokens(
+                &order,
+                &request,
+                &lookups,
+                solana_tokens.as_ref(),
+            )?;
             let last_valid_height = crate::jupiter::last_valid_height(&order)?;
             let deadline = crate::jupiter::deadline(&order)?;
             let result = (
@@ -458,6 +480,8 @@ pub(crate) async fn quote(
         .map(|terms| terms.deadline)
         .unwrap_or_else(|| crate::uniswap::now() + 1200);
     let api = ApiSwap {
+        solana_tokens,
+        delivery: None,
         jupiter,
         provider,
         request_id: id,

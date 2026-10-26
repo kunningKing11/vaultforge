@@ -42,6 +42,7 @@ pub(crate) fn sample_attempt(
 pub(crate) fn starter_assets(network: &str) -> Vec<Asset> {
     vec![
         Asset {
+            solana_token: None,
             symbol: "ETH".to_string(),
             unicode_symbol: Some("Ξ".to_string()),
             name: "Ethereum".to_string(),
@@ -53,6 +54,7 @@ pub(crate) fn starter_assets(network: &str) -> Vec<Asset> {
             token_address: None,
         },
         Asset {
+            solana_token: None,
             symbol: "BTC".to_string(),
             unicode_symbol: Some("₿".to_string()),
             name: "Bitcoin".to_string(),
@@ -64,6 +66,7 @@ pub(crate) fn starter_assets(network: &str) -> Vec<Asset> {
             token_address: None,
         },
         Asset {
+            solana_token: None,
             symbol: "SOL".to_string(),
             unicode_symbol: None,
             name: "Solana".to_string(),
@@ -75,6 +78,7 @@ pub(crate) fn starter_assets(network: &str) -> Vec<Asset> {
             token_address: None,
         },
         Asset {
+            solana_token: None,
             symbol: "USDC".to_string(),
             unicode_symbol: None,
             name: "USD Coin".to_string(),

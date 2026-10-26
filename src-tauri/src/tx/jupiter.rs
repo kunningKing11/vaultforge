@@ -22,6 +22,15 @@ pub(crate) fn validate_order(
     request: &OrderRequest,
     verified_lookups: &[SolanaLookup],
 ) -> Result<ValidatedJupiterOrder, String> {
+    validate_order_with_tokens(order, request, verified_lookups, None)
+}
+
+pub(crate) fn validate_order_with_tokens(
+    order: &JupiterOrder,
+    request: &OrderRequest,
+    verified_lookups: &[SolanaLookup],
+    tokens: Option<&crate::solana_swap_tokens::SwapTokens>,
+) -> Result<ValidatedJupiterOrder, String> {
     if order.router != "metis" || order.raw_response["gasless"].as_bool() != Some(false) {
         return Err("Jupiter engine or sponsorship is not supported".into());
     }
@@ -65,8 +74,9 @@ pub(crate) fn validate_order(
         &fee,
         amount,
         minimum,
+        tokens,
     )?;
-    encoding::validate(
+    encoding::validate_with_tokens(
         &STANDARD.encode(
             wincode::serialize(&validation_view)
                 .map_err(|_| "Jupiter validation encoding failed")?,
@@ -78,6 +88,7 @@ pub(crate) fn validate_order(
         trade_amount,
         trade_minimum,
         request.slippage_bps,
+        tokens,
     )?;
     let keys = encoding::resolved_keys(&transaction, verified_lookups)?;
     for instruction in validation_view.message.instructions() {
@@ -252,12 +263,14 @@ fn fee_validation_view(
     fee: &PlatformFee,
     amount: u64,
     minimum: u64,
+    tokens: Option<&crate::solana_swap_tokens::SwapTokens>,
 ) -> Result<(VersionedTransaction, u128, u128, Vec<(String, String)>), String> {
     let keys = encoding::resolved_keys(original, lookups)?;
     let sender = key(&request.taker)?;
-    let fee_source = encoding::associated(&request.taker, &fee.mint).ok();
-    let input_ata = encoding::associated(&request.taker, &request.input_mint)?;
-    let output_ata = encoding::associated(&request.taker, &request.output_mint)?;
+    let fee_source = encoding::associated_with_tokens(&request.taker, &fee.mint, tokens).ok();
+    let input_ata = encoding::associated_with_tokens(&request.taker, &request.input_mint, tokens)?;
+    let output_ata =
+        encoding::associated_with_tokens(&request.taker, &request.output_mint, tokens)?;
     let mut view = original.clone();
     let VersionedMessage::V0(message) = &mut view.message else {
         return Err("Jupiter v0 required".into());
@@ -286,14 +299,40 @@ fn fee_validation_view(
             let shared =
                 data.get(..8) == Some(&Sha256::digest(b"global:shared_accounts_route")[..8]);
             let route = data.get(..8) == Some(&Sha256::digest(b"global:route")[..8]);
-            if shared || route {
-                let offset = data.len().checked_sub(1).ok_or("Jupiter route truncated")?;
-                let encoded_bps = u16::from(data[offset]);
+            let v2 = data.get(..8) == Some(&Sha256::digest(b"global:route_v2")[..8]);
+            if shared || route || v2 {
+                let offset = if v2 {
+                    26
+                } else {
+                    data.len().checked_sub(1).ok_or("Jupiter route truncated")?
+                };
+                let encoded_bps = if v2 {
+                    u16::from_le_bytes(
+                        data.get(offset..offset + 2)
+                            .ok_or("Jupiter fee missing")?
+                            .try_into()
+                            .map_err(|_| "Invalid Jupiter fee")?,
+                    )
+                } else {
+                    u16::from(data[offset])
+                };
                 if encoded_bps != 0 {
+                    if v2 {
+                        return Err(
+                            "Jupiter v2 embedded platform-fee collector layout is not reviewed"
+                                .into(),
+                        );
+                    }
                     if encoded_bps != fee.bps || embedded || !removed.is_empty() {
                         return Err("Jupiter encoded platform fee differs from its quote".into());
                     }
-                    let collector = account(if shared { 9 } else { 6 })?;
+                    let collector = account(if v2 {
+                        7
+                    } else if shared {
+                        9
+                    } else {
+                        6
+                    })?;
                     if [sender, input_ata, output_ata, key(encoding::JUPITER)?].contains(&collector)
                     {
                         return Err("Invalid Jupiter fee collector".into());
@@ -301,6 +340,9 @@ fn fee_validation_view(
                     accounts.push((collector.to_string(), fee.mint.clone()));
                     embedded = true;
                     instruction.data[offset] = 0;
+                    if v2 {
+                        instruction.data[offset + 1] = 0;
+                    }
                 }
             }
             continue;
@@ -317,22 +359,53 @@ fn fee_validation_view(
             && account(1)? != input_ata
         {
             (sender, account(1)?, sender, integer(data, 4)?, false)
-        } else if program == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" {
+        } else if program == encoding::token_program(tokens, &fee.mint)? {
             match data.as_slice() {
-                [3, ..] if data.len() == 9 => (
+                [3, ..] if data.len() == 9 && program == crate::solana_tokens::CLASSIC => (
                     account(0)?,
                     account(1)?,
                     account(2)?,
                     integer(data, 1)?,
                     true,
                 ),
-                [12, ..] if data.len() == 10 && account(1)? == key(&fee.mint)? => (
-                    account(0)?,
-                    account(2)?,
-                    account(3)?,
-                    integer(data, 1)?,
-                    true,
-                ),
+                [12, ..]
+                    if data.len() == 10
+                        && account(1)? == key(&fee.mint)?
+                        && tokens.is_none_or(|t| {
+                            t.get(&fee.mint).is_ok_and(|token| {
+                                token.decimals == data[9] && token.fee_schedule.is_none()
+                            })
+                        }) =>
+                {
+                    (
+                        account(0)?,
+                        account(2)?,
+                        account(3)?,
+                        integer(data, 1)?,
+                        true,
+                    )
+                }
+                [26, 1, ..]
+                    if data.len() == 19
+                        && account(1)? == key(&fee.mint)?
+                        && program == crate::solana_tokens::TOKEN_2022 =>
+                {
+                    let token = tokens
+                        .ok_or("Jupiter Token-2022 terms missing")?
+                        .get(&fee.mint)?;
+                    if data[10] != token.decimals
+                        || integer(data, 11)? != token.fee(integer(data, 2)?)?
+                    {
+                        return Err("Jupiter token transfer tax changed".into());
+                    }
+                    (
+                        account(0)?,
+                        account(2)?,
+                        account(3)?,
+                        integer(data, 2)?,
+                        true,
+                    )
+                }
                 _ => continue,
             }
         } else {

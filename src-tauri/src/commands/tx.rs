@@ -18,9 +18,7 @@ use crate::providers::evm::{
 };
 use crate::providers::http::ProviderClients;
 use crate::providers::solana::{
-    broadcast_solana_transaction, fetch_solana_mint_decimals, fetch_solana_native_balance,
-    fetch_solana_token_account_rent, fetch_solana_token_account_state, fetch_solana_token_accounts,
-    simulate_solana_transaction,
+    broadcast_solana_transaction, fetch_solana_native_balance, simulate_solana_transaction,
 };
 use crate::providers::tron::broadcast_tron_transaction;
 use crate::providers::xrpl::{
@@ -31,10 +29,7 @@ use crate::storage::persist_state_wallet;
 use crate::tx::evm::{
     Eip1559TxDraft, build_erc20_transfer_call, build_native_transfer_call, sign_eip1559_transfer,
 };
-use crate::tx::solana::{
-    select_solana_token_sources, sign_solana_token_transfer, sign_solana_transfer,
-    solana_associated_token_address,
-};
+use crate::tx::solana::{SolanaTransferDraft, sign_solana_instructions, sign_solana_transfer};
 use crate::tx::tron::sign_tron_transfer;
 use crate::tx::tx_status::{Execution, Finality, TxStatus};
 use crate::tx::xrpl::sign_xrpl_payment;
@@ -159,7 +154,14 @@ fn is_unresolved_send(operation: &Operation, network: &str, from: &str) -> bool 
 fn prepare_durable_send(
     state: &Mutex<AppState>,
     signed: &SignedTransaction,
+    generation: Option<u64>,
 ) -> Result<Option<(String, String)>, String> {
+    if let Some(generation) = generation {
+        let guard = state.lock().map_err(|_| "State lock failed")?;
+        if !guard.can_commit_refresh(generation) {
+            return Err("Wallet changed during send preparation".into());
+        }
+    }
     let supported = evm_config_by_id(&signed.network).is_some()
         || signed.network == "solana"
         || (signed.token_address.is_none() && matches!(signed.network.as_str(), "tron" | "xrpl"));
@@ -177,11 +179,17 @@ fn prepare_durable_send(
     // Retrying an already recorded hash must reuse its durable attempt instead
     // of creating a second record for the same transaction.
     if let Some((operation_id, stored)) = find_durable_send(state, &signed.network, &tx_hash)? {
+        if signed.network == "solana" && signed.token_address.is_some() {
+            return Err("This Solana token transfer is already recorded; reconcile its saved signature instead of submitting again".into());
+        }
         return Ok(Some((operation_id, stored.unwrap_or(raw_tx))));
     }
     let mut guard = state.lock().map_err(|_| "State lock failed")?;
     if guard.locked {
         return Err("Wallet is locked".to_string());
+    }
+    if generation.is_some_and(|generation| !guard.can_commit_refresh(generation)) {
+        return Err("Wallet changed during send preparation".into());
     }
     let wallet = guard.wallet.as_mut().ok_or("No wallet exists yet")?;
     // Non-EVM chains have no account nonce to serialize sends, so a re-signed
@@ -212,6 +220,7 @@ fn prepare_durable_send(
         signed.symbol.clone(),
         signed.note.trim().to_string(),
     );
+    operation.solana_token_send = signed.solana_token_send.clone();
     operation.attempts.push(TransactionAttempt {
         step: TransactionStep::Send,
         status: TransactionStatus::Signed,
@@ -394,7 +403,7 @@ pub(crate) async fn sign_transaction(
 ) -> Result<SignedTransaction, String> {
     validate_unlocked(&state)?;
 
-    let (mnemonic, bip39_passphrase, addresses, assets, bitcoin_account) = {
+    let (mnemonic, bip39_passphrase, addresses, assets, bitcoin_account, generation) = {
         let state = state.lock().map_err(|_| "State lock failed")?;
         let wallet = state
             .wallet
@@ -414,6 +423,7 @@ pub(crate) async fn sign_transaction(
             wallet.addresses.clone(),
             wallet.assets.clone(),
             state.bitcoin_account.clone(),
+            state.wallet_generation,
         )
     };
 
@@ -459,6 +469,7 @@ pub(crate) async fn sign_transaction(
             .await?;
 
             Ok(SignedTransaction {
+                solana_token_send: None,
                 token_address: asset.token_address.clone(),
                 from,
                 to,
@@ -583,6 +594,7 @@ pub(crate) async fn sign_transaction(
             .to_string();
 
             let signed = SignedTransaction {
+                solana_token_send: None,
                 token_address: asset.token_address.clone(),
                 from: address,
                 to,
@@ -618,6 +630,7 @@ pub(crate) async fn sign_transaction(
             let sol_balance = fetch_solana_native_balance(client, &from).await?;
             let mut extra_sol_lamports = 0u64;
             let mut source_token_balance = None;
+            let mut solana_token_send = None;
 
             let signed_sol = if is_native {
                 sign_solana_transfer(client, &mnemonic, &bip39_passphrase, &from, &to, amount_u64)
@@ -627,39 +640,30 @@ pub(crate) async fn sign_transaction(
                     .token_address
                     .as_deref()
                     .ok_or_else(|| format!("{symbol} mint address is not available"))?;
-                let mint_decimals = fetch_solana_mint_decimals(client, mint).await?;
-                decimals = u32::from(mint_decimals);
-
-                let source_accounts = fetch_solana_token_accounts(client, &from).await?;
-                let (sources, total_balance) = select_solana_token_sources(
-                    &from,
-                    mint,
-                    mint_decimals,
-                    amount_u64,
-                    &source_accounts,
-                )?;
-                source_token_balance = Some(total_balance);
-
-                let destination_ata = solana_associated_token_address(&to, mint)?;
-                let ata_exists =
-                    fetch_solana_token_account_state(client, &destination_ata, &to, mint)
-                        .await?
-                        .is_some();
-                if !ata_exists {
-                    extra_sol_lamports = fetch_solana_token_account_rent(client).await?;
+                let prepared =
+                    crate::solana_send::prepare(client, &from, &to, mint, amount_u64).await?;
+                decimals = u32::from(prepared.decimals);
+                extra_sol_lamports = prepared
+                    .review
+                    .account_rent_lamports
+                    .parse()
+                    .map_err(|_| "Invalid Solana token account rent")?;
+                source_token_balance = Some(prepared.source_balance);
+                solana_token_send = Some(prepared.review);
+                {
+                    let guard = state.lock().map_err(|_| "State lock failed")?;
+                    if !guard.can_commit_refresh(generation) {
+                        return Err("Wallet changed before Solana signing".into());
+                    }
                 }
-
-                sign_solana_token_transfer(
-                    client,
-                    &mnemonic,
-                    &bip39_passphrase,
-                    &from,
-                    &to,
-                    mint,
-                    &sources,
-                    mint_decimals,
-                )
-                .await?
+                sign_solana_instructions(SolanaTransferDraft {
+                    mnemonic: &mnemonic,
+                    bip39_passphrase: &bip39_passphrase,
+                    from: &from,
+                    recent_blockhash: &prepared.blockhash,
+                    fee_lamports: prepared.fee,
+                    instructions: prepared.instructions,
+                })?
             };
 
             let fee_lamports = signed_sol.fee_lamports as u128;
@@ -700,6 +704,7 @@ pub(crate) async fn sign_transaction(
             };
 
             let signed = SignedTransaction {
+                solana_token_send,
                 token_address: asset.token_address.clone(),
                 from,
                 to,
@@ -721,6 +726,12 @@ pub(crate) async fn sign_transaction(
                 raw_tx: Some(signed_sol.raw_tx_base64),
                 tx_hash: Some(signed_sol.signature),
             };
+            {
+                let guard = state.lock().map_err(|_| "State lock failed")?;
+                if !guard.can_commit_refresh(generation) {
+                    return Err("Wallet changed during Solana signing".into());
+                }
+            }
             Ok(signed)
         }
         "tron" if is_native => {
@@ -751,6 +762,7 @@ pub(crate) async fn sign_transaction(
                 .map_err(|_| "Failed to serialize signed Tron transaction".to_string())?;
 
             let signed = SignedTransaction {
+                solana_token_send: None,
                 token_address: asset.token_address.clone(),
                 from,
                 to,
@@ -811,6 +823,7 @@ pub(crate) async fn sign_transaction(
             let signed = signed?;
 
             let signed_tx = SignedTransaction {
+                solana_token_send: None,
                 token_address: asset.token_address.clone(),
                 from,
                 to,
@@ -877,7 +890,7 @@ pub(crate) async fn send_transaction(
 ) -> Result<WalletSession, String> {
     validate_unlocked(&state)?;
 
-    {
+    let generation = {
         let state = state.lock().map_err(|_| "State lock failed")?;
         let wallet = state
             .wallet
@@ -890,13 +903,30 @@ pub(crate) async fn send_transaction(
         {
             return Err("Signed transaction does not match this wallet".to_string());
         }
+        if signed.network == "solana" && signed.token_address.is_some() {
+            if wallet.operations.iter().any(|operation| {
+                operation
+                    .attempts
+                    .iter()
+                    .any(|attempt| Some(attempt.tx_hash.as_str()) == signed.tx_hash.as_deref())
+            }) {
+                return Err("This Solana token transfer is already recorded; reconcile its saved signature instead of submitting again".into());
+            }
+        }
+        state.wallet_generation
+    };
+    if signed.network == "solana" {
+        crate::tx::solana::verify_signed_transfer(&signed)?;
+        if signed.token_address.is_some() {
+            crate::solana_send::validate_submission(clients.http(), &signed).await?;
+        }
     }
 
     let expected_hash = signed
         .tx_hash
         .clone()
         .ok_or_else(|| "Signed transaction is missing a hash".to_string())?;
-    let durable = prepare_durable_send(&state, &signed)?;
+    let durable = prepare_durable_send(&state, &signed, Some(generation))?;
     let mut raw_tx = signed
         .raw_tx
         .clone()
@@ -958,7 +988,12 @@ pub(crate) async fn send_transaction(
         // Bind acceptance to the persisted hash so a mismatched provider
         // response never overwrites the attempt's expected transaction id.
         broadcast.and_then(|hash| {
-            if hash.eq_ignore_ascii_case(&expected_hash) {
+            let matches = if signed.network == "solana" {
+                hash == expected_hash
+            } else {
+                hash.eq_ignore_ascii_case(&expected_hash)
+            };
+            if matches {
                 Ok(hash)
             } else {
                 Err(format!(

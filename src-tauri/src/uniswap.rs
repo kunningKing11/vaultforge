@@ -136,7 +136,11 @@ pub(crate) enum SwapStage {
 
 /// The stepper follows persisted transaction evidence, never display labels.
 fn swap_stage(operation: &Operation) -> SwapStage {
-    if operation.step == OperationStep::Completed || local_swap_confirmed(operation) {
+    if (operation.step == OperationStep::Completed
+        && (!crate::swap_routes::is_solana(operation)
+            || crate::solana_delivery::verified(operation)))
+        || local_swap_confirmed(operation)
+    {
         return SwapStage::Done;
     }
     match operation.attempts.last() {
@@ -356,6 +360,8 @@ pub(crate) fn approval_confirmed(attempt: &TransactionAttempt) -> bool {
 /// A solver deposit still needs destination settlement proof.
 pub(crate) fn local_swap_confirmed(operation: &Operation) -> bool {
     operation.kind == OperationKind::Swap
+        && (!crate::swap_routes::is_solana(operation)
+            || crate::solana_delivery::verified(operation))
         && operation.source_asset.network == operation.destination_asset.network
         && operation
             .swap
@@ -381,7 +387,9 @@ pub(crate) fn terminal(operation: &Operation) -> bool {
         || matches!(
             operation.step,
             OperationStep::Completed | OperationStep::Cancelled
-        )
+        ) && (!crate::swap_routes::is_solana(operation)
+            || operation.step == OperationStep::Cancelled
+            || crate::solana_delivery::verified(operation))
         || operation.attempts.last().is_some_and(|attempt| {
             is_final(attempt)
                 && attempt
@@ -399,6 +407,8 @@ pub(crate) fn update_progress(operation: &mut Operation) {
     if let Some(attempt) = operation.attempts.last() {
         if succeeded(attempt) || approval_confirmed(attempt) {
             operation.step = if attempt.step == TransactionStep::Send
+                && (!crate::swap_routes::is_solana(operation)
+                    || crate::solana_delivery::verified(operation))
                 && operation
                     .swap
                     .as_ref()
@@ -465,7 +475,11 @@ pub(crate) fn swap_activity(operation: &Operation) -> Result<Activity, String> {
     let attempt = operation.attempts.last();
     let status = if operation.step == OperationStep::Cancelled {
         "cancelled"
-    } else if operation.step == OperationStep::Completed || local_swap_confirmed(operation) {
+    } else if (operation.step == OperationStep::Completed
+        && (!crate::swap_routes::is_solana(operation)
+            || crate::solana_delivery::verified(operation)))
+        || local_swap_confirmed(operation)
+    {
         "confirmed"
     } else if terminal(operation) {
         "failed"
@@ -487,6 +501,16 @@ pub(crate) fn swap_activity(operation: &Operation) -> Result<Activity, String> {
         _ if attempt.is_some_and(|a| approval_confirmed(a)) => "Approval complete; prepare swap",
         _ if attempt.is_some_and(|a| a.step == TransactionStep::Approval) => {
             "Swap approval pending"
+        }
+        _ if crate::swap_routes::is_solana(operation)
+            && !crate::solana_delivery::verified(operation)
+            && attempt.is_some_and(|a| {
+                a.tx_status
+                    .as_ref()
+                    .is_some_and(|s| s.execution == Execution::Succeeded)
+            }) =>
+        {
+            "Verifying received amount"
         }
         _ if attempt.is_some_and(|a| {
             a.step == TransactionStep::Send
@@ -521,6 +545,7 @@ pub(crate) fn swap_activity(operation: &Operation) -> Result<Activity, String> {
             "Swap deposit confirmed" => "The deposit transaction succeeded on-chain. Waiting for source finality before checking destination settlement; a successful deposit does not yet prove the output tokens arrived.".into(),
             "Waiting for cross-chain settlement" => "The source deposit is finalized. Checking the destination receipt and received amount; the route completes after destination finality.".into(),
             "Swap pending" => "Waiting for the swap transaction receipt.".into(),
+            "Verifying received amount" => "Checking the transaction and net amount received before completing this swap.".into(),
             _ => format!("{} → {}", data.input_symbol, data.output_symbol),
         },
         amount: display_amount(
@@ -626,11 +651,20 @@ pub(crate) fn get_state(state: &Mutex<AppState>) -> Result<UniswapState, String>
                 progress: swap_activity(operation)?,
                 stage: swap_stage(operation),
                 terminal: terminal(operation),
-                needs_sync: (!terminal(operation)
-                    && operation.swap.as_ref().is_some_and(|s| s.relay.is_some())
-                    && operation.attempts.iter().any(|a| {
-                        a.step == TransactionStep::Send && a.status != TransactionStatus::Signed
+                needs_sync: (crate::swap_routes::is_solana(operation)
+                    && !crate::solana_delivery::verified(operation)
+                    && operation.attempts.last().is_some_and(|a| {
+                        a.status != TransactionStatus::Signed
+                            && a.status != TransactionStatus::Superseded
+                            && a.tx_status
+                                .as_ref()
+                                .is_none_or(|s| s.execution != Execution::Failed)
                     }))
+                    || (!terminal(operation)
+                        && operation.swap.as_ref().is_some_and(|s| s.relay.is_some())
+                        && operation.attempts.iter().any(|a| {
+                            a.step == TransactionStep::Send && a.status != TransactionStatus::Signed
+                        }))
                     || operation.attempts.iter().any(|a| {
                         !is_final(a)
                             && matches!(

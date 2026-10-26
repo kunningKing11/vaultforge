@@ -298,7 +298,7 @@ pub(crate) fn validate_operation(operation: &Operation) -> Result<(), String> {
     else {
         return Err("Solana swap transaction family mismatch".into());
     };
-    encoding::validate(
+    encoding::validate_with_tokens(
         transaction,
         lookups,
         &operation.sender,
@@ -321,6 +321,7 @@ pub(crate) fn validate_operation(operation: &Operation) -> Result<(), String> {
             .parse()
             .map_err(|_| "Invalid swap minimum")?,
         terms.slippage_bps,
+        api.solana_tokens.as_ref(),
     )?;
     Ok(())
 }
@@ -328,6 +329,7 @@ async fn fee_and_simulation(
     client: &(impl SolanaRpc + Sync),
     tx: &VersionedTransaction,
     lookups: &[SolanaLookup],
+    tokens: Option<&crate::solana_swap_tokens::SwapTokens>,
 ) -> Result<(u64, u64), String> {
     // Pin mainnet and simulate the exact message before it is signed or broadcast.
     if rpc(client, "getGenesisHash", json!([])).await?.as_str()
@@ -348,7 +350,7 @@ async fn fee_and_simulation(
     }
     let keys = encoding::resolved_keys(tx, lookups)?;
     let payer = keys.first().ok_or("Solana payer missing")?;
-    let mut new_accounts = std::collections::BTreeSet::new();
+    let mut new_accounts = std::collections::BTreeMap::new();
     let mut native_spend = 0u64;
     for instruction in tx.message.instructions() {
         let program = keys
@@ -367,8 +369,46 @@ async fn fee_and_simulation(
                 json!([account.to_string(),{"encoding":"base64","commitment":"confirmed"}]),
             )
             .await?;
-            if state.get("value").ok_or("ATA state missing")?.is_null() {
-                new_accounts.insert(account.to_string());
+            let value = state.get("value").ok_or("ATA state missing")?;
+            if !value.is_null() {
+                if let Some(tokens) = tokens {
+                    let owner = keys
+                        .get(usize::from(
+                            *instruction.accounts.get(2).ok_or("ATA owner missing")?,
+                        ))
+                        .ok_or("ATA owner index missing")?
+                        .to_string();
+                    let mint = keys
+                        .get(usize::from(
+                            *instruction.accounts.get(3).ok_or("ATA mint missing")?,
+                        ))
+                        .ok_or("ATA mint index missing")?
+                        .to_string();
+                    let token = tokens.get(&mint)?;
+                    let holding =
+                        crate::solana_tokens::inspect_holding(&account.to_string(), &owner, value)?;
+                    if holding.program.id() != token.program
+                        || holding.mint != mint
+                        || holding.unsupported_reason().is_some()
+                    {
+                        return Err(
+                            "Swap account creation targets an invalid existing token account"
+                                .into(),
+                        );
+                    }
+                }
+            }
+            if value.is_null() {
+                let mint = keys
+                    .get(usize::from(
+                        *instruction.accounts.get(3).ok_or("ATA mint missing")?,
+                    ))
+                    .ok_or("Invalid ATA mint index")?
+                    .to_string();
+                let size = tokens.map_or(Ok(165), |tokens| {
+                    Ok::<_, String>(tokens.get(&mint)?.account_len)
+                })?;
+                new_accounts.insert(account.to_string(), size);
             }
         } else if program == encoding::NATIVE {
             let amount = u64::from_le_bytes(
@@ -384,26 +424,18 @@ async fn fee_and_simulation(
                 .ok_or("Native swap amount overflow")?;
         }
     }
-    let rent = if new_accounts.is_empty() {
-        0
-    } else {
-        let per_account = rpc(
+    let mut rent = 0u64;
+    for size in new_accounts.values() {
+        let amount = rpc(
             client,
             "getMinimumBalanceForRentExemption",
-            json!([165,{"commitment":"confirmed"}]),
+            json!([size,{"commitment":"confirmed"}]),
         )
         .await?
         .as_u64()
         .ok_or("Solana rent unavailable")?;
-        per_account
-            .checked_mul(
-                new_accounts
-                    .len()
-                    .try_into()
-                    .map_err(|_| "Too many Solana accounts")?,
-            )
-            .ok_or("Solana rent overflow")?
-    };
+        rent = rent.checked_add(amount).ok_or("Solana rent overflow")?;
+    }
     let balance = rpc(
         client,
         "getBalance",
@@ -451,8 +483,11 @@ async fn validated_api_transaction(
     else {
         return Err("Native swap required".into());
     };
+    if let Some(tokens) = &api.solana_tokens {
+        crate::solana_swap_tokens::recheck(client, tokens, sender, input, output, amount).await?;
+    }
     if api.provider != crate::swap_routes::RouteProvider::Jupiter {
-        return encoding::validate(
+        return encoding::validate_with_tokens(
             transaction,
             lookups,
             sender,
@@ -461,6 +496,7 @@ async fn validated_api_transaction(
             amount,
             minimum,
             slippage,
+            api.solana_tokens.as_ref(),
         );
     }
     let saved = api.jupiter.as_ref().ok_or("Jupiter terms missing")?;
@@ -477,11 +513,39 @@ async fn validated_api_transaction(
         amount_base_units: amount.to_string(),
         slippage_bps: slippage,
     };
-    let validated = crate::tx::jupiter::validate_order(&saved.order, &request, lookups)?;
+    let validated = crate::tx::jupiter::validate_order_with_tokens(
+        &saved.order,
+        &request,
+        lookups,
+        api.solana_tokens.as_ref(),
+    )?;
     if validated.message_hash != saved.message_hash {
         return Err("Jupiter message changed".into());
     }
     for (account, mint) in &validated.fee_token_accounts {
+        if let Some(tokens) = &api.solana_tokens {
+            let token = tokens.get(mint)?;
+            let response = rpc(
+                client,
+                "getAccountInfo",
+                json!([account,{"encoding":"base64","commitment":"confirmed"}]),
+            )
+            .await?;
+            let (program, bytes) = crate::solana_tokens::account_data(&response["value"])?;
+            let owner = bytes
+                .get(32..64)
+                .ok_or("Jupiter fee collector owner missing")?;
+            let owner = bs58::encode(owner).into_string();
+            let holding =
+                crate::solana_tokens::inspect_holding(account, &owner, &response["value"])?;
+            if program.id() != token.program
+                || holding.mint != *mint
+                || holding.unsupported_reason().is_some()
+            {
+                return Err("Jupiter fee collector program, mint or extensions changed".into());
+            }
+            continue;
+        }
         let response = rpc(
             client,
             "getAccountInfo",
@@ -518,7 +582,7 @@ pub(crate) async fn quote_fee(
         client, api, sender, input, output, amount, minimum, slippage,
     )
     .await?;
-    let (fee, rent) = fee_and_simulation(client, &tx, lookups).await?;
+    let (fee, rent) = fee_and_simulation(client, &tx, lookups, api.solana_tokens.as_ref()).await?;
     fee.checked_add(rent)
         .ok_or("Solana fee and rent overflow".into())
 }
@@ -540,23 +604,8 @@ async fn reconcile(
     generation: u64,
     original: &Operation,
 ) -> Result<Operation, String> {
-    if crate::jupiter::is_jupiter(original) {
-        validate_operation(original)?;
-    }
     let mut next = original.clone();
-    crate::operations::reconcile_operation_with(&mut next, |_, hash| async move {
-        if crate::jupiter::is_jupiter(original) {
-            return crate::jupiter::observe(client, original, &hash).await;
-        }
-        let response = rpc(
-            client,
-            "getSignatureStatuses",
-            json!([[hash],{"searchTransactionHistory":true}]),
-        )
-        .await?;
-        crate::providers::solana::parse_solana_tx_observation(&json!({"result":response}))
-    })
-    .await?;
+    crate::solana_delivery::reconcile(&mut next, client).await?;
     let expiry_candidate = next.attempts.last().and_then(|attempt| {
         (attempt.tx_status.is_none()
             && matches!(
@@ -589,23 +638,38 @@ async fn reconcile(
                 .as_u64()
                 .is_some_and(|height| height > last_valid_height)
             {
-                if let Some(jupiter) = crate::jupiter::terms(&next) {
-                    let tx = encoding::decode(&jupiter.order.transaction_base64)?;
-                    let invalid = rpc(client, "isBlockhashValid", json!([tx.message.recent_blockhash().to_string(), {"commitment":"finalized"}])).await
-                        .ok().and_then(|v| v["value"].as_bool()) == Some(false);
-                    // A confirmed blockhash may not be rooted yet; require both checks
-                    // to report expiry before releasing transaction protection.
-                    let invalid_confirmed = rpc(client, "isBlockhashValid", json!([tx.message.recent_blockhash().to_string(), {"commitment":"confirmed"}])).await
-                        .ok().and_then(|v| v["value"].as_bool()) == Some(false);
-                    if !invalid || !invalid_confirmed {
-                        save_operation(
-                            &mut *state.lock().map_err(|_| "State lock failed")?,
-                            generation,
-                            original,
-                            &next,
-                        )?;
-                        return Ok(next);
-                    }
+                let blockhash = next
+                    .attempts
+                    .last()
+                    .and_then(|a| a.solana_context.as_ref())
+                    .map(|c| c.blockhash.clone())
+                    .ok_or("Saved Solana expiry blockhash missing")?;
+                let invalid = rpc(
+                    client,
+                    "isBlockhashValid",
+                    json!([blockhash,{"commitment":"finalized"}]),
+                )
+                .await
+                .ok()
+                .and_then(|v| v["value"].as_bool())
+                    == Some(false);
+                let invalid_confirmed = rpc(
+                    client,
+                    "isBlockhashValid",
+                    json!([blockhash,{"commitment":"confirmed"}]),
+                )
+                .await
+                .ok()
+                .and_then(|v| v["value"].as_bool())
+                    == Some(false);
+                if !invalid || !invalid_confirmed {
+                    save_operation(
+                        &mut *state.lock().map_err(|_| "State lock failed")?,
+                        generation,
+                        original,
+                        &next,
+                    )?;
+                    return Ok(next);
                 }
                 if let Ok(finalized_slot) =
                     rpc(client, "getSlot", json!([{"commitment":"finalized"}])).await
@@ -629,24 +693,9 @@ async fn reconcile(
                                         &json!({"result":status}),
                                     )
                                 {
-                                    if let Some(observation) = observed {
-                                        crate::operations::reconcile_operation_with(
-                                            &mut next,
-                                            |_, hash| {
-                                                let observation = observation.clone();
-                                                async move {
-                                                    if crate::jupiter::is_jupiter(original) {
-                                                        crate::jupiter::observe(
-                                                            client, original, &hash,
-                                                        )
-                                                        .await
-                                                    } else {
-                                                        Ok(Some(observation))
-                                                    }
-                                                }
-                                            },
-                                        )
-                                        .await?;
+                                    if observed.is_some() {
+                                        crate::solana_delivery::reconcile(&mut next, client)
+                                            .await?;
                                     } else if let Some(attempt) = next.attempts.last_mut() {
                                         attempt.status = TransactionStatus::Superseded;
                                         attempt.error = Some(
@@ -733,7 +782,6 @@ pub(crate) async fn prepare(
         terms.slippage_bps,
     )
     .await?;
-    let (fee, rent) = fee_and_simulation(client, &tx, &lookups).await?;
     let (hash, last_valid) = if let Some(jupiter) = crate::jupiter::terms(&original) {
         let height = rpc(
             client,
@@ -759,6 +807,29 @@ pub(crate) async fn prepare(
         }
         (hash, height)
     };
+    let (fee, rent) = fee_and_simulation(client, &tx, &lookups, api.solana_tokens.as_ref()).await?;
+    if let Some(tokens) = &api.solana_tokens {
+        crate::solana_swap_tokens::recheck(
+            client,
+            tokens,
+            &original.sender,
+            original
+                .source_asset
+                .token_address
+                .as_deref()
+                .unwrap_or(encoding::NATIVE),
+            original
+                .destination_asset
+                .token_address
+                .as_deref()
+                .unwrap_or(encoding::NATIVE),
+            original
+                .amount_base_units
+                .parse()
+                .map_err(|_| "Invalid swap amount")?,
+        )
+        .await?;
+    }
     let mut lock = state.lock().map_err(|_| "State lock failed")?;
     check_snapshot(&lock, generation, &original)?;
     let wallet = lock.wallet.as_ref().ok_or("Wallet closed")?;
@@ -954,7 +1025,7 @@ pub(crate) async fn submit(
     {
         return Err("Signed Solana swap differs from reviewed intent".into());
     }
-    let (fee, rent) = fee_and_simulation(client, &tx, lookups).await?;
+    let (fee, rent) = fee_and_simulation(client, &tx, lookups, api.solana_tokens.as_ref()).await?;
     if fee.checked_add(rent).ok_or("Native budget overflow")?
         > context
             .fee_lamports
@@ -962,6 +1033,28 @@ pub(crate) async fn submit(
             .ok_or("Saved budget overflow")?
     {
         return Err("Solana swap fee increased; review a fresh quote".into());
+    }
+    if let Some(tokens) = &api.solana_tokens {
+        crate::solana_swap_tokens::recheck(
+            client,
+            tokens,
+            &original.sender,
+            original
+                .source_asset
+                .token_address
+                .as_deref()
+                .unwrap_or(encoding::NATIVE),
+            original
+                .destination_asset
+                .token_address
+                .as_deref()
+                .unwrap_or(encoding::NATIVE),
+            original
+                .amount_base_units
+                .parse()
+                .map_err(|_| "Invalid swap amount")?,
+        )
+        .await?;
     }
     let mut submitting = original.clone();
     let next = submitting.attempts.last_mut().ok_or("Attempt missing")?;
@@ -1042,19 +1135,12 @@ pub(crate) async fn sync(
     .await
     .ok()
     .and_then(|v| v["value"].as_u64());
-    let token_params = json!([
-        operation.sender,
-        {"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},
-        {"encoding": "jsonParsed", "commitment": "confirmed"}
-    ]);
-    let tokens = match rpc(client, "getTokenAccountsByOwner", token_params).await {
-        Ok(value) => crate::providers::solana::parse_solana_token_accounts(
-            &json!({"result": value}),
-            &operation.sender,
-        )
-        .ok(),
-        Err(_) => None,
-    };
+    let tokens = crate::providers::solana::fetch_solana_portfolio_accounts_with(
+        &operation.sender,
+        |method, params| async move { Ok(json!({"result":rpc(client,method,params).await?})) },
+    )
+    .await
+    .ok();
     let mut lock = state.lock().map_err(|_| "State lock failed")?;
     check_snapshot(&lock, generation, &operation)?;
     if let Some(wallet) = lock.wallet.as_mut() {
@@ -1069,20 +1155,18 @@ pub(crate) async fn sync(
                         asset.balance = balance.to_string();
                     }
                 }
-                Some(mint) => {
-                    if let Some(accounts) = &tokens {
-                        let balance = accounts
-                            .iter()
-                            .filter(|account| &account.mint == mint)
-                            .try_fold(0u128, |sum, account| {
-                                sum.checked_add(u128::from(account.amount))
-                            })
-                            .ok_or("Solana token balance overflow")?;
-                        asset.balance = balance.to_string();
-                    }
-                }
+                Some(_) => {}
             }
         }
+    }
+    if let (Some(accounts), Some(wallet)) = (tokens, lock.wallet.as_mut()) {
+        let config = crate::registry::network_by_id("solana").ok_or("Solana network missing")?;
+        let refreshed =
+            crate::providers::solana::solana_token_assets(config, accounts, &wallet.assets);
+        wallet
+            .assets
+            .retain(|asset| asset.network != "solana" || asset.token_address.is_none());
+        wallet.assets.extend(refreshed);
     }
     Ok(session_from_state(&lock))
 }

@@ -19,6 +19,7 @@ fn evm_transfer_validation_does_not_reject_using_cached_balances() {
         usd_exchange_rate: 1.0,
         assets: vec![
             Asset {
+                solana_token: None,
                 symbol: "ETH".to_string(),
                 unicode_symbol: None,
                 name: "Ether".to_string(),
@@ -30,6 +31,7 @@ fn evm_transfer_validation_does_not_reject_using_cached_balances() {
                 token_address: None,
             },
             Asset {
+                solana_token: None,
                 symbol: "USDC".to_string(),
                 unicode_symbol: None,
                 name: "USD Coin".to_string(),
@@ -128,6 +130,7 @@ fn token_transfer_validation_uses_contract_or_mint_identity() {
         usd_exchange_rate: 1.0,
         assets: vec![
             Asset {
+                solana_token: None,
                 symbol: "DUP".to_string(),
                 unicode_symbol: None,
                 name: "First".to_string(),
@@ -139,6 +142,7 @@ fn token_transfer_validation_uses_contract_or_mint_identity() {
                 token_address: Some("So11111111111111111111111111111111111111112".to_string()),
             },
             Asset {
+                solana_token: None,
                 symbol: "DUP".to_string(),
                 unicode_symbol: None,
                 name: "Second".to_string(),
@@ -197,6 +201,7 @@ fn transfer_validation_rejects_malformed_amounts_and_mints() {
         fiat_currency: FiatCurrency::Usd,
         usd_exchange_rate: 1.0,
         assets: vec![Asset {
+            solana_token: None,
             symbol: "SPL".to_string(),
             unicode_symbol: None,
             name: "SPL".to_string(),
@@ -320,6 +325,7 @@ fn validates_solana_token_transfer_recipient_as_solana_address() {
         fiat_currency: FiatCurrency::Usd,
         usd_exchange_rate: 1.0,
         assets: vec![Asset {
+            solana_token: None,
             symbol: "SPL-So1111".to_string(),
             unicode_symbol: None,
             name: "So11111111111111111111111111111111111111112".to_string(),

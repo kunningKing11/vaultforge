@@ -554,3 +554,79 @@ fn rejects_unreviewed_engines_fees_and_extra_signers() {
         );
     }
 }
+
+#[test]
+fn token2022_orders_bind_explicit_platform_fee_and_original_message() {
+    let signer = solana_keypair::keypair_from_seed(&[3; 32]).unwrap();
+    let sender = signer.pubkey().to_string();
+    let (raw, tokens) = encoding::tests::token2022_fixture(&sender, false);
+    let mut order = JupiterOrder {
+        request_id: "token2022".into(),
+        router: "metis".into(),
+        transaction_base64: raw,
+        quoted_output_base_units: "2000000".into(),
+        minimum_output_base_units: "1990000".into(),
+        raw_response: serde_json::json!({"gasless":false,"feeBps":0}),
+    };
+    let request = OrderRequest {
+        taker: sender.clone(),
+        input_mint: tokens.input.mint.clone(),
+        output_mint: tokens.output.mint.clone(),
+        amount_base_units: "1000000".into(),
+        slippage_bps: 50,
+    };
+    validate_order_with_tokens(&order, &request, &[], Some(&tokens)).unwrap();
+    let tx = encoding::decode(&order.transaction_base64).unwrap();
+    let mut original = instructions(&tx, &sender);
+    original[1].data[8..16].copy_from_slice(&998_000u64.to_le_bytes());
+    let collector = solana_pubkey::Pubkey::from([11; 32]);
+    let mut fee_data = vec![26, 1];
+    fee_data.extend(2000u64.to_le_bytes());
+    fee_data.push(6);
+    fee_data.extend(20u64.to_le_bytes());
+    original.insert(
+        1,
+        solana_instruction::Instruction {
+            program_id: key(&tokens.input.program).unwrap(),
+            accounts: vec![
+                solana_instruction::AccountMeta::new(
+                    tokens.input.associated(&sender).unwrap(),
+                    false,
+                ),
+                solana_instruction::AccountMeta::new_readonly(
+                    key(&tokens.input.mint).unwrap(),
+                    false,
+                ),
+                solana_instruction::AccountMeta::new(collector, false),
+                solana_instruction::AccountMeta::new_readonly(key(&sender).unwrap(), true),
+            ],
+            data: fee_data,
+        },
+    );
+    let message = solana_message::v0::Message::try_compile(
+        &key(&sender).unwrap(),
+        &original,
+        &[],
+        tx.message.recent_blockhash().clone(),
+    )
+    .unwrap();
+    let tx = VersionedTransaction {
+        signatures: vec![Default::default()],
+        message: VersionedMessage::V0(message),
+    };
+    order.transaction_base64 = STANDARD.encode(wincode::serialize(&tx).unwrap());
+    order.raw_response = serde_json::json!({"gasless":false,"feeBps":20,"feeMint":tokens.input.mint,"platformFee":{"feeBps":20,"feeMint":tokens.input.mint,"amount":"2000"}});
+    let validated = validate_order_with_tokens(&order, &request, &[], Some(&tokens)).unwrap();
+    assert_eq!(validated.transaction.message, tx.message);
+    assert_eq!(
+        validated.fee_token_accounts,
+        vec![(collector.to_string(), tokens.input.mint.clone())]
+    );
+    let signed = VersionedTransaction::try_new(validated.transaction.message, &[&signer]).unwrap();
+    verify_signed_order(
+        &order,
+        &STANDARD.encode(wincode::serialize(&signed).unwrap()),
+        &sender,
+    )
+    .unwrap();
+}

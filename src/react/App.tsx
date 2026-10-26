@@ -106,6 +106,7 @@ import {
 } from "./model";
 import { PasswordInput } from "./PasswordInput";
 import { SelectionIcon } from "./SelectionIcon";
+import { solanaTokenSendDetails } from "./sendReview";
 import { SidebarAddress } from "./SidebarAddress";
 import { SwapView } from "./SwapView";
 import { vaultForgeTheme } from "./theme";
@@ -2512,7 +2513,9 @@ function SendForm({
             </Box>
             <Box minWidth={0} width="100%">
               <TextInput
-                label="Amount"
+                label={
+                  draft.network === "solana" && draft.token_address ? "Amount to debit" : "Amount"
+                }
                 inputMode="decimal"
                 onChange={(event) =>
                   updateDraft((current) => ({ ...current, amount: event.target.value }))
@@ -2523,6 +2526,12 @@ function SendForm({
               />
             </Box>
           </Grid>
+          {draft.network === "solana" && draft.token_address && (
+            <Text color="fgMuted" font="body">
+              Token transfer fees are included in this amount. Review the recipient’s net amount
+              before broadcast.
+            </Text>
+          )}
           {availableAssets.length === 0 && (
             <Text color="fgMuted" font="body">
               No assets are available on this network.
@@ -2603,20 +2612,23 @@ function SignedTransactionView({
           <Detail label="Destination tag" value={String(signed.destinationTag)} />
         )}
         <Detail
-          label="Amount"
-          value={`${formatWei(signed.amount, signed.decimals)} ${displaySymbolForSigned(signed, wallet)}`}
+          label={signed.solanaTokenSend ? "Token amount debited" : "Amount"}
+          value={`${formatWei(signed.amount, signed.decimals, signed.solanaTokenSend ? signed.decimals : 6)} ${displaySymbolForSigned(signed, wallet)}`}
         />
+        {solanaTokenSendDetails(signed, displaySymbolForSigned(signed, wallet)).map((detail) => (
+          <Detail key={detail.label} label={detail.label} value={detail.value} />
+        ))}
         <Detail
           label="Network fee"
           value={`${formatWei(signed.feeAmount, feeDecimals)} ${signed.feeSymbol}`}
         />
         <Detail
           label="Total debit"
-          value={`${formatWei(signed.totalDebit, signed.decimals)} ${displaySymbolForSigned(signed, wallet)}`}
+          value={`${formatWei(signed.totalDebit, signed.decimals, signed.solanaTokenSend ? signed.decimals : 6)} ${displaySymbolForSigned(signed, wallet)}`}
         />
         <Detail
           label="Post-send balance"
-          value={`${formatWei(signed.postBalance, signed.decimals)} ${displaySymbolForSigned(signed, wallet)}`}
+          value={`${formatWei(signed.postBalance, signed.decimals, signed.solanaTokenSend ? signed.decimals : 6)} ${displaySymbolForSigned(signed, wallet)}`}
         />
         <Detail
           label="Estimated value"

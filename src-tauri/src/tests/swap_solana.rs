@@ -2,6 +2,7 @@ use super::*;
 use crate::cctp_execution::tests::{execution_state, temp_dir};
 use crate::dto::Asset;
 use crate::swap_routes::RouteProvider;
+use sha2::Digest;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicU64, Ordering},
@@ -23,6 +24,9 @@ struct MockRpc {
     status_slot: AtomicU64,
     appear_at_expiry: AtomicBool,
     sent: Mutex<Vec<String>>,
+    landed_raw: Mutex<Option<String>>,
+    accounts: Mutex<std::collections::BTreeMap<String, Value>>,
+    epoch: AtomicU64,
     before_send: Mutex<Option<Box<dyn FnOnce() + Send>>>,
 }
 impl Default for MockRpc {
@@ -43,6 +47,9 @@ impl Default for MockRpc {
             status_slot: AtomicU64::new(42),
             appear_at_expiry: AtomicBool::new(false),
             sent: Mutex::new(vec![]),
+            landed_raw: Mutex::new(None),
+            accounts: Mutex::new(std::collections::BTreeMap::new()),
+            epoch: AtomicU64::new(4),
             before_send: Mutex::new(None),
         }
     }
@@ -77,7 +84,16 @@ impl SolanaRpc for MockRpc {
                 json!({"value":self.final_height.load(Ordering::SeqCst) <= 100 || (params[1]["commitment"] == "confirmed" && self.still_valid_confirmed.load(Ordering::SeqCst))})
             }
             "getTransaction" => {
-                let raw = self.sent.lock().unwrap().last().unwrap().clone();
+                let Some(raw) = self
+                    .sent
+                    .lock()
+                    .unwrap()
+                    .last()
+                    .cloned()
+                    .or_else(|| self.landed_raw.lock().unwrap().clone())
+                else {
+                    return Ok(Value::Null);
+                };
                 let tx = encoding::decode(&raw).unwrap();
                 let keys = tx.message.static_account_keys();
                 let swap = tx
@@ -88,12 +104,38 @@ impl SolanaRpc for MockRpc {
                         keys[usize::from(ix.program_id_index)] == key(encoding::JUPITER).unwrap()
                     })
                     .unwrap();
-                let output_index = swap.accounts[3];
-                let mint = keys[usize::from(swap.accounts[5])].to_string();
+                let v2 = swap.data.get(..8) == Some(&sha2::Sha256::digest(b"global:route_v2")[..8]);
+                let shared = swap.data.get(..8)
+                    == Some(&sha2::Sha256::digest(b"global:shared_accounts_route_v2")[..8]);
+                let output_index = swap.accounts[if shared {
+                    5
+                } else if v2 {
+                    2
+                } else {
+                    3
+                }];
+                let mint = keys[usize::from(
+                    swap.accounts[if shared {
+                        7
+                    } else if v2 {
+                        4
+                    } else {
+                        5
+                    }],
+                )]
+                .to_string();
+                let program = self
+                    .accounts
+                    .lock()
+                    .unwrap()
+                    .get(&mint)
+                    .and_then(|v| v["owner"].as_str())
+                    .unwrap_or(crate::solana_tokens::CLASSIC)
+                    .to_string();
                 json!({"slot":42,"transaction":[raw,"base64"],"meta":{
-                    "err":null,"fee":5000,"preTokenBalances":[],
-                    "postTokenBalances":[{"accountIndex":output_index,"mint":mint,"owner":keys[0].to_string(),
-                        "uiTokenAmount":{"amount": if self.bad_delivery.load(Ordering::SeqCst) {"1"} else {"2000000"}}}]
+                    "err":null,"fee":5000,"preTokenBalances":[],"preBalances":vec![0u64;keys.len()],
+                    "postTokenBalances":[{"accountIndex":output_index,"mint":mint,"owner":keys[0].to_string(),"programId":program,
+                        "uiTokenAmount":{"decimals":6,"amount": if self.bad_delivery.load(Ordering::SeqCst) {"1"} else {"2000000"}}}]
                 }})
             }
             "getGenesisHash" => json!(if self.bad_genesis.load(Ordering::SeqCst) {
@@ -114,7 +156,20 @@ impl SolanaRpc for MockRpc {
             "getFeeForMessage" => json!({"value":5000}),
             "getBalance" => json!({"value":1_000_000_000u64}),
             "getTokenAccountsByOwner" => json!({"value":[]}),
+            "getMultipleAccounts" => {
+                json!({"value":params[0].as_array().unwrap().iter().map(|a|self.accounts.lock().unwrap().get(a.as_str().unwrap()).cloned()).collect::<Vec<_>>()})
+            }
+            "getEpochInfo" => json!({"epoch":self.epoch.load(Ordering::SeqCst)}),
             "getAccountInfo" => {
+                if let Some(value) = self
+                    .accounts
+                    .lock()
+                    .unwrap()
+                    .get(params[0].as_str().unwrap())
+                    .cloned()
+                {
+                    return Ok(json!({"value":value}));
+                }
                 if params[1]["encoding"] == "jsonParsed" {
                     json!({"value":{"owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "data":{"parsed":{
                         "type":"account", "info":{"mint":if self.bad_fee_account.load(Ordering::SeqCst) { Some(encoding::WSOL.into()) } else { self.fee_account_mint.lock().unwrap().clone() },"state":"initialized"}
@@ -177,6 +232,7 @@ fn setup() -> (std::path::PathBuf, Arc<Mutex<AppState>>, String) {
     ]
     .into_iter()
     .map(|(token, symbol, decimals)| Asset {
+        solana_token: None,
         network: "solana".into(),
         token_address: token,
         symbol: symbol.into(),
@@ -189,6 +245,8 @@ fn setup() -> (std::path::PathBuf, Arc<Mutex<AppState>>, String) {
     })
     .collect();
     let api = ApiSwap {
+        solana_tokens: None,
+        delivery: None,
         jupiter: None,
         provider: RouteProvider::Lifi,
         request_id: "native-request".into(),
@@ -502,7 +560,7 @@ fn jupiter_lost_response_recovers_saved_identity_after_restart_without_reexecuti
     let stored = crate::storage::read_stored_wallet(&directory.join("wallet.json"))
         .unwrap()
         .unwrap();
-    assert_eq!(stored.version, 16);
+    assert_eq!(stored.version, 17);
     let decrypted = crate::storage::decrypt_wallet(&stored, password).unwrap();
     let (wallet, key, salt) = decrypted.into_parts();
     assert_eq!(wallet.operations[0], operation(&state, &id));
@@ -514,16 +572,8 @@ fn jupiter_lost_response_recovers_saved_identity_after_restart_without_reexecuti
     restarted.locked = false;
     let state = Arc::new(Mutex::new(restarted));
     let mut recovered = operation(&state, &id);
-    let original = recovered.clone();
     runtime()
-        .block_on(crate::operations::reconcile_operation_with(
-            &mut recovered,
-            |_, hash| {
-                let rpc = &rpc;
-                let original = &original;
-                async move { crate::jupiter::observe(rpc, original, &hash).await }
-            },
-        ))
+        .block_on(crate::solana_delivery::reconcile(&mut recovered, &rpc))
         .unwrap();
     assert!(crate::uniswap::local_swap_confirmed(&recovered));
     runtime()
@@ -693,7 +743,7 @@ fn persists_native_bytes_before_broadcast_and_completes_on_inclusion_while_track
     let stored = crate::storage::read_stored_wallet(&directory.join("wallet.json"))
         .unwrap()
         .unwrap();
-    assert_eq!(stored.version, 16);
+    assert_eq!(stored.version, 17);
     let decrypted = crate::storage::decrypt_wallet(&stored, password).unwrap();
     assert_eq!(decrypted.wallet().operations[0], saved);
     let before = state.clone();
@@ -772,6 +822,8 @@ fn stale_or_late_signature_observations_cannot_release_native_protection() {
         runtime().block_on(prepare(&state, &provider, &id)).unwrap();
         provider.final_height.store(101, Ordering::SeqCst);
         if late {
+            *provider.landed_raw.lock().unwrap() =
+                operation(&state, &id).attempts[0].raw_tx.clone();
             provider.appear_at_expiry.store(true, Ordering::SeqCst);
         } else {
             provider.status_slot.store(1, Ordering::SeqCst);
@@ -782,6 +834,347 @@ fn stale_or_late_signature_observations_cannot_release_native_protection() {
         assert!(provider.sent.lock().unwrap().is_empty());
         std::fs::remove_dir_all(directory).unwrap();
     }
+}
+
+#[test]
+fn token2022_all_providers_preserve_bytes_and_require_net_delivery_through_restart() {
+    let password = "Token-2022 recovery fixture 42!";
+    let (key, salt) = crate::storage::derive_storage_key(password, Some(&[2; 16])).unwrap();
+    for provider in [
+        RouteProvider::Jupiter,
+        RouteProvider::Lifi,
+        RouteProvider::Relay,
+    ] {
+        for shared in [false, true] {
+            let (directory, state, id, rpc) = token2022_setup(provider.clone(), shared);
+            {
+                let mut guard = state.lock().unwrap();
+                guard.encryption_key = Some(key);
+                guard.storage_salt = Some(salt.clone());
+                guard.wallet.as_mut().unwrap().wallet_password_hash =
+                    crate::activity::hash_secret(password);
+            }
+            rpc.fail_send.store(true, Ordering::SeqCst);
+            let prepared = runtime().block_on(prepare(&state, &rpc, &id)).unwrap();
+            let saved = operation(&state, &id);
+            assert!(
+                saved
+                    .swap
+                    .as_ref()
+                    .unwrap()
+                    .api
+                    .as_ref()
+                    .unwrap()
+                    .solana_tokens
+                    .is_some()
+            );
+            runtime()
+                .block_on(submit(&state, &rpc, &id, &prepared.tx_hash))
+                .unwrap();
+            assert_eq!(
+                operation(&state, &id).attempts[0].status,
+                TransactionStatus::SubmissionUnknown
+            );
+            let stored = crate::storage::read_stored_wallet(&directory.join("wallet.json"))
+                .unwrap()
+                .unwrap();
+            assert_eq!(stored.version, 17);
+            let decrypted = crate::storage::decrypt_wallet(&stored, password).unwrap();
+            let mut recovered = decrypted
+                .wallet()
+                .operations
+                .iter()
+                .find(|operation| operation.id == id)
+                .unwrap()
+                .clone();
+            assert_eq!(recovered, operation(&state, &id));
+            rpc.bad_delivery.store(true, Ordering::SeqCst);
+            runtime()
+                .block_on(crate::solana_delivery::reconcile(&mut recovered, &rpc))
+                .unwrap();
+            assert!(!crate::uniswap::local_swap_confirmed(&recovered));
+            assert!(
+                recovered.attempts[0]
+                    .error
+                    .as_ref()
+                    .unwrap()
+                    .contains("minimum delivery")
+            );
+            rpc.bad_delivery.store(false, Ordering::SeqCst);
+            runtime()
+                .block_on(crate::solana_delivery::reconcile(&mut recovered, &rpc))
+                .unwrap();
+            assert!(crate::uniswap::local_swap_confirmed(&recovered));
+            runtime().block_on(sync(&state, &rpc, &id)).unwrap();
+            let stored = crate::storage::read_stored_wallet(&directory.join("wallet.json"))
+                .unwrap()
+                .unwrap();
+            let decrypted = crate::storage::decrypt_wallet(&stored, password).unwrap();
+            let restored = decrypted
+                .wallet()
+                .operations
+                .iter()
+                .find(|operation| operation.id == id)
+                .unwrap()
+                .clone();
+            assert_eq!(
+                restored
+                    .swap
+                    .as_ref()
+                    .unwrap()
+                    .api
+                    .as_ref()
+                    .unwrap()
+                    .delivery,
+                recovered
+                    .swap
+                    .as_ref()
+                    .unwrap()
+                    .api
+                    .as_ref()
+                    .unwrap()
+                    .delivery
+            );
+            assert!(crate::solana_delivery::verified(&restored));
+            assert_eq!(restored.attempts[0].raw_tx, saved.attempts[0].raw_tx);
+            assert_eq!(rpc.sent.lock().unwrap().len(), 1);
+            let mut legacy = restored.clone();
+            legacy.swap.as_mut().unwrap().api.as_mut().unwrap().delivery = None;
+            assert!(!crate::uniswap::local_swap_confirmed(&legacy));
+            rpc.bad_delivery.store(true, Ordering::SeqCst);
+            runtime()
+                .block_on(crate::solana_delivery::reconcile(&mut legacy, &rpc))
+                .unwrap();
+            assert!(!crate::uniswap::local_swap_confirmed(&legacy));
+            std::fs::remove_dir_all(directory).unwrap();
+        }
+    }
+}
+
+fn token2022_setup(
+    provider: RouteProvider,
+    shared: bool,
+) -> (std::path::PathBuf, Arc<Mutex<AppState>>, String, MockRpc) {
+    use crate::solana_tokens::tests::{extend, holding_bytes, mint_bytes, value};
+    use spl_token_2022_interface::extension::ExtensionType;
+    let (directory, state, id) = if provider == RouteProvider::Jupiter {
+        setup_jupiter()
+    } else {
+        setup()
+    };
+    let sender = operation(&state, &id).sender;
+    let (raw, tokens) = encoding::tests::token2022_fixture(&sender, shared);
+    {
+        let mut lock = state.lock().unwrap();
+        let api = lock.wallet.as_mut().unwrap().operations[0]
+            .swap
+            .as_mut()
+            .unwrap()
+            .api
+            .as_mut()
+            .unwrap();
+        api.provider = provider;
+        api.solana_tokens = Some(tokens.clone());
+        api.transaction = RouteTransaction::Solana {
+            transaction: raw.clone(),
+            lookups: vec![],
+        };
+        if let Some(jupiter) = &mut api.jupiter {
+            jupiter.order.transaction_base64 = raw;
+            jupiter.message_hash = hex::encode(sha2::Sha256::digest(
+                encoding::decode(&jupiter.order.transaction_base64)
+                    .unwrap()
+                    .message
+                    .serialize(),
+            ));
+        }
+    }
+    let rpc = MockRpc::default();
+    for token in [&tokens.input, &tokens.output] {
+        let mut mint = mint_bytes(6);
+        let mut fee = vec![0; 108];
+        fee[80..88].copy_from_slice(&1000u64.to_le_bytes());
+        fee[88..90].copy_from_slice(&100u16.to_le_bytes());
+        fee[90..98].copy_from_slice(&5u64.to_le_bytes());
+        fee[98..106].copy_from_slice(&2000u64.to_le_bytes());
+        fee[106..108].copy_from_slice(&200u16.to_le_bytes());
+        extend(&mut mint, 1, ExtensionType::TransferFeeConfig, &fee);
+        rpc.accounts
+            .lock()
+            .unwrap()
+            .insert(token.mint.clone(), value(&token.program, &mint));
+    }
+    let mut source = holding_bytes(
+        key(&tokens.input.mint).unwrap().to_bytes(),
+        key(&sender).unwrap().to_bytes(),
+        1_000_000,
+        false,
+    );
+    extend(
+        &mut source,
+        2,
+        ExtensionType::TransferFeeAmount,
+        &777u64.to_le_bytes(),
+    );
+    rpc.accounts.lock().unwrap().insert(
+        tokens.input.associated(&sender).unwrap().to_string(),
+        value(&tokens.input.program, &source),
+    );
+    (directory, state, id, rpc)
+}
+
+#[test]
+fn token2022_changed_fee_epoch_program_or_frozen_account_blocks_signing_and_submission() {
+    for change in 0..3 {
+        let (directory, state, id, rpc) = token2022_setup(RouteProvider::Lifi, false);
+        let prepared = runtime().block_on(prepare(&state, &rpc, &id)).unwrap();
+        let terms = operation(&state, &id)
+            .swap
+            .unwrap()
+            .api
+            .unwrap()
+            .solana_tokens
+            .unwrap();
+        match change {
+            0 => rpc.epoch.store(5, Ordering::SeqCst),
+            1 => {
+                rpc.accounts
+                    .lock()
+                    .unwrap()
+                    .get_mut(&terms.input.mint)
+                    .unwrap()["owner"] = json!(crate::solana_tokens::CLASSIC);
+            }
+            _ => {
+                use base64::Engine;
+                let sender = operation(&state, &id).sender;
+                let address = terms.input.associated(&sender).unwrap().to_string();
+                let mut accounts = rpc.accounts.lock().unwrap();
+                let source = accounts.get_mut(&address).unwrap();
+                let mut bytes = STANDARD
+                    .decode(source["data"][0].as_str().unwrap())
+                    .unwrap();
+                bytes[108] = 2;
+                source["data"][0] = json!(STANDARD.encode(bytes));
+            }
+        }
+        assert!(
+            runtime()
+                .block_on(submit(&state, &rpc, &id, &prepared.tx_hash))
+                .is_err()
+        );
+        assert!(rpc.sent.lock().unwrap().is_empty());
+        assert_eq!(
+            operation(&state, &id).attempts[0].status,
+            TransactionStatus::Signed
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+}
+
+#[test]
+fn token2022_delivery_rejects_wrong_identity_missing_program_and_gross_only_evidence() {
+    let (directory, state, id, rpc) = token2022_setup(RouteProvider::Relay, false);
+    let prepared = runtime().block_on(prepare(&state, &rpc, &id)).unwrap();
+    runtime()
+        .block_on(submit(&state, &rpc, &id, &prepared.tx_hash))
+        .unwrap();
+    let original = operation(&state, &id);
+    let proof = runtime()
+        .block_on(rpc.swap_rpc("getTransaction", json!([])))
+        .unwrap();
+    crate::solana_delivery::verify_delivery(&original, &prepared.tx_hash, &proof, Some(42))
+        .unwrap();
+    for change in 0..7 {
+        let mut changed = proof.clone();
+        match change {
+            0 => {
+                changed["meta"]["postTokenBalances"][0]["programId"] =
+                    json!(crate::solana_tokens::CLASSIC)
+            }
+            1 => {
+                changed["meta"]["postTokenBalances"][0]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("programId");
+            }
+            2 => changed["meta"]["postTokenBalances"][0]["owner"] = json!(encoding::JUPITER),
+            3 => changed["meta"]["postTokenBalances"][0]["uiTokenAmount"]["decimals"] = json!(9),
+            4 => {
+                let mut before = changed["meta"]["postTokenBalances"][0].clone();
+                before["uiTokenAmount"]["amount"] = json!("1000000");
+                changed["meta"]["preTokenBalances"] = json!([before]);
+            }
+            5 => changed["slot"] = json!(43),
+            _ => {
+                let index = changed["meta"]["postTokenBalances"][0]["accountIndex"]
+                    .as_u64()
+                    .unwrap() as usize;
+                changed["meta"]["preBalances"][index] = json!(1);
+            }
+        }
+        assert!(
+            crate::solana_delivery::verify_delivery(
+                &original,
+                &prepared.tx_hash,
+                &changed,
+                Some(42)
+            )
+            .is_err(),
+            "change {change}"
+        );
+    }
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn token2022_legacy_finalized_status_requires_delivery_and_reorg_clears_completion() {
+    let (directory, state, id, rpc) = token2022_setup(RouteProvider::Lifi, false);
+    let prepared = runtime().block_on(prepare(&state, &rpc, &id)).unwrap();
+    runtime()
+        .block_on(submit(&state, &rpc, &id, &prepared.tx_hash))
+        .unwrap();
+    let mut next = operation(&state, &id);
+    rpc.finalized.store(true, Ordering::SeqCst);
+    runtime()
+        .block_on(crate::solana_delivery::reconcile(&mut next, &rpc))
+        .unwrap();
+    assert!(crate::uniswap::terminal(&next));
+    next.swap.as_mut().unwrap().api.as_mut().unwrap().delivery = None;
+    assert!(!crate::uniswap::terminal(&next));
+    assert_eq!(
+        crate::uniswap::swap_activity(&next).unwrap().status,
+        "pending"
+    );
+    rpc.bad_delivery.store(true, Ordering::SeqCst);
+    runtime()
+        .block_on(crate::solana_delivery::reconcile(&mut next, &rpc))
+        .unwrap();
+    assert_eq!(next.step, OperationStep::Send);
+    assert!(!crate::uniswap::terminal(&next));
+    assert_eq!(
+        next.attempts[0].tx_status.as_ref().unwrap().finality,
+        crate::tx::tx_status::Finality::Finalized
+    );
+    // A separate included snapshot remains subject to reorganization detection.
+    next.attempts[0].tx_status.as_mut().unwrap().finality =
+        crate::tx::tx_status::Finality::Included;
+    next.attempts[0].status = TransactionStatus::Submitted;
+    rpc.bad_delivery.store(false, Ordering::SeqCst);
+    rpc.finalized.store(false, Ordering::SeqCst);
+    runtime()
+        .block_on(crate::solana_delivery::reconcile(&mut next, &rpc))
+        .unwrap();
+    assert!(crate::uniswap::local_swap_confirmed(&next));
+    rpc.submitted.store(false, Ordering::SeqCst);
+    runtime()
+        .block_on(crate::solana_delivery::reconcile(&mut next, &rpc))
+        .unwrap();
+    assert!(!crate::uniswap::local_swap_confirmed(&next));
+    assert_eq!(
+        crate::uniswap::swap_activity(&next).unwrap().status,
+        "pending"
+    );
+    std::fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]

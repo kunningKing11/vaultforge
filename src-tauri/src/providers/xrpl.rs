@@ -178,6 +178,7 @@ pub(crate) async fn fetch_xrpl_assets(
     match fetch_xrpl_account_info(client, address, "validated").await {
         Ok(account) => NetworkAssetRefresh {
             assets: vec![Asset {
+                solana_token: None,
                 symbol: config.native_asset.symbol.clone(),
                 unicode_symbol: config.native_asset.unicode_symbol.clone(),
                 name: config.native_asset.name.clone(),

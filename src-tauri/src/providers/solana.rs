@@ -6,7 +6,7 @@ use crate::registry::{NetworkConfig, configured_asset, network_by_id};
 use crate::tx::tx_status::{Execution, Finality, TxStatus, legacy_tx_status};
 use std::collections::BTreeMap;
 
-const SOLANA_TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const SOLANA_TOKEN_PROGRAM_ID: &str = crate::solana_tokens::CLASSIC;
 
 fn solana_config() -> Result<&'static NetworkConfig, String> {
     network_by_id("solana").ok_or_else(|| "Solana is missing from the network registry".to_string())
@@ -18,6 +18,7 @@ fn solana_rpc_url() -> Result<&'static str, String> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SolanaTokenAccount {
+    pub(crate) capabilities: Option<crate::dto::SolanaTokenCapabilities>,
     pub(crate) address: String,
     pub(crate) mint: String,
     pub(crate) amount: u64,
@@ -34,13 +35,21 @@ pub(crate) async fn fetch_solana_native_balance(
     client: &reqwest::Client,
     address: &str,
 ) -> Result<u128, String> {
+    fetch_solana_native_balance_at(client, solana_rpc_url()?, address).await
+}
+
+async fn fetch_solana_native_balance_at(
+    client: &reqwest::Client,
+    url: &str,
+    address: &str,
+) -> Result<u128, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "getBalance",
         "params": [address],
         "id": 1,
     });
-    let json = rpc_post(client, solana_rpc_url()?, &body).await?;
+    let json = rpc_post(client, url, &body).await?;
     parse_solana_balance(&json)
 }
 
@@ -58,9 +67,159 @@ pub(crate) async fn fetch_solana_token_accounts(
     parse_solana_token_accounts(&json, address)
 }
 
-/// Fetches native and classic SPL balances, retaining cached values on failure.
+/// Portfolio discovery is separate from the classic-only send account reader.
+/// Neither program's partial response can prove that an absent mint has zero funds.
+async fn fetch_solana_portfolio_accounts_at(
+    client: &reqwest::Client,
+    url: &str,
+    address: &str,
+) -> Result<Vec<SolanaTokenAccount>, String> {
+    fetch_solana_portfolio_accounts_with(address, |method, params| async move {
+        rpc_post(
+            client,
+            url,
+            &serde_json::json!({"jsonrpc":"2.0","id":1,"method":method,"params":params}),
+        )
+        .await
+    })
+    .await
+}
+
+pub(crate) async fn fetch_solana_portfolio_accounts_with<F, Fut>(
+    address: &str,
+    mut call: F,
+) -> Result<Vec<SolanaTokenAccount>, String>
+where
+    F: FnMut(&'static str, serde_json::Value) -> Fut,
+    Fut: std::future::Future<Output = Result<serde_json::Value, String>>,
+{
+    use crate::solana_tokens::{CLASSIC, TOKEN_2022, inspect_holding, inspect_mint};
+    let mut holdings = Vec::new();
+    let mut addresses = std::collections::BTreeSet::new();
+    for program in [CLASSIC, TOKEN_2022] {
+        let response = call("getTokenAccountsByOwner",serde_json::json!([address,{"programId":program},{"encoding":"base64","commitment":"confirmed"}])).await?;
+        let values = json_rpc_result(&response, "Solana portfolio token accounts")?["value"]
+            .as_array()
+            .ok_or("Solana portfolio account list missing")?;
+        for value in values {
+            let account = value["pubkey"]
+                .as_str()
+                .ok_or("Solana token account address missing")?;
+            let holding = inspect_holding(account, address, &value["account"])?;
+            if holding.program.id() != program || !addresses.insert(account.to_string()) {
+                return Err(
+                    "Solana token discovery returned a foreign program or duplicate account".into(),
+                );
+            }
+            holdings.push(holding);
+        }
+    }
+    let mints: Vec<_> = holdings
+        .iter()
+        .map(|h| h.mint.clone())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let mut descriptors = BTreeMap::new();
+    for chunk in mints.chunks(100) {
+        let response = call(
+            "getMultipleAccounts",
+            serde_json::json!([chunk,{"encoding":"base64","commitment":"confirmed"}]),
+        )
+        .await?;
+        let values = json_rpc_result(&response, "Solana portfolio mints")?["value"]
+            .as_array()
+            .filter(|v| v.len() == chunk.len())
+            .ok_or("Solana mint response length mismatch")?;
+        for (mint, value) in chunk.iter().zip(values) {
+            // Closing a Token-2022 mint requires zero supply; its empty accounts
+            // can remain. Nonzero holdings still require a descriptor below.
+            if value.is_null() {
+                continue;
+            }
+            descriptors.insert(mint.clone(), inspect_mint(mint, value)?);
+        }
+    }
+    holdings
+        .into_iter()
+        .filter(|holding| holding.amount > 0 || descriptors.contains_key(&holding.mint))
+        .map(|holding| {
+            let descriptor = descriptors
+                .get(&holding.mint)
+                .ok_or("Solana mint descriptor missing")?;
+            if holding.program != descriptor.program
+                || descriptor
+                    .required_account_extensions
+                    .iter()
+                    .any(|extension| !holding.extensions.contains(extension))
+            {
+                return Err(
+                    "Solana token account program or required extensions differ from mint".into(),
+                );
+            }
+            // Account.amount already excludes withheld transfer fees. Frozen and other
+            // unsupported accounts remain visible; execution readers still reject them.
+            let reason = descriptor
+                .unsupported_reason()
+                .or_else(|| holding.unsupported_reason());
+            let capabilities = crate::dto::SolanaTokenCapabilities {
+                program: descriptor.program.id().into(),
+                extensions: descriptor
+                    .extensions
+                    .iter()
+                    .copied()
+                    .map(u16::from)
+                    .collect(),
+                send_supported: reason.is_none(),
+                swap_supported: reason.is_none()
+                    && holding.address == descriptor.associated_address(address)?,
+                unsupported_reason: reason,
+            };
+            Ok(SolanaTokenAccount {
+                capabilities: Some(capabilities),
+                address: holding.address,
+                mint: holding.mint,
+                amount: holding.amount,
+                decimals: descriptor.decimals,
+            })
+        })
+        .collect()
+}
+
+/// Reads verified mint state for program-aware account derivation and future execution.
+#[allow(dead_code)]
+pub(crate) async fn fetch_solana_token_descriptor(
+    client: &reqwest::Client,
+    mint: &str,
+) -> Result<crate::solana_tokens::TokenDescriptor, String> {
+    let response = rpc_post(
+        client,
+        solana_rpc_url()?,
+        &serde_json::json!({
+            "jsonrpc":"2.0", "id":1, "method":"getAccountInfo",
+            "params":[mint,{"encoding":"base64","commitment":"confirmed"}]
+        }),
+    )
+    .await?;
+    crate::solana_tokens::inspect_mint(
+        mint,
+        &json_rpc_result(&response, "Solana token mint")?["value"],
+    )
+}
+
+/// Fetches native, classic SPL and Token-2022 balances; failures retain cached tokens.
 pub(crate) async fn fetch_solana_assets(
     client: &reqwest::Client,
+    address: &str,
+    cached_assets: &[Asset],
+) -> NetworkAssetRefresh {
+    let url = solana_rpc_url().expect("Solana must have a configured RPC");
+    fetch_solana_assets_at(client, url, address, cached_assets).await
+}
+
+async fn fetch_solana_assets_at(
+    client: &reqwest::Client,
+    url: &str,
     address: &str,
     cached_assets: &[Asset],
 ) -> NetworkAssetRefresh {
@@ -68,8 +227,9 @@ pub(crate) async fn fetch_solana_assets(
     let mut balance_failed = false;
     let mut assets = vec![];
 
-    match fetch_solana_native_balance(client, address).await {
+    match fetch_solana_native_balance_at(client, url, address).await {
         Ok(lamports) => assets.push(Asset {
+            solana_token: None,
             symbol: config.native_asset.symbol.clone(),
             unicode_symbol: config.native_asset.unicode_symbol.clone(),
             name: config.native_asset.name.clone(),
@@ -88,7 +248,7 @@ pub(crate) async fn fetch_solana_assets(
         }
     }
 
-    let token_accounts = match fetch_solana_token_accounts(client, address).await {
+    let token_accounts = match fetch_solana_portfolio_accounts_at(client, url, address).await {
         Ok(accounts) => accounts,
         Err(_) => {
             balance_failed = true;
@@ -108,13 +268,26 @@ pub(crate) async fn fetch_solana_assets(
 }
 
 /// A complete successful owner-account read proves zero for absent registered mints.
-fn solana_token_assets(
+pub(crate) fn solana_token_assets(
     config: &NetworkConfig,
     token_accounts: Vec<SolanaTokenAccount>,
     cached_assets: &[Asset],
 ) -> Vec<Asset> {
     let mut token_balances = BTreeMap::<String, (u128, u32)>::new();
+    let mut capabilities = BTreeMap::<String, crate::dto::SolanaTokenCapabilities>::new();
     for account in token_accounts {
+        if let Some(current) = account.capabilities {
+            capabilities
+                .entry(account.mint.clone())
+                .and_modify(|previous| {
+                    previous.send_supported |= current.send_supported;
+                    previous.swap_supported |= current.swap_supported;
+                    if previous.send_supported {
+                        previous.unsupported_reason = None;
+                    }
+                })
+                .or_insert(current);
+        }
         if account.amount == 0 && configured_asset(config, Some(&account.mint)).is_none() {
             continue;
         }
@@ -157,6 +330,7 @@ fn solana_token_assets(
         let change_24h = cached.as_ref().map(|asset| asset.change_24h).unwrap_or(0.0);
 
         assets.push(Asset {
+            solana_token: capabilities.remove(&mint),
             symbol,
             unicode_symbol,
             name,
@@ -236,6 +410,7 @@ pub(crate) fn parse_solana_token_accounts(
             .try_into()
             .map_err(|_| "Solana token account decimals are too large".to_string())?;
         parsed.push(SolanaTokenAccount {
+            capabilities: None,
             address: address.to_string(),
             mint: mint.to_string(),
             amount,
@@ -425,10 +600,26 @@ pub(crate) fn parse_solana_simulation(json: &serde_json::Value) -> Result<(), St
 pub(crate) async fn fetch_solana_token_account_rent(
     client: &reqwest::Client,
 ) -> Result<u64, String> {
+    fetch_solana_token_account_rent_for_size(client, 165).await
+}
+
+/// Includes mint-required Token-2022 extensions and ATA immutable ownership.
+#[allow(dead_code)]
+pub(crate) async fn fetch_solana_mint_account_rent(
+    client: &reqwest::Client,
+    descriptor: &crate::solana_tokens::TokenDescriptor,
+) -> Result<u64, String> {
+    fetch_solana_token_account_rent_for_size(client, descriptor.account_len()?).await
+}
+
+async fn fetch_solana_token_account_rent_for_size(
+    client: &reqwest::Client,
+    account_size: usize,
+) -> Result<u64, String> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "getMinimumBalanceForRentExemption",
-        "params": [165],
+        "params": [account_size],
         "id": 1,
     });
     let json = rpc_post(client, solana_rpc_url()?, &body).await?;

@@ -15,6 +15,13 @@ export type AssetIdentity = {
 };
 
 export type Asset = AssetIdentity & {
+  solana_token?: {
+    program: string;
+    extensions: number[];
+    send_supported: boolean;
+    swap_supported: boolean;
+    unsupported_reason: string | null;
+  } | null;
   symbol: string;
   unicode_symbol?: string | null;
   name: string;
@@ -77,7 +84,18 @@ export type WalletRefreshResult = {
   warnings: RefreshWarning[];
 };
 
+export type SolanaTokenSendReview = {
+  tokenProgram: string;
+  mintExtensions: number[];
+  feeSchedule: { epoch: string; basisPoints: number; maximumFee: string } | null;
+  sources: { address: string; amount: string; fee: string }[];
+  transferFee: string;
+  recipientAmount: string;
+  accountRentLamports: string;
+};
+
 export type SignedTransaction = {
+  solanaTokenSend?: SolanaTokenSendReview | null;
   tokenAddress: string | null;
   from: string;
   to: string;
@@ -298,7 +316,18 @@ export type RelayTerms = {
   status: string | null;
 };
 
+export type SolanaSwapToken = {
+  mint: string;
+  program: string;
+  decimals: number;
+  extensions: number[];
+  fee_schedule: { epoch: string; basisPoints: number; maximumFee: string } | null;
+  account_len: number;
+};
+
 export type ApiSwap = {
+  solana_tokens?: { input: SolanaSwapToken; output: SolanaSwapToken } | null;
+  delivery?: { signature: string; slot: number; net_output: string } | null;
   provider: "jupiter" | "lifi" | "relay";
   jupiter?: {
     order: {

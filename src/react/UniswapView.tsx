@@ -18,6 +18,7 @@ import { SwapFiatValue } from "./SwapFiatValue";
 import { SwapPlatformFee } from "./SwapPlatformFee";
 import { SwapRoutePreview } from "./SwapRoutePreview";
 import { SwapStepper } from "./SwapStepper";
+import { SwapTokenFees } from "./SwapTokenFees";
 import { nativeSwapToken, quoteProvider } from "./uniswapFlow";
 import type { UniswapController } from "./useUniswap";
 
@@ -355,6 +356,7 @@ export function UniswapView({
                         : ""}
                     </Button>
                     <SwapPlatformFee trade={option} assets={assets} />
+                    <SwapTokenFees trade={option} />
                     <Text font="caption" color="fgMuted">
                       Maximum {option.approval_required ? "approval" : "swap"} network fee:{" "}
                       {formatWei(
@@ -387,6 +389,7 @@ export function UniswapView({
                 <Text font="headline">{quoteProvider(quote)}</Text>
                 <SwapRoutePreview route={quote.route} />
                 <SwapPlatformFee trade={quote} assets={assets} />
+                <SwapTokenFees trade={quote} />
                 <Text font="headline">
                   Expected:{" "}
                   {formatWei(quote.quoted_output, quote.output_decimals, quote.output_decimals)}{" "}
@@ -504,6 +507,9 @@ export function UniswapView({
                 )}
                 currency={fiatCurrency}
                 rate={usdExchangeRate}
+              />
+              <SwapTokenFees
+                trade={{ api: operation.terms.api ?? null, network: operation.network }}
               />
               <SwapPlatformFee
                 trade={{

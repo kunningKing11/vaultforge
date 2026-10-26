@@ -69,6 +69,7 @@ fn unlocked_tron_state() -> AppState {
         fiat_currency: FiatCurrency::Usd,
         usd_exchange_rate: 1.0,
         assets: vec![Asset {
+            solana_token: None,
             symbol: "TRX".to_string(),
             unicode_symbol: None,
             name: "TRON".to_string(),

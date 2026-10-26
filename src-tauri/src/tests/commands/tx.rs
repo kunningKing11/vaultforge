@@ -70,7 +70,9 @@ fn cancel_marks_durable_send_failed_and_ignores_submitted_attempts() {
     let directory = send_directory("send-cancel");
     let state = send_state(directory.join("wallet.json"));
     let signed = signed_send("solana", "SolFrom", "SolTo", "blockhash", "0xhash");
-    let (operation_id, _) = prepare_durable_send(&state, &signed).unwrap().unwrap();
+    let (operation_id, _) = prepare_durable_send(&state, &signed, None)
+        .unwrap()
+        .unwrap();
 
     {
         let mut guard = state.lock().unwrap();
@@ -240,7 +242,9 @@ fn evm_send_operation_advances_recovered_nonce() {
     let directory = send_directory("send-nonce");
     let state = send_state(directory.join("wallet.json"));
     let signed = signed_send("ethereum", "0xabc", "0xdef", "7", "0xhash");
-    let (operation_id, _) = prepare_durable_send(&state, &signed).unwrap().unwrap();
+    let (operation_id, _) = prepare_durable_send(&state, &signed, None)
+        .unwrap()
+        .unwrap();
     update_send_attempt(&state, &operation_id, "0xhash", |attempt| {
         attempt.status = TransactionStatus::Submitted;
     })
@@ -257,7 +261,9 @@ fn evm_signed_send_blocks_nonce_until_resolved() {
     let directory = send_directory("send-signed-block");
     let state = send_state(directory.join("wallet.json"));
     let signed = signed_send("ethereum", "0xabc", "0xdef", "7", "0xhash");
-    prepare_durable_send(&state, &signed).unwrap().unwrap();
+    prepare_durable_send(&state, &signed, None)
+        .unwrap()
+        .unwrap();
     let mut manager = EvmNonceManager::default();
     manager.restore_send_operations(&operations(&state));
     assert!(manager.reserve(1, "0xabc", 7).is_err());
@@ -393,7 +399,9 @@ fn send_operation_activity_uses_send_kind_and_symbol() {
     let directory = send_directory("send-activity");
     let state = send_state(directory.join("wallet.json"));
     let signed = signed_send("solana", "SolFrom", "SolTo", "blockhash", "0xhash");
-    let (operation_id, _) = prepare_durable_send(&state, &signed).unwrap().unwrap();
+    let (operation_id, _) = prepare_durable_send(&state, &signed, None)
+        .unwrap()
+        .unwrap();
     update_send_attempt(&state, &operation_id, "0xhash", |attempt| {
         attempt.status = TransactionStatus::Submitted;
     })
@@ -421,12 +429,12 @@ fn send_operation_blocks_second_broadcast_until_reconciled() {
     let directory = send_directory("send-conflict");
     let state = send_state(directory.join("wallet.json"));
     let first = signed_send("solana", "SolFrom", "SolTo", "blockhash-1", "0xhash1");
-    let (operation_id, raw) = prepare_durable_send(&state, &first).unwrap().unwrap();
+    let (operation_id, raw) = prepare_durable_send(&state, &first, None).unwrap().unwrap();
     assert_eq!(raw, "raw-0xhash1");
     let second = signed_send("solana", "SolFrom", "SolTo2", "blockhash-2", "0xhash2");
-    assert!(prepare_durable_send(&state, &second).is_err());
+    assert!(prepare_durable_send(&state, &second, None).is_err());
     // Retrying the same hash reuses the durable attempt.
-    let retry = prepare_durable_send(&state, &first).unwrap().unwrap();
+    let retry = prepare_durable_send(&state, &first, None).unwrap().unwrap();
     assert_eq!(retry.0, operation_id);
     std::fs::remove_dir_all(directory).unwrap();
 }
@@ -437,7 +445,9 @@ fn send_operation_persists_signed_attempt_for_recovery() {
     let path = directory.join("wallet.json");
     let state = send_state(path.clone());
     let signed = signed_send("xrpl", "rFrom", "rTo", "42", "0xhash");
-    let (operation_id, _) = prepare_durable_send(&state, &signed).unwrap().unwrap();
+    let (operation_id, _) = prepare_durable_send(&state, &signed, None)
+        .unwrap()
+        .unwrap();
 
     assert!(path.exists());
     let guard = state.lock().unwrap();
@@ -466,7 +476,7 @@ fn send_save_failure_leaves_no_operation() {
     // Point storage at a directory so the atomic rename cannot replace it.
     state.lock().unwrap().storage_path = directory.clone();
     let signed = signed_send("solana", "SolFrom", "SolTo", "blockhash", "0xhash");
-    assert!(prepare_durable_send(&state, &signed).is_err());
+    assert!(prepare_durable_send(&state, &signed, None).is_err());
     assert!(
         state
             .lock()
@@ -542,7 +552,9 @@ fn send_status_commit_updates_durable_operation() {
     let directory = send_directory("send-status");
     let state = send_state(directory.join("wallet.json"));
     let signed = signed_send("solana", "SolFrom", "SolTo", "blockhash", "0xhash");
-    let (operation_id, _) = prepare_durable_send(&state, &signed).unwrap().unwrap();
+    let (operation_id, _) = prepare_durable_send(&state, &signed, None)
+        .unwrap()
+        .unwrap();
 
     let observed = test_runtime()
         .block_on(reconcile_send_status_with(
@@ -602,6 +614,7 @@ fn send_status_does_not_downgrade_a_concurrently_settled_record() {
 
 fn signed_send(network: &str, from: &str, to: &str, nonce: &str, hash: &str) -> SignedTransaction {
     SignedTransaction {
+        solana_token_send: None,
         token_address: None,
         from: from.to_string(),
         to: to.to_string(),
@@ -899,4 +912,104 @@ fn solana_token_requires_sol_for_fee() {
         "Solana transaction fee",
     )
     .is_ok());
+}
+
+#[test]
+fn token_send_persists_review_and_unknown_submission_and_rejects_resubmission() {
+    let directory = send_directory("token2022-review");
+    let path = directory.join("wallet.json");
+    let state = send_state(path.clone());
+    let password = "Token review recovery 42!";
+    let (key, salt) = derive_storage_key(password, Some(&[2; 16])).unwrap();
+    {
+        let mut guard = state.lock().unwrap();
+        guard.encryption_key = Some(key);
+        guard.storage_salt = Some(salt);
+    }
+    let mut signed = signed_send("solana", "SolFrom", "SolTo", "blockhash", "signature");
+    signed.token_address = Some("mint".into());
+    signed.solana_token_send = Some(crate::dto::SolanaTokenSendReview {
+        token_program: crate::solana_tokens::TOKEN_2022.into(),
+        mint_extensions: vec![1],
+        fee_schedule: Some(crate::dto::SolanaTransferFeeSchedule {
+            epoch: "4".into(),
+            basis_points: 100,
+            maximum_fee: "10".into(),
+        }),
+        sources: vec![crate::dto::SolanaTokenSendSource {
+            address: "source".into(),
+            amount: "100".into(),
+            fee: "1".into(),
+        }],
+        transfer_fee: "1".into(),
+        recipient_amount: "99".into(),
+        account_rent_lamports: "2100000".into(),
+    });
+    let legacy: SignedTransaction = serde_json::from_value({
+        let mut json = serde_json::to_value(&signed).unwrap();
+        json.as_object_mut().unwrap().remove("solanaTokenSend");
+        json
+    })
+    .unwrap();
+    assert!(legacy.solana_token_send.is_none());
+    let (id, raw) = prepare_durable_send(&state, &signed, Some(12))
+        .unwrap()
+        .unwrap();
+    assert_eq!(raw, signed.raw_tx.clone().unwrap());
+    let stored = read_stored_wallet(&path).unwrap().unwrap();
+    assert_eq!(stored.version, 17);
+    assert!(
+        !serde_json::to_string(&stored)
+            .unwrap()
+            .contains("token_program")
+    );
+    let restored = decrypt_wallet(&stored, password).unwrap();
+    assert_eq!(
+        restored.wallet().operations[0].solana_token_send,
+        signed.solana_token_send
+    );
+    assert_eq!(
+        restored.wallet().operations[0].attempts[0].status,
+        TransactionStatus::Signed
+    );
+    update_send_attempt(&state, &id, "signature", |attempt| {
+        attempt.status = TransactionStatus::SubmissionUnknown
+    })
+    .unwrap();
+    assert!(
+        prepare_durable_send(&state, &signed, Some(12))
+            .unwrap_err()
+            .contains("already recorded")
+    );
+    let stored = read_stored_wallet(&path).unwrap().unwrap();
+    let restored = decrypt_wallet(&stored, password).unwrap();
+    let operation = &restored.wallet().operations[0];
+    assert_eq!(operation.solana_token_send, signed.solana_token_send);
+    assert_eq!(
+        operation.attempts[0].status,
+        TransactionStatus::SubmissionUnknown
+    );
+    assert!(super::is_unresolved_send(operation, "solana", "SolFrom"));
+    let mut legacy = serde_json::to_value(operation).unwrap();
+    legacy.as_object_mut().unwrap().remove("solana_token_send");
+    let legacy: crate::operations::Operation = serde_json::from_value(legacy).unwrap();
+    assert!(legacy.solana_token_send.is_none());
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn token_send_rejects_generation_changes_before_persistence() {
+    let directory = send_directory("token2022-generation");
+    let path = directory.join("wallet.json");
+    let state = send_state(path.clone());
+    let signed = signed_send("solana", "SolFrom", "SolTo", "blockhash", "signature");
+    state.lock().unwrap().advance_wallet_generation();
+    assert!(
+        prepare_durable_send(&state, &signed, Some(12))
+            .unwrap_err()
+            .contains("Wallet changed")
+    );
+    assert!(!path.exists());
+    assert!(operations(&state).is_empty());
+    std::fs::remove_dir_all(directory).unwrap();
 }

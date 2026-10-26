@@ -297,6 +297,7 @@ async fn refresh_bitcoin_account_asset(
     let refreshed_account = scan_bitcoin_account(client, cached_account.account()).await?;
     let balance = refreshed_account.total_balance()?.to_string();
     let asset = Asset {
+        solana_token: None,
         symbol: config.native_asset.symbol.clone(),
         unicode_symbol: config.native_asset.unicode_symbol.clone(),
         name: config.native_asset.name.clone(),

@@ -17,12 +17,14 @@ fn combines_classic_spl_token_accounts_with_ata_priority() {
     let ata = solana_associated_token_address(owner, mint).unwrap();
     let accounts = vec![
         SolanaTokenAccount {
+            capabilities: None,
             address: "7VH1XhBY1DmFk98fBdLqEbDsKpr41whdM8EzipizyVCJ".to_string(),
             mint: mint.to_string(),
             amount: 7,
             decimals: 9,
         },
         SolanaTokenAccount {
+            capabilities: None,
             address: ata.clone(),
             mint: mint.to_string(),
             amount: 3,

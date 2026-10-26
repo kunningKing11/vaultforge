@@ -7,6 +7,7 @@ use crate::providers::prices::CoinGeckoPriceResponse;
 
 fn asset(price_usd: f64, change_24h: f64, token_address: Option<&str>) -> Asset {
     Asset {
+        solana_token: None,
         symbol: "USDC".to_string(),
         unicode_symbol: None,
         name: "USD Coin".to_string(),

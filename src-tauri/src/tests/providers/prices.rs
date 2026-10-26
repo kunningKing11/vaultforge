@@ -32,6 +32,7 @@ fn parses_discovered_token_metadata_without_float_amounts() {
 #[test]
 fn receipt_tokens_do_not_inherit_the_underlying_price_id() {
     let mut asset = crate::dto::Asset {
+        solana_token: None,
         network: "solana".into(),
         token_address: Some("JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD".into()),
         symbol: "JupUSD".into(),

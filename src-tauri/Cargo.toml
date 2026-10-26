@@ -36,6 +36,8 @@ solana-system-interface = { version = "3.3.0", features = ["wincode"] }
 solana-transaction = { version = "4.3.0", features = ["wincode"] }
 spl-associated-token-account-interface = "2.0.0"
 spl-token-interface = "3.0.0"
+spl-token-2022-interface = "3.1.2"
+spl-token-metadata-interface = "1.0.1"
 sha2 = { version = "0.11.1", features = ["zeroize"] }
 bip39 = "2.2.2"
 bip32 = { version = "0.6.0", features = ["alloc"] }

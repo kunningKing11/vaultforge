@@ -53,6 +53,7 @@ pub(crate) async fn fetch_tron_assets(
     match fetch_tron_native_balance(client, address).await {
         Ok(sun) => NetworkAssetRefresh {
             assets: vec![Asset {
+                solana_token: None,
                 symbol: config.native_asset.symbol.clone(),
                 unicode_symbol: config.native_asset.unicode_symbol.clone(),
                 name: config.native_asset.name.clone(),

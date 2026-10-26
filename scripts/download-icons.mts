@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import manifest from "../src/icon-manifest.json";
+import { validateIconImage } from "./icon-image";
 
 const root = fileURLToPath(new URL("../public/icons/", import.meta.url));
 const checkOnly = process.argv.includes("--check");
@@ -20,6 +21,11 @@ function transformSvg(bytes: Uint8Array, transform?: string, viewBox?: string): 
     const paths = [...text.matchAll(/<path\b[^>]*>(?:[\s\S]*?<\/path>)/g)].slice(1);
     if (!circle || paths.length !== 1) throw new Error("Official OP token artwork missing");
     text = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="841 529 817 817">${circle[0]}${paths[0][0]}</svg>\n`;
+  } else if (transform === "render_token") {
+    // Preserve the issuer's symbol paths with the requested white-on-red treatment.
+    const paths = [...text.matchAll(/<path\b[^>]*(?:\/>|>[\s\S]*?<\/path>)/g)].slice(0, 2);
+    if (paths.length !== 2) throw new Error("Official Render symbol paths missing");
+    text = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><circle cx="24" cy="24" r="24" fill="#DF0001"/><g fill="#FFFFFF" transform="translate(4 4)">${paths.map((path) => path[0].replace(/\sclass="[^"]*"/g, "")).join("")}</g></svg>\n`;
   } else if (transform === "bitcoin_symbol" || transform === "bnb_symbol") {
     // Keep the original symbol paths; omit the wordmark and its coordinate transforms.
     const count = transform === "bitcoin_symbol" ? 2 : 1;
@@ -42,27 +48,10 @@ function transformSvg(bytes: Uint8Array, transform?: string, viewBox?: string): 
   return Buffer.from(text);
 }
 
-function validateImage(bytes: Uint8Array, file: string) {
-  const buffer = Buffer.from(bytes);
-  if (file.endsWith(".svg")) {
-    const text = buffer.toString("utf8");
-    // Reject active content rather than modifying official artwork. Only the reviewed,
-    // checksum-pinned files are accepted, and SVGs are served as image resources.
-    if (
-      /<svg\b/.test(text) &&
-      !/<(?:script|foreignObject|iframe|image|animate|set)\b|<!ENTITY|<!DOCTYPE|\bon\w+\s*=|(?:href|xlink:href)\s*=|javascript:|@import|url\(\s*["']?(?!#)/i.test(
-        text,
-      )
-    )
-      return;
-  }
-  throw new Error(`Invalid or unsafe image: ${file}`);
-}
-
 for (const [id, asset] of Object.entries(manifest.assets)) {
   const destination = resolve(root, asset.file);
   if (
-    !asset.file.endsWith(".svg") ||
+    !/\.(?:svg|png|jpe?g)$/.test(asset.file) ||
     !destination.startsWith(root) ||
     !/^https:\/\//.test(asset.url)
   )
@@ -71,7 +60,11 @@ for (const [id, asset] of Object.entries(manifest.assets)) {
   if (checkOnly) {
     bytes = await readFile(destination);
   } else {
-    const response = await fetch(asset.url, { signal: AbortSignal.timeout(30000) });
+    const requestHeaders = "requestHeaders" in asset ? asset.requestHeaders : undefined;
+    const response = await fetch(asset.url, {
+      headers: requestHeaders,
+      signal: AbortSignal.timeout(30000),
+    });
     if (!response.ok) throw new Error(`${id}: HTTP ${response.status}`);
     const downloaded = new Uint8Array(await response.arrayBuffer());
     if (downloaded.length > 20 * 1024 * 1024) throw new Error(`${id}: download too large`);
@@ -127,7 +120,7 @@ for (const [id, asset] of Object.entries(manifest.assets)) {
     throw new Error(
       `${id}: checksum changed; review the official asset before updating the manifest`,
     );
-  validateImage(bytes, asset.file);
+  validateIconImage(bytes, asset.file);
   if (!checkOnly) {
     await mkdir(dirname(destination), { recursive: true });
     await writeFile(`${destination}.tmp`, bytes);

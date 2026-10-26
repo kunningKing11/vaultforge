@@ -242,6 +242,7 @@ pub(crate) async fn fetch_evm_assets(
 
     match fetch_evm_native_balance(client, config, address).await {
         Ok(wei) => assets.push(Asset {
+            solana_token: None,
             symbol: config.native_asset.symbol.clone(),
             unicode_symbol: config.native_asset.unicode_symbol.clone(),
             name: config.native_asset.name.clone(),
@@ -264,6 +265,7 @@ pub(crate) async fn fetch_evm_assets(
         match fetch_evm_token_balance(client, config, token, address).await {
             Ok(balance) => {
                 assets.push(Asset {
+                    solana_token: None,
                     symbol: token.symbol.to_string(),
                     unicode_symbol: token.unicode_symbol.clone(),
                     name: token.name.to_string(),
