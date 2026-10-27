@@ -159,6 +159,8 @@ All Bun unit-test commands use `bun test --parallel`, which runs test files in p
 
 When adding tests, keep them alphabetically ordered: Rust test functions by function name within each mirrored test file, and TypeScript test blocks by title within their containing scope. Run `bun run lint:test-order` to check the order or `bun run lint:test-order:fix` to sort them.
 
+Keep dependency names alphabetically ordered within each Cargo dependency table. Run `bun run lint:cargo-order` to check them.
+
 With Lefthook installed, local Git operations run these unit tests:
 
 - Pre-commit: `bun test --parallel` runs the TypeScript tests. Rust unit tests do not run at commit time; the hook runs `cargo check` and `cargo fmt --check`.

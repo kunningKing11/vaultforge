@@ -192,6 +192,8 @@ bun run format
 
 `dev` and `build` run the non-mutating Oxlint, Bun formatting, and Bun type checks before starting Vite. Run `./lint.sh` for the same checks or `./lint.sh --fix` to apply safe lint fixes and formatting first.
 
+`bun run lint` and the pre-commit hook also check that dependency names are alphabetized within each Cargo dependency table. Run `bun run lint:cargo-order` to check this separately.
+
 Every commit checks 72-character commit-message lines, syncs Cargo's version from `package.json`, runs dependency installs, and stages the package and Cargo manifests/lockfiles. It then runs Oxlint, Bun formatting and type checks, the TypeScript unit tests, `cargo fmt --check`, and `cargo check`. Before every push, Lefthook runs Bun's dependency audit; the push validation runs TypeScript tests, verifies Cargo manifests match the lockfile with `cargo metadata --locked`, audits the resolved versions with `cargo audit --file src-tauri/Cargo.lock`, and runs the full Rust test suite. Each hook runs every command in its group before printing a pass/fail summary; a failed command blocks its commit or push.
 
 You can run the same checks manually with `bun run hooks:check -- commit` or `bun run hooks:check -- push`. After cloning or installing dependencies, `bun install` installs the Git hooks through the `prepare` script; run `bun run prepare` in an already-installed checkout.
