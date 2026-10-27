@@ -31,7 +31,7 @@ commit)
   run_check "Sync Cargo package version" bun run sync-cargo-version
   run_check "bun install" bun install
   run_check "Oxlint" bun run lint:oxlint
-  run_check "Oxfmt" bun run format:check
+  run_check "Bun fmt" bun run format:check
   run_check "Test order" bun run lint:test-order
   run_check "Icon order" bun run lint:icon-order
   run_check "TypeScript" bun run typecheck

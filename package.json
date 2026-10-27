@@ -7,13 +7,13 @@
     "dev": "bun run check && vite --host 127.0.0.1 --port 1420",
     "prepare-tauri": "bun scripts/prepare-tauri-icons.mts",
     "build": "bun run check && vite build",
-    "lint": "oxlint . && oxfmt --check . && bun run lint:test-order && bun run lint:icon-order",
+    "lint": "oxlint . && bun fmt --check . && bun run lint:test-order && bun run lint:icon-order",
     "lint:oxlint": "oxlint .",
     "lint:test-order": "bun scripts/lint-test-order.mts --check",
     "lint:test-order:fix": "bun scripts/lint-test-order.mts --fix",
-    "lint:fix": "oxlint --fix . && oxfmt --write . && bun run lint:test-order:fix && bun run lint:icon-order:fix",
-    "format": "oxfmt --write .",
-    "format:check": "oxfmt --check .",
+    "lint:fix": "oxlint --fix . && bun fmt . && bun run lint:test-order:fix && bun run lint:icon-order:fix",
+    "format": "bun fmt .",
+    "format:check": "bun fmt --check .",
     "test": "bun test --parallel",
     "typecheck": "bun check --no-script",
     "check": "bun run lint && bun run typecheck",
@@ -25,7 +25,7 @@
     "icons:download": "bun scripts/download-icons.mts",
     "icons:check": "bun scripts/download-icons.mts --check",
     "lint:icon-order": "bun scripts/lint-icon-order.mts --check",
-    "lint:icon-order:fix": "bun scripts/lint-icon-order.mts --fix && oxfmt --write src/icon-manifest.json"
+    "lint:icon-order:fix": "bun scripts/lint-icon-order.mts --fix && bun fmt src/icon-manifest.json"
   },
   "dependencies": {
     "@coinbase/cds-web": "^9.29.0",
@@ -49,7 +49,6 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "lefthook": "^2.2.2",
-    "oxfmt": "^0.74.0",
     "oxlint": "^1.89.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"

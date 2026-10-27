@@ -34,7 +34,7 @@ In every TypeScript and JavaScript file, group imports in this order: runtime-pr
 and stylesheet imports. Sort module specifiers alphabetically within each group, regardless
 of the imported binding names, and sort named imports alphabetically by their imported
 names. Use braces for named imports, including single named imports; omit braces only for
-default imports. Oxfmt and Oxlint enforce the repository-wide ordering.
+default imports. Bun fmt and Oxlint enforce the repository-wide ordering.
 
 ### Frontend
 
