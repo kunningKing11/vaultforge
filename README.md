@@ -1,5 +1,8 @@
 ---
 
+> [!WARNING]
+> VaultForge is provided on an “as is” basis. Although reasonable efforts have been made to address security risks, no guarantee is made that the software is free from vulnerabilities or will safeguard your assets. Use of VaultForge is at your own risk. To the fullest extent permitted by law, the author and contributors disclaim liability for any loss of funds or other damages arising from its use.
+
 # VaultForge Wallet
 
 A local-first crypto wallet desktop app built with a React frontend, Coinbase Design System, and a Rust backend through Tauri.
