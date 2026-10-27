@@ -1,2 +1,27 @@
 [install]
 minimumReleaseAge = 259200 # 3 days
+
+[fmt]
+printWidth = 100
+tabWidth = 2
+useTabs = false
+semi = true
+singleQuote = false
+trailingComma = "all"
+endOfLine = "lf"
+insertFinalNewline = true
+proseWrap = "preserve"
+sortPackageJson = true
+sortTailwindcss = false
+
+[fmt.sortImports]
+customGroups = [{ groupName = "bun", elementNamePattern = ["bun:*"] }]
+groups = [
+  ["builtin", "bun"],
+  "external",
+  ["parent", "sibling", "index"],
+  ["side_effect_style", "style", "side_effect"],
+  "unknown",
+]
+newlinesBetween = true
+sortSideEffects = true

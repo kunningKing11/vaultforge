@@ -9,12 +9,7 @@ import type {
 
 type NetworkTemplate = Pick<Network, "vm_type" | "isL2" | "isTestNet">;
 type RequiredNetworkFields =
-  | "kind"
-  | "id"
-  | "name"
-  | "addressKey"
-  | "nativeAsset"
-  | "transactionStatusProvider";
+  "kind" | "id" | "name" | "addressKey" | "nativeAsset" | "transactionStatusProvider";
 type NetworkDefinition = Pick<Network, RequiredNetworkFields> &
   Partial<Omit<Network, RequiredNetworkFields | "ticker">>;
 

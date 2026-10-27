@@ -139,14 +139,7 @@ export type SessionCommand =
   | "refresh_portfolio";
 
 export type View =
-  | "dashboard"
-  | "send"
-  | "receive"
-  | "swap"
-  | "assets"
-  | "activity"
-  | "security"
-  | "settings";
+  "dashboard" | "send" | "receive" | "swap" | "assets" | "activity" | "security" | "settings";
 
 export type QrResilience = "L" | "M" | "Q" | "H";
 
