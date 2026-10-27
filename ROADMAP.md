@@ -39,10 +39,9 @@ The below items are the priorities for this project and an item will probably ge
       - [x] sends with reviewed extensions and transfer-fee handling
       - [x] reviewed same-chain swaps (Jupiter, Relay and LI.FI)
       - [ ] embedded Jupiter v2 platform-fee collector layouts
-    - [x] pre-sign live balance refresh
   - [x] Tron (TRX) basic transfers
     - [x] native TRX transfers
-    - [x] configured TRC-20 balance discovery and transfers (USDT, USD1, TRUMP, and legacy USDC)
+    - [x] TRC-20 token transfers
   - [ ] XRP Ledger (XRP) basic transfers
     - [x] native XRP transfers
     - [ ] issued-currency, MPT, and NFT transfers
@@ -64,7 +63,7 @@ The below items are the priorities for this project and an item will probably ge
       - [ ] cross-chain
       - [ ] multiple pools
     - [x] Jupiter (Metis router)
-    - [ ] Aerodrome
+    - [ ] Aero
     - [ ] Raydium
     - [ ] Meteora
   - [ ] via major DEX aggregators
@@ -78,10 +77,10 @@ The below items are the priorities for this project and an item will probably ge
       - [ ] cross-chain
   - [ ] gasless/sponsored swaps (using paymaster/ERC-4337 or smart contract deposits)
 - [x] Public GitHub repository
-- [ ] Live pre-sign balance refresh
+- [ ] Pre-sign balance refresh
   - [ ] Bitcoin
   - [x] EVM
-  - [ ] Solana
+  - [x] Solana
   - [x] Tron
   - [ ] XRPL
 - [ ] Proper fee estimation engine + preflight checks
