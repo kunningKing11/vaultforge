@@ -142,7 +142,7 @@ Use `assetIconPath(asset)` and `chainIconPath(network)` from `src/assetIcons.ts`
 
 ### Setup
 
-This project requires Bun `v1.4.0` or newer and uses the native TypeScript 7 compiler installed from the project's dependencies.
+Use the Bun version specified by `packageManager` in [package.json](package.json); CI and release builds use the same version. The project uses the native TypeScript 7 compiler installed from its dependencies.
 
 **Install dependencies:**
 
