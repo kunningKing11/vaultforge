@@ -305,6 +305,13 @@ textarea {
   object-fit: contain;
 }
 
+.asset-chain-filter-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
 .asset-card-coin-icon[src="/icons/chains/ethereum.svg"],
 .asset-card-coin-icon[src="/icons/coins/render.svg"],
 .asset-card-chain-icon[src="/icons/chains/ethereum.svg"] {

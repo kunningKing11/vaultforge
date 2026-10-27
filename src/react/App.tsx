@@ -1,12 +1,19 @@
 import type { ThemeVars } from "@coinbase/cds-common/core/theme";
 import { Button } from "@coinbase/cds-web/buttons";
 import { ContentCard } from "@coinbase/cds-web/cards/ContentCard";
-import { Checkbox, NativeTextArea, Switch, TextInput } from "@coinbase/cds-web/controls";
+import {
+  Checkbox,
+  type CheckboxProps,
+  ControlGroup,
+  NativeTextArea,
+  Switch,
+  TextInput,
+} from "@coinbase/cds-web/controls";
 import { useMediaQuery } from "@coinbase/cds-web/hooks/useMediaQuery";
 import { Icon } from "@coinbase/cds-web/icons/Icon";
 import { Box, Grid, HStack, VStack } from "@coinbase/cds-web/layout";
 import { Sidebar, SidebarItem } from "@coinbase/cds-web/navigation";
-import { Modal, PortalProvider, Tooltip } from "@coinbase/cds-web/overlays";
+import { Modal, PopoverPanel, PortalProvider, Tooltip } from "@coinbase/cds-web/overlays";
 import { useToast } from "@coinbase/cds-web/overlays/useToast";
 import { MediaQueryProvider, ThemeProvider } from "@coinbase/cds-web/system";
 import { Text } from "@coinbase/cds-web/typography";
@@ -2812,16 +2819,80 @@ function AssetsView({
   collapse: boolean;
   onCollapse: (value: boolean) => void;
 }) {
-  const assets = assetGroups(wallet.assets, collapse, wallet.hideBelowUsd);
+  const [selectedChains, setSelectedChains] = useState<NetworkId[]>([]);
+  const availableNetworks = networks.filter((network) =>
+    wallet.assets.some((asset) => asset.network === network.id),
+  );
+  const filteredAssets =
+    selectedChains.length === 0
+      ? wallet.assets
+      : wallet.assets.filter((asset) => selectedChains.includes(asset.network));
+  const assets = assetGroups(filteredAssets, collapse, wallet.hideBelowUsd);
+
   return (
     <ContentCard background="bgElevation1" borderRadius={400} gap={3} padding={4}>
-      <HStack justifyContent="space-between">
+      <HStack alignItems="center" justifyContent="space-between">
         <Text as="h2" font="title1">
           Assets
         </Text>
-        <Text color="fgMuted" font="body">
-          {assets.length} tracked
-        </Text>
+        <HStack alignItems="center" gap={2}>
+          <Text color="fgMuted" font="body">
+            {assets.length} tracked
+          </Text>
+          <PopoverPanel
+            accessibilityLabel="Filter assets by chain"
+            content={
+              <VStack maxHeight="400px" overflow="auto" padding={2}>
+                <ControlGroup<"all" | NetworkId, CheckboxProps<"all" | NetworkId>>
+                  ControlComponent={Checkbox}
+                  direction="vertical"
+                  gap={1}
+                  label="Filter assets by chain"
+                  onChange={(event) => {
+                    const { checked, value } = event.target;
+                    if (value === "all") {
+                      setSelectedChains([]);
+                      return;
+                    }
+                    const networkId = value as NetworkId;
+                    setSelectedChains((current) =>
+                      checked
+                        ? current.includes(networkId)
+                          ? current
+                          : [...current, networkId]
+                        : current.filter((id) => id !== networkId),
+                    );
+                  }}
+                  options={[
+                    { value: "all", children: "All chains" },
+                    ...availableNetworks.map((network) => ({
+                      value: network.id,
+                      children: (
+                        <HStack alignItems="center" gap={1}>
+                          <img
+                            alt=""
+                            className="asset-chain-filter-icon"
+                            src={chainIconPath(network.id)}
+                          />
+                          <Text font="body">{network.name}</Text>
+                        </HStack>
+                      ),
+                    })),
+                  ]}
+                  role="group"
+                  value={selectedChains.length === 0 ? ["all"] : selectedChains}
+                />
+              </VStack>
+            }
+            contentPosition={{ placement: "bottom-end" }}
+            minPanelWidth="240px"
+            maxPanelHeight="400px"
+          >
+            <Button compact start={<Icon name="filter" size="s" />} variant="secondary">
+              Filter
+            </Button>
+          </PopoverPanel>
+        </HStack>
       </HStack>
       <Switch checked={collapse} onChange={(event) => onCollapse(event.target.checked)}>
         Group across chains

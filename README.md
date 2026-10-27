@@ -27,6 +27,7 @@ A local-first crypto wallet desktop app built with a React frontend, Coinbase De
 - Portfolio dashboard with token balances, allocation, weighted 24h change, optional Unicode crypto symbols, and USD, EUR, GBP, or JPY valuation selectable during setup or in settings
 - Activity transaction hashes and sender/recipient addresses link to their chain explorers. Sidebar addresses are clickable while retaining separate copy buttons; the shared EVM address opens on Ethereum's explorer.
 - Portfolio and Assets share a “Group across chains” toggle remembered in the wallet file; new wallets start with grouping enabled. Known registry assets with the same price ID combine into one display card; hovering or keyboard-focusing it shows per-chain balances and fiat values only when at least two chains hold a nonzero balance. Zero-balance chains are omitted. Grouping does not change stored balances or send selections, and unknown token contracts remain separate.
+- The Assets view can filter the displayed holdings by one or more chains; “All chains” restores the complete list, and each chain option shows its icon.
 - Save the wallet name, display currency, auto-lock timeout, crypto-symbol preference, hidden-asset cutoff, and chain-grouping preference together from settings
 - Sign and review chain-specific transactions before broadcasting them
 - Basic real transfer paths for BTC, EVM native/ERC-20, Solana native/classic SPL and reviewed Token-2022 assets, Tron native and configured TRC-20 assets, and XRP Ledger native XRP
