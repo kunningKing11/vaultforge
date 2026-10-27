@@ -21,7 +21,6 @@ async function fixture(
     for (const [target, extensions] of Object.entries({
       "linux-x64": ["AppImage", "deb", "rpm"],
       "linux-arm64": ["AppImage", "deb", "rpm"],
-      "macos-x64": ["app.tar.gz"],
       "macos-arm64": ["app.tar.gz"],
       "windows-x64": ["exe"],
       "windows-arm64": ["exe"],
@@ -48,13 +47,11 @@ test("builds complete updater manifests with matching copied packages and signat
     const manifest = await prepareReleaseAssets(options);
     expect(manifest.version).toBe("0.5.0");
     expect(manifest.notes).toBe(options.notes);
-    expect(Object.keys(manifest.platforms)).toHaveLength(16);
+    expect(Object.keys(manifest.platforms)).toHaveLength(14);
     expect(manifest.platforms["linux-x86_64-deb"].url.endsWith(".deb")).toBe(true);
     expect(manifest.platforms["linux-x86_64-rpm"].url.endsWith(".rpm")).toBe(true);
     expect(manifest.platforms["linux-x86_64"].url.endsWith(".AppImage")).toBe(true);
-    expect(manifest.platforms["darwin-x86_64"].url).not.toBe(
-      manifest.platforms["darwin-aarch64"].url,
-    );
+    expect(manifest.platforms).not.toHaveProperty("darwin-x86_64");
     for (const entry of Object.values(manifest.platforms)) {
       expect(
         entry.url.startsWith("https://github.com/owner/wallet/releases/download/v0.5.0/"),
@@ -69,7 +66,6 @@ test("builds complete updater manifests with matching copied packages and signat
     expect(JSON.parse(await readFile(join(options.output, "latest.json"), "utf8"))).toEqual(
       manifest,
     );
-    await access(join(options.output, "macos-x64-VaultForge.Wallet.dmg"));
   });
 });
 

@@ -4,7 +4,6 @@ import { basename, join } from "node:path";
 const targets = [
   { artifact: "linux-x64", platform: "linux-x86_64", formats: ["appimage", "deb", "rpm"] },
   { artifact: "linux-arm64", platform: "linux-aarch64", formats: ["appimage", "deb", "rpm"] },
-  { artifact: "macos-x64", platform: "darwin-x86_64", formats: ["app"] },
   { artifact: "macos-arm64", platform: "darwin-aarch64", formats: ["app"] },
   { artifact: "windows-x64", platform: "windows-x86_64", formats: ["nsis"] },
   { artifact: "windows-arm64", platform: "windows-aarch64", formats: ["nsis"] },
