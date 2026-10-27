@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::{collections::HashMap, sync::Mutex};
 use tauri::State;
 
 use crate::cctp_attestation::{AttestationProgress, poll_attestation};
@@ -23,7 +23,7 @@ pub(crate) async fn poll_cctp_attestation(
     .await
 }
 
-use crate::cctp::{CctpRoute, NATIVE_EXECUTION_ENABLED};
+use crate::cctp::CctpRoute;
 use crate::cctp_execution::{
     CctpOperationResult, CctpPreparedSource, begin_action, create_source_operation,
     prepare_source_step, save_operation, submit_source_step,
@@ -68,28 +68,7 @@ pub(crate) struct CctpStateView {
     operations: Vec<CctpOperationView>,
 }
 
-/// EVM routes execute through the proven mint path. Solana native execution
-/// stays off until a funded integration proves the route and restart.
-fn route_executable(route: &CctpRoute) -> bool {
-    let native = route.source.network.kind == "svm" || route.destination.network.kind == "svm";
-    !native || NATIVE_EXECUTION_ENABLED
-}
-
-fn require_route_executable(route: &CctpRoute) -> Result<(), String> {
-    if route_executable(route) {
-        Ok(())
-    } else {
-        Err("Native Solana CCTP execution is unavailable until a funded integration proves the route".into())
-    }
-}
-
-#[tauri::command]
-pub(crate) fn get_cctp_state(state: State<'_, Mutex<AppState>>) -> Result<CctpStateView, String> {
-    let state = state.lock().map_err(|_| "State lock failed")?;
-    if state.locked {
-        return Err("Wallet is locked".into());
-    }
-    let wallet = state.wallet.as_ref().ok_or("No wallet exists")?;
+fn available_routes(addresses: &HashMap<String, String>) -> Vec<CctpRouteView> {
     let networks = [
         "ethereum",
         "avalanche_c",
@@ -108,10 +87,10 @@ pub(crate) fn get_cctp_state(state: State<'_, Mutex<AppState>>) -> Result<CctpSt
             let Ok(route) = CctpRoute::for_networks(source, destination) else {
                 continue;
             };
-            let Some(sender) = wallet.addresses.get(&route.source.network.address_key) else {
+            let Some(sender) = addresses.get(&route.source.network.address_key) else {
                 continue;
             };
-            let Some(address) = wallet.addresses.get(&route.destination.network.address_key) else {
+            let Some(address) = addresses.get(&route.destination.network.address_key) else {
                 continue;
             };
             routes.push(CctpRouteView {
@@ -122,10 +101,21 @@ pub(crate) fn get_cctp_state(state: State<'_, Mutex<AppState>>) -> Result<CctpSt
                 sender: sender.clone(),
                 destination_address: address.clone(),
                 environment: format!("{:?}", route.environment),
-                executable: route_executable(&route),
+                executable: true,
             });
         }
     }
+    routes
+}
+
+#[tauri::command]
+pub(crate) fn get_cctp_state(state: State<'_, Mutex<AppState>>) -> Result<CctpStateView, String> {
+    let state = state.lock().map_err(|_| "State lock failed")?;
+    if state.locked {
+        return Err("Wallet is locked".into());
+    }
+    let wallet = state.wallet.as_ref().ok_or("No wallet exists")?;
+    let routes = available_routes(&wallet.addresses);
     let operations = wallet
         .operations
         .iter()
@@ -183,7 +173,6 @@ pub(crate) fn create_cctp_transfer(
     amount_base_units: String,
 ) -> Result<CctpOperationResult, String> {
     let route = CctpRoute::for_networks(&source_network, &destination_network)?;
-    require_route_executable(&route)?;
     create_source_operation(
         state.inner(),
         AssetIdentity::new(&source_network, Some(route.source.usdc)),
@@ -200,7 +189,6 @@ pub(crate) async fn prepare_cctp_step(
 ) -> Result<CctpPreparedSource, String> {
     let operation = current_operation(state.inner(), &operation_id)?;
     let transfer = operation.cctp_transfer()?;
-    require_route_executable(&transfer.route)?;
     let mint = operation.step == OperationStep::Mint
         || crate::operations::attestation_available(&operation);
     let native = crate::providers::cctp_native::LiveNative {
@@ -279,7 +267,6 @@ pub(crate) async fn submit_cctp_step(
     expected_hash: String,
 ) -> Result<WalletSession, String> {
     let operation = current_operation(state.inner(), &operation_id)?;
-    require_route_executable(&operation.cctp_transfer()?.route)?;
     let attempt = operation
         .attempts
         .last()
@@ -306,8 +293,7 @@ pub(crate) async fn submit_cctp_step(
 }
 
 /// Abandons a transfer that has not reached the irreversible burn step.
-/// Cancellation stays available for gated routes too so no saved transfer is
-/// ever stuck. The action guard blocks racing an in-flight submission.
+/// The action guard blocks racing an in-flight submission.
 #[tauri::command(rename_all = "camelCase")]
 pub(crate) fn cancel_cctp_transfer(
     state: State<'_, Mutex<AppState>>,
@@ -331,7 +317,6 @@ pub(crate) async fn sync_cctp_transfer(
     operation_id: String,
 ) -> Result<WalletSession, String> {
     let operation = current_operation(state.inner(), &operation_id)?;
-    require_route_executable(&operation.cctp_transfer()?.route)?;
     if operation.cctp_transfer()?.route.destination.network.kind == "svm" {
         crate::cctp_native::sync_native(
             state.inner(),
@@ -370,17 +355,5 @@ pub(crate) async fn refresh_cctp_attestation(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{require_route_executable, route_executable};
-    use crate::cctp::{CctpRoute, NATIVE_EXECUTION_ENABLED};
-
-    #[test]
-    fn native_routes_stay_gated_until_proven() {
-        let evm = CctpRoute::for_networks("ethereum", "arbitrum_one").unwrap();
-        assert!(route_executable(&evm));
-        assert!(require_route_executable(&evm).is_ok());
-        let native = CctpRoute::for_networks("ethereum", "solana").unwrap();
-        assert_eq!(route_executable(&native), NATIVE_EXECUTION_ENABLED);
-        assert!(require_route_executable(&native).is_err());
-    }
-}
+#[path = "../tests/commands/cctp.rs"]
+mod tests;

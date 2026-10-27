@@ -8,10 +8,6 @@ use crate::registry::{NetworkConfig, TransactionStatusProvider, configured_asset
 use crate::tx::tx_status::Finality;
 
 pub(crate) const CCTP_PROTOCOL_VERSION: u32 = 2;
-// Native construction/recovery is covered by mocks; enable execution only after
-// a funded native-route integration proves the pinned deployment and restart.
-pub(crate) const NATIVE_EXECUTION_ENABLED: bool = false;
-
 pub(crate) const STANDARD_FINALITY_THRESHOLD: u32 = 2000;
 pub(crate) const MAX_BURN_AMOUNT: u128 = 10_000_000 * 1_000_000;
 // Provisional budgets, not RPC estimates or guaranteed upper bounds. Every real call
