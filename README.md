@@ -150,6 +150,8 @@ Use the Bun version specified by `packageManager` in [package.json](package.json
 bun install
 ```
 
+Bun applies a three-day minimum release age when resolving new direct and transitive npm dependencies. Existing `bun.lock` entries and lockfile changes produced by Dependabot are not rechecked against this policy. For an urgent, reviewed update, temporarily add its exact `name@version` to `minimumReleaseAgeExcludes` in `bunfig.toml`, then remove the exception when it is no longer needed.
+
 **Run the web frontend:**
 
 ```bash
