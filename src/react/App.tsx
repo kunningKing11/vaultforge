@@ -15,6 +15,7 @@ import { Box, Grid, HStack, VStack } from "@coinbase/cds-web/layout";
 import { Sidebar, SidebarItem } from "@coinbase/cds-web/navigation";
 import { Modal, PopoverPanel, PortalProvider, Tooltip } from "@coinbase/cds-web/overlays";
 import { useToast } from "@coinbase/cds-web/overlays/useToast";
+import { Pagination } from "@coinbase/cds-web/pagination";
 import { MediaQueryProvider, ThemeProvider } from "@coinbase/cds-web/system";
 import { Text } from "@coinbase/cds-web/typography";
 import { ProgressBar } from "@coinbase/cds-web/visualizations";
@@ -2820,6 +2821,8 @@ function AssetsView({
   onCollapse: (value: boolean) => void;
 }) {
   const [selectedChains, setSelectedChains] = useState<NetworkId[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
   const availableNetworks = networks.filter((network) =>
     wallet.assets.some((asset) => asset.network === network.id),
   );
@@ -2828,6 +2831,12 @@ function AssetsView({
       ? wallet.assets
       : wallet.assets.filter((asset) => selectedChains.includes(asset.network));
   const assets = assetGroups(filteredAssets, collapse, wallet.hideBelowUsd);
+  const totalPages = Math.max(1, Math.ceil(assets.length / pageSize));
+  const visiblePage = Math.min(currentPage, totalPages);
+  const pageStart = (visiblePage - 1) * pageSize;
+  const visibleAssets = assets.slice(pageStart, pageStart + pageSize);
+  const firstAssetIndex = assets.length === 0 ? 0 : pageStart + 1;
+  const lastAssetIndex = Math.min(pageStart + pageSize, assets.length);
 
   return (
     <ContentCard background="bgElevation1" borderRadius={400} gap={3} padding={4}>
@@ -2852,6 +2861,7 @@ function AssetsView({
                     const { checked, value } = event.target;
                     if (value === "all") {
                       setSelectedChains([]);
+                      setCurrentPage(1);
                       return;
                     }
                     const networkId = value as NetworkId;
@@ -2862,6 +2872,7 @@ function AssetsView({
                           : [...current, networkId]
                         : current.filter((id) => id !== networkId),
                     );
+                    setCurrentPage(1);
                   }}
                   options={[
                     { value: "all", children: "All chains" },
@@ -2894,12 +2905,18 @@ function AssetsView({
           </PopoverPanel>
         </HStack>
       </HStack>
-      <Switch checked={collapse} onChange={(event) => onCollapse(event.target.checked)}>
+      <Switch
+        checked={collapse}
+        onChange={(event) => {
+          onCollapse(event.target.checked);
+          setCurrentPage(1);
+        }}
+      >
         Group across chains
       </Switch>
       <HiddenAssetsNote cutoff={wallet.hideBelowUsd} />
       <Grid className="assets-grid" columnMin="280px" gap={2}>
-        {assets.map((asset) => (
+        {visibleAssets.map((asset) => (
           <AssetCard group={asset} key={asset.id} wallet={wallet} />
         ))}
         {assets.length === 0 && (
@@ -2909,6 +2926,46 @@ function AssetsView({
           />
         )}
       </Grid>
+      {assets.length > 0 && (
+        <HStack
+          alignItems="center"
+          className="assets-pagination"
+          flexWrap="wrap"
+          gap={2}
+          justifyContent="space-between"
+        >
+          <HStack alignItems="center" flexWrap="wrap" gap={2}>
+            <Text color="fgMuted" font="body">
+              Assets per page
+            </Text>
+            <CdsSelect
+              accessibilityLabel="Assets per page"
+              className="assets-page-size-select"
+              onChange={(value) => {
+                setPageSize(Number(value));
+                setCurrentPage(1);
+              }}
+              options={[
+                { label: "12", value: "12" },
+                { label: "24", value: "24" },
+                { label: "48", value: "48" },
+              ]}
+              value={String(pageSize)}
+            />
+            <Text color="fgMuted" font="body">
+              Showing {firstAssetIndex}–{lastAssetIndex} of {assets.length}
+            </Text>
+          </HStack>
+          {totalPages > 1 && (
+            <Pagination
+              accessibilityLabel="Asset pages"
+              activePage={visiblePage}
+              onChange={setCurrentPage}
+              totalPages={totalPages}
+            />
+          )}
+        </HStack>
+      )}
     </ContentCard>
   );
 }

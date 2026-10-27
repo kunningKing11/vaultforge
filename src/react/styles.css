@@ -312,6 +312,10 @@ textarea {
   object-fit: contain;
 }
 
+.assets-page-size-select {
+  width: 5rem;
+}
+
 .asset-card-coin-icon[src="/icons/chains/ethereum.svg"],
 .asset-card-coin-icon[src="/icons/coins/render.svg"],
 .asset-card-chain-icon[src="/icons/chains/ethereum.svg"] {
