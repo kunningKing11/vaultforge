@@ -15,7 +15,7 @@
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "test": "bun test --parallel",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bun check --no-script",
     "check": "bun run lint && bun run typecheck",
     "preview": "vite preview",
     "prepare": "lefthook install",

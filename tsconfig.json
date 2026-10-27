@@ -22,6 +22,8 @@
     "src/**/*.tsx",
     "scripts/**/*.ts",
     "scripts/**/*.mts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "vite.config.ts"
   ]
 }
