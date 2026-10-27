@@ -30,16 +30,16 @@ commit)
   # dependency files for this same commit only.
   run_check "Sync Cargo package version" bun run sync-cargo-version
   run_check "bun install" bun install
+  run_check "Stage dependency files" git add -- package.json bun.lock src-tauri/Cargo.toml src-tauri/Cargo.lock
   run_check "Oxlint" bun run lint:oxlint
-  run_check "Bun fmt" bun run format:check
+  run_check "Bun fmt (staged)" bun fmt --staged --check
   run_check "Test order" bun run lint:test-order
   run_check "Icon order" bun run lint:icon-order
   run_check "Cargo dependency order" bun run lint:cargo-order
-  run_check "TypeScript" bun run typecheck
+  run_check "TypeScript (staged)" bash scripts/check-staged-types.sh
   run_check "TypeScript tests" bun test --parallel
   run_check "Cargo fmt" cargo fmt --all --manifest-path src-tauri/Cargo.toml --check
   run_check "Cargo check" cargo check --manifest-path src-tauri/Cargo.toml
-  run_check "Stage dependency files" git add -- package.json bun.lock src-tauri/Cargo.toml src-tauri/Cargo.lock
   operation="commit"
   ;;
 push)
