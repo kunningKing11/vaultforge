@@ -1,4 +1,6 @@
----
+<p align="center">
+  <img src="src-tauri/icons/banner.svg" alt="VaultForge" width="100%" style="max-width: 900px; height: auto;" />
+</p>
 
 > [!WARNING]
 > VaultForge is provided on an “as is” basis. Although reasonable efforts have been made to address security risks, no guarantee is made that the software is free from vulnerabilities or will safeguard your assets. Use of VaultForge is at your own risk. To the fullest extent permitted by law, the author and contributors disclaim liability for any loss of funds or other damages arising from its use.
