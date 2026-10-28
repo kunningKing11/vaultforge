@@ -9,6 +9,10 @@
 
 A local-first crypto wallet desktop app built with a React frontend, Coinbase Design System, and a Rust backend through Tauri.
 
+## App demo
+
+[Watch the VaultForge app demo](docs/vaultforge-demo.mp4).
+
 ## Features
 
 - Create, import, lock, and unlock a wallet session
