@@ -224,7 +224,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download bundles
-        uses: actions/download-artifact@v8.0.1
+        uses: actions/download-artifact@v8.0.2
         with:
           path: artifacts
 
