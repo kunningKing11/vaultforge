@@ -82,6 +82,7 @@ import type {
   WalletRefreshResult,
   WalletSession,
 } from "../types";
+import { updateDownloadSize } from "../update";
 import { appVersion } from "../version";
 import { walletApi } from "../walletApi";
 import { walletPasswordStrength } from "../walletPassword";
@@ -697,13 +698,15 @@ function WalletApplication({
     try {
       const update = await check();
       if (!update) {
-        toast("VaultForge is up to date.", "info");
+        toast(`VaultForge is up to date (v${appVersion}).`, "info");
         return;
       }
       const notes = update.body ? `\n\nRelease notes:\n${update.body}` : "";
+      const size = await updateDownloadSize(update.rawJson);
+      const sizeText = size === null ? "Size unknown" : `${(size / 1024 ** 2).toFixed(1)} MiB`;
       if (
         !window.confirm(
-          `VaultForge ${update.version} is available.${notes}\n\nInstall and restart now?`,
+          `VaultForge v${update.version} is available (current installed version is v${appVersion}).\nDownload size: ${sizeText}.${notes}\n\nInstall and restart now?`,
         )
       ) {
         return;

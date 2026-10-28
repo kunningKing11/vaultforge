@@ -156,7 +156,7 @@ bunx tauri build
 
 `prepare-tauri` caches icon hashes locally and regenerates the desktop and mobile icons when needed.
 
-The manually dispatched Release workflow builds signed updater packages using `TAURI_SIGNING_PRIVATE_KEY` and an optional password. `scripts/prepare-release-assets.mts` collects the builds and signatures and generates `latest.json`; missing or ambiguous packages or signatures block publication. The Settings updater requires a published release containing these files.
+The manually dispatched Release workflow builds signed updater packages using `TAURI_SIGNING_PRIVATE_KEY` and an optional password. `scripts/prepare-release-assets.mts` collects the builds and signatures and generates `latest.json`, including each package's download size; missing or ambiguous packages or signatures block publication. The Settings updater requires a published release containing these files. Older releases without sizes show an unknown download size.
 
 **Check and fix frontend (TypeScript) issues:**
 

@@ -72,6 +72,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::update::updater_target,
             commands::wallet::get_wallet,
             commands::wallet::generate_mnemonic_cmd,
             commands::market::refresh_portfolio,

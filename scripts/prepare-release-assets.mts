@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 const targets = [
@@ -69,7 +69,7 @@ export async function prepareReleaseAssets({
     counts.get(fileName(pkg.source))! > 1
       ? `${pkg.artifact}-${fileName(pkg.source)}`
       : fileName(pkg.source);
-  const platforms: Record<string, { url: string; signature: string }> = {};
+  const platforms: Record<string, { url: string; signature: string; size: number }> = {};
   const copies = new Map<string, string>();
   for (const pkg of packages) {
     const name = assetName(pkg);
@@ -94,6 +94,7 @@ export async function prepareReleaseAssets({
       const entry = {
         url: `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(name)}`,
         signature,
+        size: (await stat(pkg.source)).size,
       };
       platforms[`${target.platform}-${kind}`] = entry;
       // Older clients and unrecognized bundle types use OS-ARCH. Linux falls back to AppImage.

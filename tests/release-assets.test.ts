@@ -59,6 +59,7 @@ test("builds complete updater manifests with matching copied packages and signat
       expect(entry.url).not.toContain(" ");
       const name = decodeURIComponent(new URL(entry.url).pathname.split("/").at(-1)!);
       await access(join(options.output, name));
+      expect(entry.size).toBe((await readFile(join(options.output, name))).byteLength);
       expect((await readFile(join(options.output, `${name}.sig`), "utf8")).trim()).toBe(
         entry.signature,
       );
