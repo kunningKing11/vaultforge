@@ -11,7 +11,7 @@ A local-first crypto wallet desktop app built with a React frontend, Coinbase De
 
 ## App demo
 
-[Watch the VaultForge app demo](docs/vaultforge-demo.mp4).
+<video src="docs/vaultforge-demo.mp4" controls width="100%"></video>
 
 ## Features
 
@@ -87,7 +87,7 @@ Bridged, CCIP and ERC-677 variants remain separate assets by contract or mint, e
 
 ### Supported features
 
-The table distinguishes implemented backend paths from network entries that are currently address or validation scaffolding. “No” means the feature is not implemented; it does not imply that the underlying chain lacks it.
+The table distinguishes implemented backend paths from network entries that are currently address or validation scaffolding. “No” means the feature is not implemented yet.
 
 | Chain             | Native transfer            | Token transfer          | NFTs / Filecoin storage / Shielded pools (whichever are applicable) |
 | :---------------- | :------------------------- | :---------------------- | ------------------------------------------------------------------: |
@@ -111,15 +111,11 @@ The table distinguishes implemented backend paths from network entries that are 
 
 ### Chain and coin icons
 
-`src/icon-manifest.json` curates official project artwork, issuer source pages and brand kits, local filenames, SHA-256 checksums, chain mappings, and token mappings by network and contract/mint. Artwork is bundled in `public/icons/` for offline display. Official SVGs are preferred; original issuer PNG and JPEG icons are also accepted when a reviewed SVG is unavailable. Raster icons retain their published bytes; embedded raster content inside SVGs is rejected. Some chain assets are official website icons or wordmarks rather than standalone symbols; project branding terms still apply.
+`src/icon-manifest.json` records artwork sources, SHA-256 checksums, and chain and token mappings. Icons are bundled in `public/icons/` for offline use. Official SVGs are preferred; original issuer PNGs and JPEGs are accepted when a reviewed SVG is unavailable. Documented transforms preserve symbol geometry, and issuer branding terms apply.
 
-Run `bun run icons:download` to download the pinned assets (Bun and `unzip` are required for Circle's USDC archive), or `bun run icons:check` to verify existing files without network access. Changed upstream files fail checksum validation; review them before updating the manifest. The downloader rejects active SVG content; USDT uses Tether’s official green SVG logo mark. Explicit manifest transforms extract the original Bitcoin and BNB symbol paths from wordmarks and normalize Injective’s inline SVG attributes, apply its official `#4D3DFF` brand purple, and remove the OP token preview background and padding. Render uses its original symbol paths with the requested white fill on a red circle. Original symbol geometry is preserved.
+Run `bun run icons:download` to download pinned artwork (Circle's USDC archive also requires `unzip`) or `bun run icons:check` to verify it offline. Review upstream changes before updating checksums. The downloader rejects active SVG content and embedded raster content in SVGs. Run `bun run lint:icon-order:fix` to sort manifest entries.
 
-For published wordmarks, `svgViewBox` records a reviewed viewport crop that displays the original symbol without changing its paths. Icons without an available reviewed issuer source retain the question-mark fallback. Mint-published artwork records its metadata URI alongside the issuer page and download URL in the manifest. The TRUMP icon comes from [the official Trump token site](https://gettrumpmemes.com/images/trump-favicon-256.png). JLP, JupSOL and JupUSD use Jupiter-hosted token icons; BNSOL uses the logo Jupiter serves for Binance’s exact verified mint. Every Jupiter Lend receipt, including jlUSDS and JUICED, uses its own Jupiter interface token image selected by mint, rather than borrowing the underlying asset or generic Jupiter icon.
-
-Pre-commit and `bun run lint` enforce alphabetical icon IDs and network-map keys. Token mappings are grouped by icon, then sorted by network ID and contract. Run `bun run lint:icon-order:fix` to sort the manifest.
-
-Use `assetIconPath(asset)` and `chainIconPath(network)` from `src/assetIcons.ts` in image elements. Unknown identities return the bundled question-mark icon. Native ETH on Base, Optimism, and Arbitrum uses the ETH coin icon while the chain helper returns the corresponding chain badge. Dashboard and Assets share one `AssetCard` that uses these helpers for a coin icon and a small chain badge; missing or failed images use the question-mark fallback. Adding an icon does not declare transaction support. The question-mark artwork comes from Feather under the MIT license, included at `public/icons/fallback/LICENSE.txt`.
+Use `assetIconPath(asset)` and `chainIconPath(network)` from `src/assetIcons.ts` for asset icons and chain badges. Unknown or failed icons use the bundled Feather question-mark fallback. An icon does not imply transaction support.
 
 ### Setup
 
@@ -158,11 +154,11 @@ bun run prepare-tauri
 bunx tauri build
 ```
 
-`prepare-tauri` records SHA-256 hashes for `src-tauri/icons/icon.svg` and every generated desktop, Android, and iOS icon in the ignored local `src-tauri/icons/icon-hashes.json` cache. It skips `tauri icon` when the source, manifest, and all generated products still match, and regenerates the complete set when any file is missing or changed.
+`prepare-tauri` caches icon hashes locally and regenerates the desktop and mobile icons when needed.
 
-The manually dispatched Release workflow builds signed updater packages using the existing `TAURI_SIGNING_PRIVATE_KEY` and optional password secrets. `scripts/prepare-release-assets.mts` collects five architecture builds, retains updater signatures, and generates `latest.json` with package URLs and signature contents. Linux DEB/RPM/AppImage installs have separate entries; Apple silicon Macs use `.app.tar.gz` archives and Windows uses NSIS installers. Missing or ambiguous updater packages and missing/empty signatures block publication. The Settings updater endpoint becomes usable once a release containing these files is published; local workflow changes do not repair existing GitHub releases.
+The manually dispatched Release workflow builds signed updater packages using `TAURI_SIGNING_PRIVATE_KEY` and an optional password. `scripts/prepare-release-assets.mts` collects the builds and signatures and generates `latest.json`; missing or ambiguous packages or signatures block publication. The Settings updater requires a published release containing these files.
 
-**Check and fix frontend quality:**
+**Check and fix frontend (TypeScript) issues:**
 
 ```bash
 bun run check
@@ -177,7 +173,7 @@ Formatter settings and the dependency release-age policy live in `bunfig.toml`.
 
 `bun run lint` and the pre-commit hook also check that dependency names are alphabetized within each Cargo dependency table. Run `bun run lint:cargo-order` to check this separately.
 
-Every commit checks 72-character commit-message lines, syncs Cargo's version from `package.json`, runs dependency installs, and stages the package and Cargo manifests/lockfiles. It then runs Oxlint, Bun formatting and type checks, the TypeScript unit tests, `cargo fmt --check`, and `cargo check`. Formatting checks staged files, and type checking uses a temporary snapshot of the staged project with the installed dependencies. Other checks use the working tree. Before every push, Lefthook runs Bun's dependency audit; the push validation runs TypeScript tests, verifies Cargo manifests match the lockfile with `cargo metadata --locked`, audits the resolved versions with `cargo audit --file src-tauri/Cargo.lock`, and runs the full Rust test suite. Each hook runs every command in its group before printing a pass/fail summary; a failed command blocks its commit or push.
+Commit hooks check message length, sync versions and dependencies, and run lint, formatting, type checks, TypeScript tests, `cargo fmt --check`, and `cargo check`. Push hooks run dependency audits, TypeScript and Rust tests, and verify the Cargo lockfile. Failed checks block the commit or push. Formatting checks staged files and type checking uses a staged snapshot; other checks use the working tree.
 
 You can run the same checks manually with `bun run hooks:check -- commit` or `bun run hooks:check -- push`. After cloning or installing dependencies, `bun install` installs the Git hooks through the `prepare` script; run `bun run prepare` in an already-installed checkout.
 
@@ -185,31 +181,14 @@ You can run the same checks manually with `bun run hooks:check -- commit` or `bu
 
 ### Project Structure
 
-- `src/main.tsx` mounts the React frontend and Coinbase Design System providers/styles.
-- `src/react/App.tsx` contains the React shell, lifecycle screens, wallet views, Tauri action orchestration, and UI effects.
-- `src/react/model.ts` owns typed frontend state, session normalization, and pure derived wallet reads.
-- `src/react/styles.css` provides responsive layout rules using Coinbase Design System tokens; legacy SVGs remain in `src/assets/icons/`.
-- `src/` also contains the Tauri API boundary, amount formatting, recovery-phrase checks, network registry, scrollbar behavior, and shared types.
-- `scripts/generate-network-registry.ts` validates and normalizes the network registry for the Rust build.
-- `tests/` mirrors the frontend modules covered by Bun unit tests.
-- `src-tauri/src/lib.rs` wires the shared Tauri app, managed state, and command handlers; `src-tauri/src/main.rs` is the thin desktop launcher.
-- `src-tauri/src/commands/` contains Tauri command handlers split by domain: wallet lifecycle, transactions, and market data.
-- `src-tauri/src/providers/` contains chain RPC/provider code for balances, fee data, broadcast, and transaction status.
-- `src-tauri/src/registry.rs` exposes the normalized network, provider, native-asset, token, and pricing configuration embedded by `build.rs`.
-- `src-tauri/src/tests/` mirrors the Rust module structure for unit tests while keeping test code out of implementation files.
-- `src-tauri/src/tx/` contains chain-specific transaction construction, encoding, and signing code.
-- `src-tauri/src/cctp.rs` validates CCTP V2 Standard USDC routes among all supported EVM chains, plus a private Ethereum/Arbitrum Sepolia counterpart. `src-tauri/src/tx/cctp.rs` builds contract calls; `src-tauri/src/providers/cctp.rs` performs EVM balance, allowance, fee, and gas preparation. Solana source execution preparation is explicitly unavailable; these declarations and tests do not establish live transfer support or enable testnet wallet networks.
-- `src-tauri/src/cctp_attestation.rs` binds V2 burn logs to attested messages and saves polling deadlines; `src-tauri/src/providers/cctp_attestation.rs` fetches Circle messages and verifies EVM destinations through contract simulation. `src-tauri/src/providers/cctp_solana.rs` validates native Solana transaction/MessageSent-account evidence and recovers attestation signatures against the destination program's enabled on-chain attesters and threshold; this is distinct from mint simulation. The read-only `poll_cctp_attestation` command resumes polling by operation ID. Mint execution and the CCTP UI remain unavailable.
-- `src-tauri/src/operations.rs` tracks encrypted operation records, checks transitions, reconciles transaction statuses on unlock, and derives activity. CCTP mint entry requires bound attestation data, destination-specific authentication, and matching source-finality evidence; execution still requires its own fresh preflight.
-- `src-tauri/src/assets.rs` contains shared asset-cache helpers used by provider refresh paths.
-- `src-tauri/src/activity.rs`, `assets.rs`, `derivation.rs`, `dto.rs`, `state.rs`, `storage.rs`, and `validation.rs` contain the backend domain support code used by commands:
-  - `activity.rs`:
-  - `assets.rs`:
-  - `derivation.rs`: key derivation
-  - `dto.rs`: serialization
-  - `state.rs`:
-  - `storage.rs`:
-  - `validation.rs`:
+- `src/react/`: React screens, application state, and styles.
+- `src/`: frontend entry point, wallet API, network registry, and shared types and utilities.
+- `scripts/`: build, registry, icon, and release tooling.
+- `tests/`: frontend unit tests.
+- `src-tauri/src/commands/`: Tauri command boundaries for wallet, transaction, market, and swap actions.
+- `src-tauri/src/providers/` and `src-tauri/src/tx/`: chain providers and transaction construction, encoding, and signing.
+- `src-tauri/src/`: wallet state, encrypted storage, derivation, operations, swap and CCTP orchestration, and Tauri setup.
+- `src-tauri/src/tests/`: Rust unit tests.
 
 ## License
 
