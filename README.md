@@ -11,7 +11,7 @@ A local-first crypto wallet desktop app built with a React frontend, Coinbase De
 
 ## App demo
 
-<video src="docs/vaultforge-demo.mp4" controls width="100%"></video>
+https://github.com/user-attachments/assets/ff082c14-b698-4070-8c10-5ca884f6a4ed
 
 ## Features
 
