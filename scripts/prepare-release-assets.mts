@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 const targets = [
@@ -87,7 +87,7 @@ export async function prepareReleaseAssets({
         );
       const pkg = matches[0];
       const signaturePath = `${pkg.source}.sig`;
-      const signature = (await readFile(signaturePath, "utf8")).trim();
+      const signature = (await Bun.file(signaturePath).text()).trim();
       if (!signature) throw new Error(`Empty updater signature: ${signaturePath}`);
       const name = assetName(pkg);
       copies.set(`${name}.sig`, signaturePath);
@@ -104,12 +104,12 @@ export async function prepareReleaseAssets({
   const manifest = { version: tag.replace(/^v/, ""), notes, pub_date: pubDate, platforms };
   await mkdir(output, { recursive: true });
   for (const [name, source] of copies) await copyFile(source, join(output, name));
-  await writeFile(join(output, "latest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await Bun.write(join(output, "latest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   return manifest;
 }
 
 if (import.meta.main) {
-  const [artifacts, output, repository, tag, notesFile] = process.argv.slice(2);
+  const [artifacts, output, repository, tag, notesFile] = Bun.argv.slice(2);
   if (!artifacts || !output || !repository || !tag || !notesFile)
     throw new Error("Usage: prepare-release-assets.mts ARTIFACTS OUTPUT OWNER/REPO TAG NOTES_FILE");
   const manifest = await prepareReleaseAssets({
@@ -117,7 +117,7 @@ if (import.meta.main) {
     output,
     repository,
     tag,
-    notes: await readFile(notesFile, "utf8"),
+    notes: await Bun.file(notesFile).text(),
   });
   console.log(
     `Prepared latest.json for ${Object.keys(manifest.platforms).length} updater targets.`,

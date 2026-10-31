@@ -19,11 +19,10 @@
 // Usage:
 // - `bun scripts/lint-test-order.mts --check` (default): exit 1 on violation.
 // - `bun scripts/lint-test-order.mts --fix`: reorder in place, then re-check.
-import { readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readdir } from "node:fs/promises";
+import { join, resolve } from "node:path";
 
-const root: string = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root: string = resolve(import.meta.dir, "..");
 const tsTestDir: string = join(root, "tests");
 const rustTestDir: string = join(root, "src-tauri", "src", "tests");
 
@@ -906,7 +905,7 @@ async function listFilesRecursive(dir: string, suffix: string): Promise<Array<st
 }
 
 async function main(): Promise<void> {
-  const mode: Mode = parseMode(process.argv.slice(2));
+  const mode: Mode = parseMode(Bun.argv.slice(2));
   const tsFiles: Array<string> = (await readdir(tsTestDir))
     .filter((name: string) => name.endsWith(".test.ts"))
     .sort()
@@ -917,20 +916,20 @@ async function main(): Promise<void> {
     let fixed: number = 0;
     for (const full of tsFiles) {
       const relativePath: string = full.slice(root.length + 1);
-      const text: string = await readFile(full, "utf8");
+      const text: string = await Bun.file(full).text();
       const next: string = fixTsTests(text, relativePath);
       if (next !== text) {
-        await writeFile(full, next);
+        await Bun.write(full, next);
         fixed++;
         console.log(`sorted ${relativePath}`);
       }
     }
     for (const full of rustFiles) {
       const relativePath: string = full.slice(root.length + 1);
-      const text: string = await readFile(full, "utf8");
+      const text: string = await Bun.file(full).text();
       const next: string = fixRustFile(text, relativePath);
       if (next !== text) {
-        await writeFile(full, next);
+        await Bun.write(full, next);
         fixed++;
         console.log(`sorted ${relativePath}`);
       }
@@ -942,12 +941,12 @@ async function main(): Promise<void> {
   const violations: Array<Violation> = [];
   for (const full of tsFiles) {
     const relativePath: string = full.slice(root.length + 1);
-    const text: string = await readFile(full, "utf8");
+    const text: string = await Bun.file(full).text();
     checkTsTests(relativePath, tsTestNodes(text, relativePath), violations, text);
   }
   for (const full of rustFiles) {
     const relativePath: string = full.slice(root.length + 1);
-    checkRustFile(relativePath, await readFile(full, "utf8"), violations);
+    checkRustFile(relativePath, await Bun.file(full).text(), violations);
   }
   if (violations.length > 0) {
     violations.sort((a: Violation, b: Violation) =>

@@ -10,7 +10,7 @@
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "Bundler",
     "noUncheckedSideEffectImports": true,
-    "types": ["node", "bun"],
+    "types": ["bun"],
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
@@ -23,7 +23,6 @@
     "scripts/**/*.ts",
     "scripts/**/*.mts",
     "tests/**/*.ts",
-    "tests/**/*.tsx",
-    "vite.config.ts"
+    "tests/**/*.tsx"
   ]
 }

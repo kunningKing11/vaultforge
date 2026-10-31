@@ -33,22 +33,22 @@ import {
   useState,
 } from "react";
 
-import licenseText from "../../LICENSE?raw";
+import licenseText from "../../LICENSE" with { type: "text" };
 import appLogoUrl from "../../src-tauri/icons/icon.svg";
 import { assetIconPath, chainIconPath, UNKNOWN_ASSET_ICON } from "../assetIcons";
-import activityIcon from "../assets/icons/activity.svg?raw";
-import assetsIcon from "../assets/icons/assets.svg?raw";
-import copyIcon from "../assets/icons/copy.svg?raw";
-import dashboardIcon from "../assets/icons/dashboard.svg?raw";
-import downloadIcon from "../assets/icons/download.svg?raw";
-import lockIcon from "../assets/icons/lock.svg?raw";
-import receiveIcon from "../assets/icons/receive.svg?raw";
-import refreshIcon from "../assets/icons/refresh.svg?raw";
-import sendUpIcon from "../assets/icons/send-up.svg?raw";
-import sendIcon from "../assets/icons/send.svg?raw";
-import settingsIcon from "../assets/icons/settings.svg?raw";
-import swapIcon from "../assets/icons/swap.svg?raw";
-import walletIcon from "../assets/icons/wallet.svg?raw";
+import activityIcon from "../assets/icons/activity.svg" with { type: "text" };
+import assetsIcon from "../assets/icons/assets.svg" with { type: "text" };
+import copyIcon from "../assets/icons/copy.svg" with { type: "text" };
+import dashboardIcon from "../assets/icons/dashboard.svg" with { type: "text" };
+import downloadIcon from "../assets/icons/download.svg" with { type: "text" };
+import lockIcon from "../assets/icons/lock.svg" with { type: "text" };
+import receiveIcon from "../assets/icons/receive.svg" with { type: "text" };
+import refreshIcon from "../assets/icons/refresh.svg" with { type: "text" };
+import sendUpIcon from "../assets/icons/send-up.svg" with { type: "text" };
+import sendIcon from "../assets/icons/send.svg" with { type: "text" };
+import settingsIcon from "../assets/icons/settings.svg" with { type: "text" };
+import swapIcon from "../assets/icons/swap.svg" with { type: "text" };
+import walletIcon from "../assets/icons/wallet.svg" with { type: "text" };
 import { fiatCurrencies } from "../currencies";
 import {
   cryptoDisplaySymbol,

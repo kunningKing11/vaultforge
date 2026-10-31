@@ -1,8 +1,7 @@
 /** Validate pinned image formats before bundling issuer artwork. */
 export function validateIconImage(bytes: Uint8Array, file: string): void {
-  const buffer = Buffer.from(bytes);
   if (file.endsWith(".svg")) {
-    const text = buffer.toString("utf8");
+    const text = new TextDecoder().decode(bytes);
     // SVGs remain image-only: no active content, external resources or embedded rasters.
     if (
       /<svg\b/.test(text) &&
@@ -13,22 +12,22 @@ export function validateIconImage(bytes: Uint8Array, file: string): void {
       return;
   } else if (file.endsWith(".png")) {
     if (
-      buffer.length >= 33 &&
-      buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) &&
-      buffer.readUInt32BE(8) === 13 &&
-      buffer.toString("ascii", 12, 16) === "IHDR" &&
-      buffer.readUInt32BE(16) > 0 &&
-      buffer.readUInt32BE(20) > 0
+      bytes.length >= 33 &&
+      [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => bytes[index] === byte) &&
+      new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(8) === 13 &&
+      new TextDecoder().decode(bytes.subarray(12, 16)) === "IHDR" &&
+      new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(16) > 0 &&
+      new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(20) > 0
     )
       return;
   } else if (/\.jpe?g$/.test(file)) {
     if (
-      buffer.length >= 4 &&
-      buffer[0] === 0xff &&
-      buffer[1] === 0xd8 &&
-      buffer[2] === 0xff &&
-      buffer[buffer.length - 2] === 0xff &&
-      buffer[buffer.length - 1] === 0xd9
+      bytes.length >= 4 &&
+      bytes[0] === 0xff &&
+      bytes[1] === 0xd8 &&
+      bytes[2] === 0xff &&
+      bytes[bytes.length - 2] === 0xff &&
+      bytes[bytes.length - 1] === 0xd9
     )
       return;
   }

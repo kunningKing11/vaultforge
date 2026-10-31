@@ -111,11 +111,9 @@ The table distinguishes implemented backend paths from network entries that are 
 
 ### Chain and coin icons
 
-`src/icon-manifest.json` records artwork sources, SHA-256 checksums, and chain and token mappings. Icons are bundled in `public/icons/` for offline use. Official SVGs are preferred; original issuer PNGs and JPEGs are accepted when a reviewed SVG is unavailable. Documented transforms preserve symbol geometry, and issuer branding terms apply.
+`src/icon-manifest.json` pins sources, checksums, and mappings for offline icons in `public/icons/`. SVGs are preferred (for obvious reasons, they don't lose quality at different sizes), however issuer PNGs or JPEGs are accepted when a reviewed SVG is unavailable.
 
-Run `bun run icons:download` to download pinned artwork (Circle's USDC archive also requires `unzip`) or `bun run icons:check` to verify it offline. Review upstream changes before updating checksums. The downloader rejects active SVG content and embedded raster content in SVGs. Run `bun run lint:icon-order:fix` to sort manifest entries.
-
-Use `assetIconPath(asset)` and `chainIconPath(network)` from `src/assetIcons.ts` for asset icons and chain badges. Unknown or failed icons use the bundled Feather question-mark fallback. An icon does not imply transaction support.
+Run `bun run icons:download` to download the icons, `bun run icons:check` to verify the icons offline (comparing them against their hash), and `bun run lint:icon-order:fix` to sort entries. Review upstream changes before updating checksums. Use `assetIconPath` and `chainIconPath` from `src/assetIcons.ts`; unknown or failed icons use a bundled fallback. Icons do not imply transaction support.
 
 ### Setup
 
@@ -167,7 +165,7 @@ bun run lint:fix
 bun fmt .
 ```
 
-`dev` and `build` run the non-mutating Oxlint, Bun formatting, and Bun type checks before starting Vite. Run `./lint.sh` for the same checks or `./lint.sh --fix` to apply safe lint fixes and formatting first.
+`dev` and `build` run the non-mutating Oxlint, Bun formatting, and Bun type checks before starting the Bun development server or production build. Run `./lint.sh` for the same checks or `./lint.sh --fix` to apply safe lint fixes and formatting first.
 
 Formatter settings and the dependency release-age policy live in `bunfig.toml`.
 

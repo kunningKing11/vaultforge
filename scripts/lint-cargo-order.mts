@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-
 type Table = Record<string, unknown>;
 
 function isTable(value: unknown): value is Table {
@@ -34,7 +32,7 @@ export function cargoDependencyOrderErrors(source: string): string[] {
 }
 
 if (import.meta.main) {
-  const source = await readFile(new URL("../src-tauri/Cargo.toml", import.meta.url), "utf8");
+  const source = await Bun.file(new URL("../src-tauri/Cargo.toml", import.meta.url)).text();
   const errors = cargoDependencyOrderErrors(source);
   if (errors.length) {
     console.error(`Cargo dependency order is incorrect:\n${errors.join("\n")}`);

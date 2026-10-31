@@ -1,18 +1,17 @@
-import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, rename } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import manifest from "../src/icon-manifest.json";
+import { extractIconArchiveMember } from "./icon-archive";
 import { validateIconImage } from "./icon-image";
 
 const root = fileURLToPath(new URL("../public/icons/", import.meta.url));
-const checkOnly = process.argv.includes("--check");
-const checksum = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+const checkOnly = Bun.argv.includes("--check");
+const checksum = (bytes: Uint8Array) => Bun.CryptoHasher.hash("sha256", bytes, "hex");
 
 function transformSvg(bytes: Uint8Array, transform?: string, viewBox?: string): Uint8Array {
-  let text = Buffer.from(bytes).toString("utf8");
+  let text = new TextDecoder().decode(bytes);
   if (transform === "inline_xml" || transform === "injective_purple") {
     text = text.replace(/viewbox=/g, "viewBox=").replace(/\sdata-v-[a-z0-9]+(?:="[^"]*")?/g, "");
     if (transform === "injective_purple") text = text.replace(/currentColor/g, "#4D3DFF");
@@ -45,7 +44,7 @@ function transformSvg(bytes: Uint8Array, transform?: string, viewBox?: string): 
         .replace(/>$/, ` viewBox="${bounds.join(" ")}" overflow="hidden">`),
     );
   }
-  return Buffer.from(text);
+  return new TextEncoder().encode(text);
 }
 
 for (const [id, asset] of Object.entries(manifest.assets)) {
@@ -58,7 +57,7 @@ for (const [id, asset] of Object.entries(manifest.assets)) {
     throw new Error(`Invalid manifest entry: ${id}`);
   let bytes: Uint8Array;
   if (checkOnly) {
-    bytes = await readFile(destination);
+    bytes = await Bun.file(destination).bytes();
   } else {
     const requestHeaders = "requestHeaders" in asset ? asset.requestHeaders : undefined;
     const response = await fetch(asset.url, {
@@ -69,28 +68,12 @@ for (const [id, asset] of Object.entries(manifest.assets)) {
     const downloaded = new Uint8Array(await response.arrayBuffer());
     if (downloaded.length > 20 * 1024 * 1024) throw new Error(`${id}: download too large`);
     if ("archiveMember" in asset) {
-      // Extract one named file to stdout; never unpack remote paths into the project.
-      const temporary = await mkdtemp(resolve(tmpdir(), "vaultforge-icons-"));
-      try {
-        const archive = resolve(temporary, "download.zip");
-        await writeFile(archive, downloaded);
-        const child = Bun.spawn(["unzip", "-p", archive, asset.archiveMember], {
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-        bytes = new Uint8Array(await new Response(child.stdout).arrayBuffer());
-        if ((await child.exited) !== 0)
-          throw new Error(`${id}: archive extraction failed (requires unzip)`);
-      } finally {
-        await rm(temporary, { recursive: true, force: true });
-      }
+      bytes = extractIconArchiveMember(downloaded, asset.archiveMember);
     } else if ("inlineSvgLabel" in asset || "inlineSvgMatch" in asset) {
       const label =
         "inlineSvgMatch" in asset ? asset.inlineSvgMatch : `aria-label="${asset.inlineSvgLabel}"`;
       const matches = [
-        ...Buffer.from(downloaded)
-          .toString("utf8")
-          .matchAll(/<svg\b[^>]*>[\s\S]*?<\/svg>/g),
+        ...new TextDecoder().decode(downloaded).matchAll(/<svg\b[^>]*>[\s\S]*?<\/svg>/g),
       ]
         .map((match) => match[0])
         .filter((svg) => svg.includes(label));
@@ -98,14 +81,14 @@ for (const [id, asset] of Object.entries(manifest.assets)) {
         (svg) =>
           checksum(
             transformSvg(
-              Buffer.from(svg),
+              new TextEncoder().encode(svg),
               "svgTransform" in asset ? asset.svgTransform : undefined,
               "svgViewBox" in asset ? asset.svgViewBox : undefined,
             ),
           ) === asset.sha256,
       );
       if (!pinned) throw new Error(`${id}: reviewed official inline SVG not found`);
-      bytes = Buffer.from(pinned);
+      bytes = new TextEncoder().encode(pinned);
     } else {
       bytes = downloaded;
     }
@@ -123,7 +106,7 @@ for (const [id, asset] of Object.entries(manifest.assets)) {
   validateIconImage(bytes, asset.file);
   if (!checkOnly) {
     await mkdir(dirname(destination), { recursive: true });
-    await writeFile(`${destination}.tmp`, bytes);
+    await Bun.write(`${destination}.tmp`, bytes);
     await rename(`${destination}.tmp`, destination);
   }
   console.log(`${checkOnly ? "Verified" : "Downloaded"} ${id}`);

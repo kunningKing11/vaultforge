@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run check && vite --host 127.0.0.1 --port 1420",
+    "dev": "bun run check && bun --hot scripts/dev-server.ts",
     "prepare-tauri": "bun scripts/prepare-tauri-icons.mts",
-    "build": "bun run check && vite build",
+    "build": "bun run check && bun scripts/build-frontend.ts",
     "lint": "oxlint . && bun fmt --check . && bun run lint:test-order && bun run lint:icon-order && bun run lint:cargo-order",
     "lint:oxlint": "oxlint .",
     "lint:test-order": "bun scripts/lint-test-order.mts --check",
@@ -16,7 +16,7 @@
     "test": "bun test --parallel",
     "typecheck": "bun check --no-script",
     "check": "bun run lint && bun run typecheck",
-    "preview": "vite preview",
+    "preview": "bun scripts/preview-frontend.ts",
     "prepare": "lefthook install",
     "hooks:check": "bash scripts/hook-checks.sh",
     "sync-cargo-version": "bun scripts/sync-cargo-version.mts",
@@ -46,11 +46,10 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.2",
+    "fflate": "^0.8.3",
     "lefthook": "^2.2.2",
     "oxlint": "^1.89.0",
-    "typescript": "^7.0.2",
-    "vite": "^8.3.5"
+    "typescript": "^7.0.2"
   },
   "packageManager": "bun@1.4.4"
 }

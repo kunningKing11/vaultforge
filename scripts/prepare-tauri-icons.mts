@@ -1,7 +1,5 @@
-import { createHash } from "node:crypto";
-import { readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { rename } from "node:fs/promises";
+import { resolve } from "node:path";
 
 type HashedFile = {
   file: string;
@@ -64,7 +62,7 @@ const productFiles: string[] = [
   "ios/AppIcon-512@2x.png",
 ].sort();
 
-const root: string = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root: string = resolve(import.meta.dir, "..");
 const iconDirectory: string = resolve(root, "src-tauri", "icons");
 const sourceFile: string = "icon.svg";
 const sourcePath: string = resolve(iconDirectory, sourceFile);
@@ -94,9 +92,7 @@ function isIconHashManifest(value: unknown): value is IconHashManifest {
 
 async function sha256(path: string): Promise<string | null> {
   try {
-    return createHash("sha256")
-      .update(await readFile(path))
-      .digest("hex");
+    return Bun.CryptoHasher.hash("sha256", await Bun.file(path).bytes(), "hex");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
@@ -105,7 +101,7 @@ async function sha256(path: string): Promise<string | null> {
 
 async function readManifest(): Promise<IconHashManifest | null> {
   try {
-    const value: unknown = JSON.parse(await readFile(manifestPath, "utf8"));
+    const value: unknown = JSON.parse(await Bun.file(manifestPath).text());
     return isIconHashManifest(value) ? value : null;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT" || error instanceof SyntaxError) {
@@ -160,7 +156,7 @@ async function writeManifest(): Promise<void> {
     products: hashes,
   };
   const temporaryPath = `${manifestPath}.${process.pid}.tmp`;
-  await writeFile(temporaryPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await Bun.write(temporaryPath, `${JSON.stringify(manifest, null, 2)}\n`);
   await rename(temporaryPath, manifestPath);
 }
 

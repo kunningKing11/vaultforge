@@ -190,7 +190,7 @@ export async function verifyCctpSepolia(
 }
 
 if (import.meta.main) {
-  const args = process.argv.slice(2);
+  const args = Bun.argv.slice(2);
   const burn = args[args.indexOf("--burn") + 1];
   const mint = args[args.indexOf("--mint") + 1];
   if (!args.includes("--burn") || !args.includes("--mint") || !burn || !mint) {
