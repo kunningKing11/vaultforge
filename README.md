@@ -9,6 +9,8 @@
 
 A local-first crypto wallet desktop app built with a React frontend, Coinbase Design System, and a Rust backend through Tauri.
 
+Let's be honest. Crypto wallets are not fun to use. You need to have one installed for each blockchain you want to use. So one day I thought, why not make my own at this point? Little did I know, it would turn out to be much harder than I had thought... ~~It's written in Rust so you know it's fast.~~
+
 ## App demo
 
 https://github.com/user-attachments/assets/ff082c14-b698-4070-8c10-5ca884f6a4ed
@@ -187,6 +189,22 @@ You can run the same checks manually with `bun run hooks:check -- commit` or `bu
 - `src-tauri/src/providers/` and `src-tauri/src/tx/`: chain providers and transaction construction, encoding, and signing.
 - `src-tauri/src/`: wallet state, encrypted storage, derivation, operations, swap and CCTP orchestration, and Tauri setup.
 - `src-tauri/src/tests/`: Rust unit tests.
+
+## AI Use
+
+As this is a complex topic with many pieces of in-depth, required knowledge needed for implementing many of the features, I had to do a LOT of research. The majority of this research involved using AI tools as they made it much easier to understand the relevant required information as I could ask questions to better understand things.
+
+In terms of code generation, there were just a few times where I used AI:
+
+- A refactor from a big TypeScript file into multiple smaller ones
+- A (very) big refactor from TailwindCSS to React
+- Part of the swapping support integration, as it was quite confusing to understand the different transaction types and in behaviour between various chains and Decentralized EXchanges (DEXs) and DEX aggregators
+
+Finally, I also used CodeRabbit occasionally for code review to find edge cases in my code, and I used AI for debugging/fixing failing GitHub Actions workflows, as these were very confusing and hard to understand.
+
+## Notes
+
+This project was created as part of the [Stardance Challenge](https://stardance.hackclub.com); [here](https://stardance.hackclub.com/projects/4712) is the project link.
 
 ## License
 
